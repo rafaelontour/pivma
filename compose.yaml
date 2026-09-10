@@ -1,0 +1,12 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: pivma-web:local
+    init: true
+    ports:
+      - "4025:3000"
+    environment:
+      PIVMA_API_URL: ${PIVMA_API_URL:-https://api.pivma.acerola.dev.br}
+    restart: unless-stopped
