@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { internalApiErrorResponse } from "@/app/(paginas)/api/_shared/responses";
 import {
   getUserAccess,
   grantUserProfile,
@@ -28,19 +29,16 @@ export async function POST(
   const result = await grantUserProfile(accessToken, userId, profileId);
 
   if (!result.ok) {
-    if (result.status === 401) {
-      cookieStore.delete("access_token");
-    }
-
-    const responseStatus = result.status === 401 || result.status === 403 ? result.status : 502;
-    const message =
-      responseStatus === 401
-        ? "Sua sessão não é mais válida."
-        : responseStatus === 403
-          ? "Você não tem permissão para atribuir perfis de acesso."
-          : "Não foi possível atribuir o perfil de acesso no momento.";
-
-    return NextResponse.json({ message }, { status: responseStatus });
+    return internalApiErrorResponse(result.status, {
+      fallbackMessage: "Não foi possível atribuir o perfil de acesso no momento.",
+      cookieStore,
+      messages: {
+        403: "Você não tem permissão para atribuir perfis de acesso.",
+        404: "O usuário ou perfil informado não foi encontrado.",
+        409: "Este perfil já está atribuído ao usuário.",
+        422: "O perfil não pode ser atribuído a este usuário.",
+      },
+    });
   }
 
   return NextResponse.json({ success: true }, { status: 201 });
@@ -66,22 +64,14 @@ export async function DELETE(
   const accessResult = await getUserAccess(accessToken, userId);
 
   if (!accessResult.ok) {
-    if (accessResult.status === 401) {
-      cookieStore.delete("access_token");
-    }
-
-    const responseStatus =
-      accessResult.status === 401 || accessResult.status === 403
-        ? accessResult.status
-        : 502;
-    const message =
-      responseStatus === 401
-        ? "Sua sessão não é mais válida."
-        : responseStatus === 403
-          ? "Você não tem permissão para consultar os perfis deste usuário."
-          : "Não foi possível validar os cargos do usuário no momento.";
-
-    return NextResponse.json({ message }, { status: responseStatus });
+    return internalApiErrorResponse(accessResult.status, {
+      fallbackMessage: "Não foi possível validar os cargos do usuário no momento.",
+      cookieStore,
+      messages: {
+        403: "Você não tem permissão para consultar os perfis deste usuário.",
+        404: "O usuário informado não foi encontrado.",
+      },
+    });
   }
 
   if (accessResult.data.profiles.length <= 1) {
@@ -94,19 +84,16 @@ export async function DELETE(
   const result = await revokeUserProfile(accessToken, userId, profileId);
 
   if (!result.ok) {
-    if (result.status === 401) {
-      cookieStore.delete("access_token");
-    }
-
-    const responseStatus = result.status === 401 || result.status === 403 ? result.status : 502;
-    const message =
-      responseStatus === 401
-        ? "Sua sessão não é mais válida."
-        : responseStatus === 403
-          ? "Você não tem permissão para remover perfis de acesso."
-          : "Não foi possível remover o perfil de acesso no momento.";
-
-    return NextResponse.json({ message }, { status: responseStatus });
+    return internalApiErrorResponse(result.status, {
+      fallbackMessage: "Não foi possível remover o perfil de acesso no momento.",
+      cookieStore,
+      messages: {
+        403: "Você não tem permissão para remover perfis de acesso.",
+        404: "O usuário ou perfil informado não foi encontrado.",
+        409: "Este perfil não está mais atribuído ao usuário.",
+        422: "O perfil não pode ser removido deste usuário.",
+      },
+    });
   }
 
   return new NextResponse(null, { status: 204 });

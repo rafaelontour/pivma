@@ -1,5 +1,6 @@
-import type { ReactNode } from "react";
-import type { CurrentUser, UserListItem } from "./Usuario";
+import type { ReactNode, RefObject } from "react";
+import type { CurrentUser, UserEditState, UserListItem } from "./Usuario";
+import type { CreateProfileState } from "./Rbac";
 import type {
   PermissionDefinition,
   PermissionProfile,
@@ -11,10 +12,19 @@ export type SessionState =
   | { kind: "ready"; user: CurrentUser };
 
 export type AuthenticatedHomeProps = {
-  page?: "home" | "users";
+  page?: "home";
 };
 
-export type AuthenticatedPage = "home" | "users" | "processes" | "submissions";
+export type AuthenticatedPage =
+  | "home"
+  | "users"
+  | "processes"
+  | "submissions"
+  | "forms"
+  | "ai-evaluations"
+  | "triage"
+  | "operational-observability"
+  | "ai-observability";
 
 export type AuthenticatedShellProps = {
   activePage: AuthenticatedPage;
@@ -24,7 +34,11 @@ export type AuthenticatedShellProps = {
 export type SidebarProps = {
   activePage: AuthenticatedPage;
   canManageUsers: boolean;
+  canManageForms: boolean;
+  canViewAiEvaluations: boolean;
   canViewProcesses: boolean;
+  canViewTriage: boolean;
+  canViewObservability: boolean;
   expanded: boolean;
   user: CurrentUser;
 };
@@ -41,24 +55,45 @@ export type AccessPanelState =
       access: UserAccess;
       selectedProfileId: string;
       isSaving: boolean;
-      editingProfileId: string | null;
-      editedPermissionCodes: string[];
-      isUpdatingPermissions: boolean;
       isRemovingProfileId: string | null;
     };
 
 export type AccessPanelProps = {
   panel: Exclude<AccessPanelState, { kind: "closed" }>;
+  canManageAssignments: boolean;
   onClose: () => void;
   onRetry: () => void;
   onProfileChange: (profileId: string) => void;
   onGrant: () => void;
-  onBeginPermissionEdit: (profileId: string) => void;
-  onCancelPermissionEdit: () => void;
-  onPermissionToggle: (permissionCode: string) => void;
-  onSavePermissions: () => void;
   onRemoveProfile: (profileId: string) => void;
 };
+
+export type UserEditDialogProps = {
+  state: UserEditState;
+  onChange: (fullName: string) => void;
+  onClose: () => void;
+  onSave: () => void;
+};
+
+export type CreateProfileDialogProps = {
+  state: CreateProfileState;
+  permissions: PermissionDefinition[];
+  isCatalogLoading: boolean;
+  onNameChange: (name: string) => void;
+  onDescriptionChange: (description: string) => void;
+  onPermissionToggle: (permissionCode: string) => void;
+  onClose: () => void;
+  onSave: () => void;
+};
+
+export type ModalShellProps = {
+  label: string;
+  titleId: string;
+  onClose: () => void;
+  children: ReactNode;
+};
+
+export type AccessibleDialogHandle = RefObject<HTMLDivElement | null>;
 
 export type DirectoryMessageProps = {
   message: string;

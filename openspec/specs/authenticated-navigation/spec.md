@@ -98,3 +98,36 @@ O sistema SHALL apresentar o item de navegação Usuários para pessoas cuja ses
 
 - **WHEN** uma pessoa sem autorização tenta carregar dados da página de Usuários
 - **THEN** o sistema não apresenta dados administrativos e comunica que a consulta não é permitida
+
+### Requirement: Acesso às submissões do proponente
+
+O sistema SHALL apresentar o item Submissões na navegação de pessoas autenticadas que possam iniciar processos como proponente. O item MUST possuir nome e ícone acessíveis e indicar quando a página estiver ativa.
+
+#### Scenario: Pessoa autenticada acessa submissões
+
+- **WHEN** uma pessoa autenticada pode criar uma submissão
+- **THEN** o sistema apresenta o item Submissões e permite abrir o catálogo de templates
+
+#### Scenario: Item Submissões está ativo
+
+- **WHEN** a pessoa está na página de submissões
+- **THEN** a barra lateral identifica Submissões como a localização atual
+
+### Requirement: Acesso ao Kanban de processos
+
+O sistema SHALL apresentar o item de navegação Processos para pessoas autorizadas da BraCVAM a consultar processos. O item MUST direcionar para o Kanban, possuir nome e ícone acessíveis e indicar visualmente quando a página estiver ativa.
+
+#### Scenario: Pessoa autorizada acessa o Kanban
+
+- **WHEN** uma pessoa autenticada possui permissão para consultar processos
+- **THEN** o sistema apresenta o item Processos na barra lateral e permite acessar o Kanban
+
+#### Scenario: Item Processos está ativo
+
+- **WHEN** a pessoa está na página do Kanban
+- **THEN** a barra lateral identifica o item Processos como a localização atual
+
+#### Scenario: Pessoa sem autorização não recebe o acesso administrativo
+
+- **WHEN** a sessão não possui permissão para consultar processos
+- **THEN** o sistema não apresenta o item Processos e não revela dados caso a URL seja acessada diretamente

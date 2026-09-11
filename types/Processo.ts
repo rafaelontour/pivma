@@ -1,6 +1,5 @@
 export const PROCESS_KANBAN_PERMISSION_CODES = [
-  "process.read",
-  "process.participants.manage",
+  "triage.review",
 ] as const;
 
 export type ProcessInstance = {

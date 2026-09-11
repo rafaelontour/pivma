@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { internalApiErrorResponse } from "@/app/(paginas)/api/_shared/responses";
 import { getCurrentUser } from "@/services/Autenticacao";
 import {
   getSubmissionForm,
@@ -140,50 +141,26 @@ function formErrorResponse(
   cookieStore: Awaited<ReturnType<typeof cookies>>,
   operation: "consultar" | "salvar" | "enviar",
 ) {
-  if (status === 401) {
-    cookieStore.delete("access_token");
-  }
+  const fallbackMessage =
+    operation === "salvar"
+      ? "Não foi possível salvar o rascunho no momento."
+      : operation === "enviar"
+        ? "Não foi possível enviar a submissão no momento."
+        : "Não foi possível carregar o formulário no momento.";
 
-  const responseStatus = getResponseStatus(status);
-  const message = getErrorMessage(responseStatus, operation);
-  return NextResponse.json({ message }, { status: responseStatus });
-}
-
-function getResponseStatus(status: number | undefined) {
-  if (
-    status === 401 ||
-    status === 403 ||
-    status === 404 ||
-    status === 409 ||
-    status === 422
-  ) {
-    return status;
-  }
-
-  return 502;
-}
-
-function getErrorMessage(
-  status: number,
-  operation: "consultar" | "salvar" | "enviar",
-) {
-  if (status === 401) return "Sua sessão não é mais válida.";
-  if (status === 403) return "Você não pode acessar este rascunho.";
-  if (status === 404) return "O formulário deste rascunho não foi encontrado.";
-  if (status === 409) return "Este formulário não aceita mais alterações.";
-  if (status === 422) {
-    return operation === "enviar"
-      ? "Preencha os campos obrigatórios antes de enviar para análise."
-      : "Revise os valores informados no formulário.";
-  }
-
-  if (operation === "salvar") {
-    return "Não foi possível salvar o rascunho no momento.";
-  }
-
-  return operation === "enviar"
-    ? "Não foi possível enviar a submissão no momento."
-    : "Não foi possível carregar o formulário no momento.";
+  return internalApiErrorResponse(status, {
+    cookieStore,
+    fallbackMessage,
+    messages: {
+      403: "Você não pode acessar este rascunho.",
+      404: "O formulário deste rascunho não foi encontrado.",
+      409: "Este formulário não aceita mais alterações.",
+      422:
+        operation === "enviar"
+          ? "Preencha os campos obrigatórios antes de enviar para análise."
+          : "Revise os valores informados no formulário.",
+    },
+  });
 }
 
 function isValidValues(

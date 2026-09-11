@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { internalApiErrorResponse } from "@/app/(paginas)/api/_shared/responses";
 import { login } from "@/services/Autenticacao";
 
 export const runtime = "nodejs";
@@ -19,17 +20,14 @@ export async function POST(request: Request) {
   const result = await login(identifier, password);
 
   if (!result.ok) {
-    return NextResponse.json(
-      {
-        message:
-          result.status === 401
-            ? "E-mail, usuário ou senha não conferem."
-            : result.status
-              ? "Não foi possível validar suas credenciais. Tente novamente."
-              : "O serviço de autenticação está indisponível no momento.",
+    return internalApiErrorResponse(result.status, {
+      fallbackMessage: "O serviço de autenticação está indisponível no momento.",
+      messages: {
+        401: "E-mail, usuário ou senha não conferem.",
+        403: "Este usuário não pode acessar a plataforma.",
+        422: "Não foi possível validar suas credenciais. Revise os dados.",
       },
-      { status: result.status === 401 ? 401 : 502 },
-    );
+    });
   }
 
   const accessTokenCookie = result.data.setCookies.find((cookie) =>

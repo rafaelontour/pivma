@@ -26,36 +26,41 @@ const PROCESS_PAGE_SIZE = 100;
 const PAGE_BATCH_SIZE = 4;
 const REVALIDATION_INTERVAL_MS = 30_000;
 
-// O backend ainda não publica o catálogo de estados. Estes aliases são
-// provisórios e qualquer valor novo permanece visível na coluna de contingência.
 const STATUS_PRESENTATIONS: readonly ProcessStatusPresentation[] = [
   {
-    key: "new-submissions",
-    label: "Novas submissões",
-    description: "Processos enviados e aguardando o início da análise.",
-    statusValues: ["SUBMITTED", "NEW_SUBMISSION", "PENDING_TRIAGE"],
+    key: "submission",
+    label: "Elaboração e correção",
+    description: "Propostas em preenchimento ou devolvidas para ajustes.",
+    statusValues: ["SUBMISSION"],
     tone: "teal",
   },
   {
-    key: "triage",
-    label: "Em triagem",
-    description: "Processos em conferência inicial pela equipe técnica.",
-    statusValues: ["TRIAGE", "UNDER_TRIAGE"],
-    tone: "amber",
-  },
-  {
-    key: "evaluation",
-    label: "Em avaliação",
-    description: "Processos que avançaram para avaliação técnica.",
-    statusValues: ["EVALUATION", "UNDER_EVALUATION", "IN_REVIEW"],
+    key: "ai-pre-evaluation",
+    label: "Pré-avaliação por IA",
+    description: "Propostas em processamento automático assíncrono.",
+    statusValues: ["AI_PRE_EVALUATION"],
     tone: "blue",
   },
   {
-    key: "completed",
-    label: "Concluídos",
-    description: "Processos encerrados pelo fluxo da plataforma.",
-    statusValues: ["COMPLETED", "CLOSED"],
+    key: "triage",
+    label: "Triagem humana",
+    description: "Propostas em análise pela equipe BraCVAM.",
+    statusValues: ["TRIAGE"],
+    tone: "amber",
+  },
+  {
+    key: "planning",
+    label: "Planejamento",
+    description: "Métodos aprovados que avançaram para planejamento.",
+    statusValues: ["PLANNING"],
     tone: "violet",
+  },
+  {
+    key: "closed",
+    label: "Encerrados",
+    description: "Processos encerrados pelo fluxo da plataforma.",
+    statusValues: ["CLOSED"],
+    tone: "slate",
   },
 ];
 
@@ -287,12 +292,12 @@ export function ProcessKanban() {
 
       <section
         aria-label="Quadro de processos por estado"
-        className="min-w-0 overflow-x-hidden pb-4"
+        className="min-w-0 overflow-x-auto pb-4"
       >
         <div
-          className="grid w-full min-w-0 items-start gap-3"
+          className="grid w-max min-w-full grid-flow-col auto-cols-[minmax(15rem,1fr)] items-start gap-3"
           style={{
-            gridTemplateColumns: `repeat(${columns.length}, minmax(0, 1fr))`,
+            gridTemplateColumns: `repeat(${columns.length}, minmax(15rem, 1fr))`,
           }}
         >
           {columns.map((column) => (

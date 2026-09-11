@@ -2,12 +2,14 @@ import "server-only";
 
 import { isAxiosError } from "axios";
 import { tryit } from "radash";
-import { http } from "./Http";
+import { apiOrigin, http } from "./Http";
 import type { ServiceResult } from "@/types/Servico";
 import type {
   CreateUserInput,
   UserList,
+  UserListOptions,
   UserPublic,
+  UpdateUserInput,
 } from "@/types/Usuario";
 
 export async function createUser(
@@ -26,12 +28,37 @@ export async function createUser(
 
 export async function listUsers(
   accessToken: string,
-  options: { offset: number; limit: number },
+  options: UserListOptions,
 ): Promise<ServiceResult<UserList>> {
+  const { profileId, ...params } = options;
   const [error, response] = await tryit(() =>
     http.get<UserList>("/users", {
       headers: { Cookie: `access_token=${accessToken}` },
-      params: options,
+      params: {
+        ...params,
+        profile_id: profileId,
+      },
+    }),
+  )();
+
+  if (error) {
+    return { ok: false, status: getStatus(error) };
+  }
+
+  return { ok: true, data: response.data };
+}
+
+export async function updateUser(
+  accessToken: string,
+  userId: string,
+  input: UpdateUserInput,
+): Promise<ServiceResult<UserPublic>> {
+  const [error, response] = await tryit(() =>
+    http.patch<UserPublic>(`/users/${userId}`, input, {
+      headers: {
+        Cookie: `access_token=${accessToken}`,
+        Origin: apiOrigin,
+      },
     }),
   )();
 

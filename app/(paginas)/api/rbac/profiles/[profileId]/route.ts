@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { internalApiErrorResponse } from "@/app/(paginas)/api/_shared/responses";
 import { updatePermissionProfile } from "@/services/Perfil";
 import type { UpdatePermissionProfileInput } from "@/types/Rbac";
 
@@ -29,19 +30,16 @@ export async function PATCH(
   const result = await updatePermissionProfile(accessToken, profileId, payload);
 
   if (!result.ok) {
-    if (result.status === 401) {
-      cookieStore.delete("access_token");
-    }
-
-    const status = result.status === 401 || result.status === 403 ? result.status : 502;
-    const message =
-      status === 401
-        ? "Sua sessão não é mais válida."
-        : status === 403
-          ? "Você não tem permissão para alterar este perfil."
-          : "Não foi possível salvar as permissões do perfil no momento.";
-
-    return NextResponse.json({ message }, { status });
+    return internalApiErrorResponse(result.status, {
+      fallbackMessage: "Não foi possível salvar as permissões do perfil no momento.",
+      cookieStore,
+      messages: {
+        403: "Você não tem permissão para alterar este perfil.",
+        404: "O perfil informado não foi encontrado.",
+        409: "O perfil foi alterado durante a operação. Atualize e tente novamente.",
+        422: "Revise os códigos de permissão informados.",
+      },
+    });
   }
 
   return NextResponse.json(result.data);

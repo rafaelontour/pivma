@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { internalApiErrorResponse } from "@/app/(paginas)/api/_shared/responses";
 import { createUser } from "@/services/Usuario";
 import type { RegistrationInput } from "@/types/Autenticacao";
 
@@ -9,52 +10,55 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export async function POST(request: Request) {
   const payload = await request.json().catch(() => null);
+  const fullName =
+    typeof payload?.fullName === "string" ? payload.fullName.trim() : "";
   const username =
     typeof payload?.username === "string" ? payload.username.trim() : "";
   const email = typeof payload?.email === "string" ? payload.email.trim() : "";
   const password = typeof payload?.password === "string" ? payload.password : "";
 
-  if (!isValidRegistration({ username, email, password })) {
+  if (!isValidRegistration({ fullName, username, email, password })) {
     return NextResponse.json(
       { message: "Revise os dados informados para criar sua conta." },
       { status: 400 },
     );
   }
 
-  const result = await createUser({ username, email, password });
+  const result = await createUser({
+    full_name: fullName,
+    username,
+    email,
+    password,
+  });
 
   if (!result.ok) {
-    if (!result.status || result.status >= 500) {
-      return serviceUnavailable();
-    }
-
-    return NextResponse.json(
-      { message: "Não foi possível criar sua conta. Revise os dados e tente novamente." },
-      { status: 400 },
-    );
+    return internalApiErrorResponse(result.status, {
+      fallbackMessage: "O serviço de cadastro está indisponível no momento.",
+      messages: {
+        409: "Já existe uma conta com o usuário ou e-mail informado.",
+        422: "Não foi possível criar sua conta. Revise os dados e tente novamente.",
+      },
+    });
   }
 
   return NextResponse.json({ success: true }, { status: 201 });
 }
 
 function isValidRegistration({
+  fullName,
   username,
   email,
   password,
 }: RegistrationInput) {
   return (
+    fullName.length >= 1 &&
+    fullName.length <= 255 &&
     USERNAME_PATTERN.test(username) &&
     EMAIL_PATTERN.test(email) &&
     password.length >= 8 &&
     /[A-Z]/.test(password) &&
     /[a-z]/.test(password) &&
-    /\d/.test(password)
-  );
-}
-
-function serviceUnavailable() {
-  return NextResponse.json(
-    { message: "O serviço de cadastro está indisponível no momento." },
-    { status: 502 },
+    /\d/.test(password) &&
+    password.length <= 128
   );
 }

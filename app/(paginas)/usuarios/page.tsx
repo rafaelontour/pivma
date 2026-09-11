@@ -1,5 +1,10 @@
-import { AuthenticatedHome } from "../inicio/authenticated-home";
+import { AuthenticatedShell } from "@/app/_components/authenticated-shell";
+import { UserDirectory } from "./user-directory";
 
 export default function UsuariosPage() {
-  return <AuthenticatedHome page="users" />;
+  return (
+    <AuthenticatedShell activePage="users">
+      <UserDirectory />
+    </AuthenticatedShell>
+  );
 }

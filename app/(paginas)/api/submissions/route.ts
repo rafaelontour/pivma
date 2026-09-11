@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { internalApiErrorResponse } from "@/app/(paginas)/api/_shared/responses";
 import { createSubmissionDraft } from "@/services/Submissao";
 import type { CreateSubmissionDraftInput } from "@/types/Submissao";
 
@@ -14,10 +15,11 @@ export async function POST(request: Request) {
   const templateKey = typeof payload?.templateKey === "string"
     ? payload.templateKey.trim()
     : "";
+  const title = typeof payload?.title === "string" ? payload.title.trim() : "";
 
-  if (!TEMPLATE_KEY_PATTERN.test(templateKey)) {
+  if (!TEMPLATE_KEY_PATTERN.test(templateKey) || title.length < 3 || title.length > 255) {
     return NextResponse.json(
-      { message: "Selecione um tipo de submissão válido." },
+      { message: "Selecione um tipo e informe um título entre 3 e 255 caracteres." },
       { status: 400 },
     );
   }
@@ -34,37 +36,21 @@ export async function POST(request: Request) {
 
   const result = await createSubmissionDraft(accessToken, {
     templateKey,
-    title: `${templateKey}-001`,
+    title,
   });
 
   if (!result.ok) {
-    if (result.status === 401) {
-      cookieStore.delete("access_token");
-    }
-
-    const status = getResponseStatus(result.status);
-    return NextResponse.json(
-      { message: getErrorMessage(status) },
-      { status },
-    );
+    return internalApiErrorResponse(result.status, {
+      cookieStore,
+      fallbackMessage: "Não foi possível criar o rascunho no momento.",
+      messages: {
+        403: "Você não pode iniciar esta submissão.",
+        404: "Este tipo de submissão não está mais disponível.",
+        409: "Não foi possível criar outro rascunho neste momento.",
+        422: "Os dados da submissão foram rejeitados pela API.",
+      },
+    });
   }
 
   return NextResponse.json(result.data, { status: 201 });
-}
-
-function getResponseStatus(status: number | undefined) {
-  if (status === 401 || status === 403 || status === 404 || status === 409) {
-    return status;
-  }
-
-  return status === 422 ? 400 : 502;
-}
-
-function getErrorMessage(status: number) {
-  if (status === 401) return "Sua sessão não é mais válida.";
-  if (status === 403) return "Você não pode iniciar esta submissão.";
-  if (status === 404) return "Este tipo de submissão não está mais disponível.";
-  if (status === 409) return "Não foi possível criar outro rascunho neste momento.";
-  if (status === 400) return "O tipo de submissão foi rejeitado pela API.";
-  return "Não foi possível criar o rascunho no momento.";
 }

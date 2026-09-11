@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { internalApiErrorResponse } from "@/app/(paginas)/api/_shared/responses";
 import { getCurrentUser } from "@/services/Autenticacao";
 import { canReadProcessKanban, listProcesses } from "@/services/Processo";
 
@@ -31,11 +32,7 @@ export async function GET(request: Request) {
   const currentUser = await getCurrentUser(accessToken);
 
   if (!currentUser.ok) {
-    if (currentUser.status === 401) {
-      cookieStore.delete("access_token");
-    }
-
-    return processErrorResponse(currentUser.status);
+    return processErrorResponse(currentUser.status, cookieStore);
   }
 
   if (!canReadProcessKanban(currentUser.data.access.global_permissions)) {
@@ -52,11 +49,7 @@ export async function GET(request: Request) {
   });
 
   if (!result.ok) {
-    if (result.status === 401) {
-      cookieStore.delete("access_token");
-    }
-
-    return processErrorResponse(result.status);
+    return processErrorResponse(result.status, cookieStore);
   }
 
   return NextResponse.json(result.data);
@@ -80,14 +73,15 @@ function readInteger(
   return parsed >= minimum && parsed <= maximum ? parsed : null;
 }
 
-function processErrorResponse(status: number | undefined) {
-  const responseStatus = status === 401 || status === 403 ? status : 502;
-  const message =
-    responseStatus === 401
-      ? "Sua sessão não é mais válida."
-      : responseStatus === 403
-        ? "Você não tem permissão para consultar processos."
-        : "Não foi possível consultar os processos no momento.";
-
-  return NextResponse.json({ message }, { status: responseStatus });
+function processErrorResponse(
+  status: number | undefined,
+  cookieStore: Awaited<ReturnType<typeof cookies>>,
+) {
+  return internalApiErrorResponse(status, {
+    cookieStore,
+    fallbackMessage: "Não foi possível consultar os processos no momento.",
+    messages: {
+      403: "Você não tem permissão para consultar processos.",
+    },
+  });
 }

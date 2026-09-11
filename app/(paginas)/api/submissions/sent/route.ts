@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { internalApiErrorResponse } from "@/app/(paginas)/api/_shared/responses";
 import { getCurrentUser } from "@/services/Autenticacao";
 import { listProponentSubmittedProcesses } from "@/services/Submissao";
 
@@ -38,17 +39,9 @@ function submissionsErrorResponse(
   status: number | undefined,
   cookieStore: Awaited<ReturnType<typeof cookies>>,
 ) {
-  if (status === 401) {
-    cookieStore.delete("access_token");
-  }
-
-  const responseStatus = status === 401 || status === 403 ? status : 502;
-  const message =
-    responseStatus === 401
-      ? "Sua sessão não é mais válida."
-      : responseStatus === 403
-        ? "Você não pode consultar estas submissões."
-        : "Não foi possível consultar suas submissões no momento.";
-
-  return NextResponse.json({ message }, { status: responseStatus });
+  return internalApiErrorResponse(status, {
+    cookieStore,
+    fallbackMessage: "Não foi possível consultar suas submissões no momento.",
+    messages: { 403: "Você não pode consultar estas submissões." },
+  });
 }
