@@ -35,6 +35,7 @@ export type SidebarProps = {
   activePage: AuthenticatedPage;
   canManageUsers: boolean;
   canManageForms: boolean;
+  canViewSubmissions: boolean;
   canViewAiEvaluations: boolean;
   canViewProcesses: boolean;
   canViewTriage: boolean;

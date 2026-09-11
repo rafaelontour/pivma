@@ -31,7 +31,7 @@ O frontend Next.js implementa autenticação, administração básica, Kanban e 
 
 - `user-registration`: o cadastro passa a exigir e enviar o nome completo aceito pelo contrato atual da API.
 - `user-access-management`: a gestão passa a usar os perfis já retornados na listagem, buscar e filtrar usuários, editar nome completo e criar perfis customizados.
-- `authenticated-navigation`: a navegação passa a expor editor de formulários, triagem e observabilidade de acordo com as permissões da sessão.
+- `authenticated-navigation`: a navegação passa a separar o acesso global do perfil Proponente dos módulos administrativos e a expor editor de formulários, triagem e observabilidade de acordo com os perfis e permissões da sessão.
 - `dynamic-process-forms`: a criação recebe um título do proponente e o formulário passa a apresentar seções, indicadores de IA e os estados da pré-avaliação sem perder as operações atuais de rascunho.
 - `process-kanban`: as colunas e a autorização passam a refletir o ciclo e as permissões efetivamente definidos pela branch `develop` do backend.
 

@@ -90,7 +90,7 @@
 - [x] 7.5 Garantir estado ativo e rótulos acessíveis da navegação em sidebar aberta, recolhida e viewport móvel
   - Todos os links possuem `aria-label` e `aria-current`; a sidebar acompanha a mudança entre viewport móvel e desktop e permanece recolhível por teclado.
 - [ ] 7.6 Verificar acesso direto e visibilidade do menu para proponente, leitor de IA, gestor de IA, triador e administrador
-  - Regras de capacidade, tipos, lint e build foram verificados; a matriz completa de visibilidade aguarda sessões válidas dos cinco perfis.
+  - Em 11/09/2026, sessões reais confirmaram que o perfil oficial `Proponente` deve ver Início e Submissões, enquanto o perfil `Administrador` deve ver Início e os módulos administrativos autorizados, sem Submissões. O papel local `proponent` não pode decidir a navegação global porque também aparece na sessão administradora por participação em processos. A regra do shell foi corrigida e passou por lint, TypeScript e build; a matriz completa ainda aguarda sessões válidas dos perfis especializados de leitura/gestão de IA e triagem.
 
 ## 8. Observabilidade administrativa
 

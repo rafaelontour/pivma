@@ -210,6 +210,9 @@ export function AuthenticatedShell({
           session.user.profiles.some((profile) => profile.name === "Grupo Gestor")
         }
         canManageUsers={session.user.permissions.includes("users.read")}
+        canViewSubmissions={session.user.profiles.some(
+          (profile) => profile.name === "Proponente",
+        )}
         canViewAiEvaluations={canViewAiEvaluations}
         canViewProcesses={canViewProcesses}
         canViewTriage={canViewTriage}
@@ -264,6 +267,7 @@ function Sidebar({
   activePage,
   canManageForms,
   canManageUsers,
+  canViewSubmissions,
   canViewAiEvaluations,
   canViewProcesses,
   canViewTriage,
@@ -300,19 +304,21 @@ function Sidebar({
           {expanded && <span>Início</span>}
         </Link>
 
-        <Link
-          aria-current={activePage === "submissions" ? "page" : undefined}
-          aria-label="Submissões"
-          className={`mt-2 ${linkClassName(activePage === "submissions")}`}
-          href="/submissoes"
-        >
-          <FilePenLine
-            aria-hidden="true"
-            className="size-5 shrink-0"
-            strokeWidth={2.2}
-          />
-          {expanded && <span>Submissões</span>}
-        </Link>
+        {canViewSubmissions && (
+          <Link
+            aria-current={activePage === "submissions" ? "page" : undefined}
+            aria-label="Submissões"
+            className={`mt-2 ${linkClassName(activePage === "submissions")}`}
+            href="/submissoes"
+          >
+            <FilePenLine
+              aria-hidden="true"
+              className="size-5 shrink-0"
+              strokeWidth={2.2}
+            />
+            {expanded && <span>Submissões</span>}
+          </Link>
+        )}
 
         {canViewProcesses && (
           <Link

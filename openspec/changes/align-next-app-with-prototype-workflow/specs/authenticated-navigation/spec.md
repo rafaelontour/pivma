@@ -1,3 +1,29 @@
+## MODIFIED Requirements
+
+### Requirement: Acesso às submissões do proponente
+
+O sistema SHALL apresentar o item Submissões na navegação de sessões com o perfil global oficial `Proponente`. O item MUST possuir nome e ícone acessíveis e indicar quando a página estiver ativa. Um papel local `proponent` vinculado à participação em um processo MUST NOT, isoladamente, apresentar esse destino para uma conta de outro perfil.
+
+#### Scenario: Perfil Proponente acessa submissões
+
+- **WHEN** a sessão possui o perfil global oficial `Proponente`
+- **THEN** o sistema apresenta o item Submissões e permite abrir o catálogo de templates
+
+#### Scenario: Administrador não acumula o perfil Proponente
+
+- **WHEN** a sessão possui somente o perfil global `Administrador`, ainda que participe de um processo com o papel local `proponent`
+- **THEN** o sistema não apresenta o item Submissões na navegação administrativa
+
+#### Scenario: Pessoa acumula os dois perfis
+
+- **WHEN** a sessão possui os perfis globais `Proponente` e `Administrador`
+- **THEN** o sistema apresenta Submissões junto aos módulos autorizados pelas permissões administrativas
+
+#### Scenario: Item Submissões está ativo
+
+- **WHEN** a pessoa com perfil Proponente está na página de submissões
+- **THEN** a barra lateral identifica Submissões como a localização atual
+
 ## ADDED Requirements
 
 ### Requirement: Acesso à configuração de formulários e IA

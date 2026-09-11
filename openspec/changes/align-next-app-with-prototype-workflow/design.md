@@ -68,6 +68,7 @@ Alternativa considerada: reunir configuração, submissão e triagem numa única
 - `triage.review` autoriza Triagem e, provisoriamente, o Kanban BraCVAM.
 - `ai_evaluations.read` autoriza leitura da biblioteca.
 - `ai_evaluations.manage` autoriza mutações, teste, publicação e associações.
+- o perfil global oficial `Proponente` apresenta Submissões; o papel local `proponent` limita os processos pertencentes à pessoa, mas não decide a navegação porque também pode aparecer em sessões de outros perfis que participem de um processo.
 - observabilidade depende do indicador administrativo/permissão devolvido pelo contrato de logs.
 - o editor de formulários usa a capacidade administrativa publicada para templates/formulários; ela não será inventada no cliente.
 
