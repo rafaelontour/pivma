@@ -113,6 +113,8 @@ export type FormEditorState =
 export type FormEditorProps = {
   state: Extract<FormEditorState, { kind: "ready" }>;
   canManageAi: boolean;
+  hasPendingChanges?: boolean;
+  onBack?: () => void;
   onNameChange: (name: string) => void;
   onDescriptionChange: (description: string) => void;
   onAddSection: () => void;
@@ -127,6 +129,19 @@ export type FormEditorProps = {
   ) => void;
   onRemoveField: (sectionId: string, fieldIndex: number) => void;
   onMoveField: (sectionId: string, fieldIndex: number, direction: -1 | 1) => void;
+  onSave: () => void;
+};
+
+export type FormCatalogGridProps = {
+  items: FormTemplateCatalogItem[];
+  onSelect: (item: FormTemplateCatalogItem) => void;
+  onRefresh: () => void;
+};
+
+export type FormWorkspaceHeaderProps = {
+  item: FormTemplateCatalogItem;
+  isSaving: boolean;
+  onBack: () => void;
   onSave: () => void;
 };
 
@@ -207,6 +222,12 @@ export type FormModalProps = {
   titleId: string;
   onClose: () => void;
   children: ReactNode;
+};
+
+export type FormConfirmDiscardDialogProps = {
+  isOpen: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
 };
 
 export type FormDefinitionValidation = {

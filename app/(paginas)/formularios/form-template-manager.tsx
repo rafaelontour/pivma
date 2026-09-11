@@ -5,9 +5,10 @@ import { useEffect, useRef, useState } from "react";
 import {
   AlertCircle,
   ArrowDown,
+  ArrowLeft,
+  ArrowRight,
   ArrowUp,
   Bot,
-  FileCog,
   LoaderCircle,
   Plus,
   RefreshCw,
@@ -15,6 +16,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useAccessibleDialog } from "@/components/accessible-dialog";
 import {
   FORM_FIELD_TYPES,
   createEmptyFormField,
@@ -29,6 +31,7 @@ import type {
   EvaluableFieldsResponse,
   FormCatalogCardProps,
   FormCatalogState,
+  FormConfirmDiscardDialogProps,
   FormEditorProps,
   FormEditorFieldProps,
   FormEditorSection,
@@ -64,6 +67,8 @@ export function FormTemplateManager() {
   const [editor, setEditor] = useState<FormEditorState>({ kind: "closed" });
   const [permissions, setPermissions] = useState<string[]>([]);
   const [reloadKey, setReloadKey] = useState(0);
+  const [hasPendingChanges, setHasPendingChanges] = useState(false);
+  const [isConfirmDiscardOpen, setIsConfirmDiscardOpen] = useState(false);
   const selectionRequestId = useRef(0);
 
   useEffect(() => {
@@ -129,6 +134,8 @@ export function FormTemplateManager() {
   async function selectForm(item: FormTemplateCatalogItem) {
     const requestId = selectionRequestId.current + 1;
     selectionRequestId.current = requestId;
+    setHasPendingChanges(false);
+    setIsConfirmDiscardOpen(false);
     setEditor({ kind: "loading", item });
 
     try {
@@ -178,6 +185,7 @@ export function FormTemplateManager() {
         assignments,
         isSaving: false,
       });
+      setHasPendingChanges(false);
     } catch {
       if (selectionRequestId.current === requestId) {
         setEditor({
@@ -193,7 +201,23 @@ export function FormTemplateManager() {
     update: (state: Extract<FormEditorState, { kind: "ready" }>) =>
       Extract<FormEditorState, { kind: "ready" }>,
   ) {
+    setHasPendingChanges(true);
     setEditor((current) => (current.kind === "ready" ? update(current) : current));
+  }
+
+  function handleBackToList() {
+    if (hasPendingChanges) {
+      setIsConfirmDiscardOpen(true);
+      return;
+    }
+    setEditor({ kind: "closed" });
+    setHasPendingChanges(false);
+  }
+
+  function handleConfirmDiscard() {
+    setIsConfirmDiscardOpen(false);
+    setEditor({ kind: "closed" });
+    setHasPendingChanges(false);
   }
 
   async function saveForm() {
@@ -263,6 +287,7 @@ export function FormTemplateManager() {
         assignments: editor.assignments,
         isSaving: false,
       });
+      setHasPendingChanges(false);
       toast.success("Formulário salvo com os dados confirmados pela API.");
     } catch {
       updateReadyEditor((current) => ({ ...current, isSaving: false }));
@@ -270,35 +295,39 @@ export function FormTemplateManager() {
     }
   }
 
-  return (
-    <div className="grid flex-1 gap-5 py-7 lg:grid-cols-[20rem_minmax(0,1fr)]">
-      <aside className="self-start rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="flex items-start justify-between gap-3">
+  if (editor.kind === "closed") {
+    return (
+      <div className="flex-1 pb-12 pt-2">
+        <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.14em] text-teal-700">
-              Catálogo
+              Gestão de formulários
             </p>
-            <h2 className="mt-1 text-lg font-bold text-slate-900">
+            <h1 className="mt-1 text-2xl font-bold text-slate-900">
               Formulários dos processos
-            </h2>
+            </h1>
+            <p className="mt-1 text-sm text-slate-600">
+              Selecione um formulário abaixo para configurar seções, campos e critérios de avaliação de IA.
+            </p>
           </div>
           <button
-            aria-label="Atualizar catálogo de formulários"
-            className="grid size-10 shrink-0 place-items-center rounded-lg text-slate-500 outline-none transition hover:bg-slate-100 hover:text-teal-800 focus-visible:ring-2 focus-visible:ring-teal-500"
+            aria-label="Atualizar lista de formulários"
+            className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm outline-none transition hover:bg-slate-50 hover:text-teal-800 focus-visible:ring-2 focus-visible:ring-teal-500"
             onClick={() => setReloadKey((value) => value + 1)}
             type="button"
           >
             <RefreshCw aria-hidden="true" className="size-4" />
+            <span>Atualizar lista</span>
           </button>
         </div>
 
-        <div className="mt-4 grid gap-3">
-          {catalog.kind === "loading" ? (
-            <div className="flex min-h-28 items-center justify-center gap-2 text-sm text-slate-600">
-              <LoaderCircle aria-hidden="true" className="size-5 animate-spin" />
-              Carregando…
-            </div>
-          ) : catalog.kind === "denied" || catalog.kind === "error" ? (
+        {catalog.kind === "loading" ? (
+          <div className="flex min-h-64 items-center justify-center gap-3 rounded-2xl border border-slate-200 bg-white p-8 text-sm text-slate-600 shadow-sm">
+            <LoaderCircle aria-hidden="true" className="size-5 animate-spin text-teal-700" />
+            Carregando formulários dos processos…
+          </div>
+        ) : catalog.kind === "denied" || catalog.kind === "error" ? (
+          <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
             <FormPageMessage
               actionLabel={catalog.kind === "error" ? "Tentar novamente" : undefined}
               description={catalog.message}
@@ -307,188 +336,246 @@ export function FormTemplateManager() {
                   ? () => setReloadKey((value) => value + 1)
                   : undefined
               }
-              title={catalog.kind === "denied" ? "Acesso restrito" : "Falha no catálogo"}
+              title={catalog.kind === "denied" ? "Acesso restrito" : "Falha na listagem"}
             />
-          ) : catalog.items.length === 0 ? (
+          </div>
+        ) : catalog.items.length === 0 ? (
+          <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
             <FormPageMessage
-              description="A API não retornou formulários administráveis."
+              description="Nenhum formulário de processo administrável foi encontrado."
               title="Nenhum formulário disponível"
             />
-          ) : (
-            catalog.items.map((item) => (
+          </div>
+        ) : (
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            {catalog.items.map((item) => (
               <FormCatalogCard
                 item={item}
                 key={`${item.processKey}:${item.key}`}
                 onSelect={(selected) => void selectForm(selected)}
               />
-            ))
-          )}
-        </div>
-      </aside>
-
-      <section className="min-w-0 rounded-2xl border border-slate-200 bg-white shadow-sm">
-        {editor.kind === "closed" ? (
-          <div className="grid min-h-96 place-items-center p-8 text-center">
-            <div className="max-w-md">
-              <FileCog aria-hidden="true" className="mx-auto size-10 text-teal-700" />
-              <h2 className="mt-4 text-xl font-bold text-slate-900">
-                Selecione um formulário
-              </h2>
-              <p className="mt-2 text-sm leading-6 text-slate-600">
-                Escolha um item do catálogo para consultar e editar sua definição.
-              </p>
-            </div>
+            ))}
           </div>
-        ) : editor.kind === "loading" ? (
-          <div className="flex min-h-96 items-center justify-center gap-3 text-sm text-slate-600">
-            <LoaderCircle aria-hidden="true" className="size-5 animate-spin" />
-            Carregando {editor.item.name}…
-          </div>
-        ) : editor.kind === "error" ? (
-          <div className="grid min-h-96 place-items-center p-8">
-            <FormPageMessage
-              actionLabel="Tentar novamente"
-              description={editor.message}
-              onAction={() => void selectForm(editor.item)}
-              title="Não foi possível abrir o formulário"
-            />
-          </div>
-        ) : (
-          <FormEditor
-            canManageAi={canManageAi}
-            onAddField={(sectionId) =>
-              updateReadyEditor((current) => ({
-                ...current,
-                sections: current.sections.map((section) =>
-                  section.id === sectionId
-                    ? {
-                        ...section,
-                        fields: [
-                          ...section.fields,
-                          createEmptyFormField(
-                            current.sections.reduce(
-                              (total, item) => total + item.fields.length,
-                              0,
-                            ),
-                            section.name,
-                          ),
-                        ],
-                      }
-                    : section,
-                ),
-              }))
-            }
-            onAddSection={() =>
-              updateReadyEditor((current) => ({
-                ...current,
-                sections: [
-                  ...current.sections,
-                  createEmptyFormSection(current.sections.length),
-                ],
-              }))
-            }
-            onDescriptionChange={(description) =>
-              updateReadyEditor((current) => ({
-                ...current,
-                detail: { ...current.detail, description },
-              }))
-            }
-            onMoveField={(sectionId, fieldIndex, direction) =>
-              updateReadyEditor((current) => ({
-                ...current,
-                sections: current.sections.map((section) =>
-                  section.id === sectionId
-                    ? { ...section, fields: moveItem(section.fields, fieldIndex, direction) }
-                    : section,
-                ),
-              }))
-            }
-            onMoveSection={(sectionId, direction) =>
-              updateReadyEditor((current) => ({
-                ...current,
-                sections: moveItem(
-                  current.sections,
-                  current.sections.findIndex((section) => section.id === sectionId),
-                  direction,
-                ),
-              }))
-            }
-            onNameChange={(name) =>
-              updateReadyEditor((current) => ({
-                ...current,
-                detail: { ...current.detail, name },
-              }))
-            }
-            onRemoveField={(sectionId, fieldIndex) =>
-              updateReadyEditor((current) => ({
-                ...current,
-                sections: current.sections.map((section) =>
-                  section.id === sectionId
-                    ? {
-                        ...section,
-                        fields: section.fields.filter((_, index) => index !== fieldIndex),
-                      }
-                    : section,
-                ),
-              }))
-            }
-            onRemoveSection={(sectionId) =>
-              updateReadyEditor((current) => ({
-                ...current,
-                sections: current.sections.filter((section) => section.id !== sectionId),
-              }))
-            }
-            onRenameSection={(sectionId, name) =>
-              updateReadyEditor((current) => ({
-                ...current,
-                sections: current.sections.map((section) =>
-                  section.id === sectionId ? { ...section, name } : section,
-                ),
-              }))
-            }
-            onSave={() => void saveForm()}
-            onUpdateField={(sectionId, fieldIndex, field) =>
-              updateReadyEditor((current) => ({
-                ...current,
-                sections: current.sections.map((section) =>
-                  section.id === sectionId
-                    ? {
-                        ...section,
-                        fields: section.fields.map((item, index) =>
-                          index === fieldIndex ? field : item,
-                        ),
-                      }
-                    : section,
-                ),
-              }))
-            }
-            state={editor}
-          />
         )}
-      </section>
+      </div>
+    );
+  }
+
+  if (editor.kind === "loading") {
+    return (
+      <div className="flex-1 pb-12 pt-2">
+        <div className="mb-4">
+          <button
+            className="inline-flex items-center gap-2 rounded-lg py-1 text-sm font-semibold text-teal-700 outline-none transition hover:text-teal-900 focus-visible:ring-2 focus-visible:ring-teal-500"
+            onClick={() => setEditor({ kind: "closed" })}
+            type="button"
+          >
+            <ArrowLeft aria-hidden="true" className="size-4" />
+            Voltar para a lista de formulários
+          </button>
+        </div>
+        <div className="flex min-h-96 items-center justify-center gap-3 rounded-2xl border border-slate-200 bg-white p-8 text-sm text-slate-600 shadow-sm">
+          <LoaderCircle aria-hidden="true" className="size-5 animate-spin text-teal-700" />
+          Carregando formulário {editor.item.name}…
+        </div>
+      </div>
+    );
+  }
+
+  if (editor.kind === "error") {
+    return (
+      <div className="flex-1 pb-12 pt-2">
+        <div className="mb-4">
+          <button
+            className="inline-flex items-center gap-2 rounded-lg py-1 text-sm font-semibold text-teal-700 outline-none transition hover:text-teal-900 focus-visible:ring-2 focus-visible:ring-teal-500"
+            onClick={() => setEditor({ kind: "closed" })}
+            type="button"
+          >
+            <ArrowLeft aria-hidden="true" className="size-4" />
+            Voltar para a lista de formulários
+          </button>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
+          <FormPageMessage
+            actionLabel="Tentar novamente"
+            description={editor.message}
+            onAction={() => void selectForm(editor.item)}
+            title="Não foi possível abrir o formulário"
+          />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex-1 pb-12 pt-2">
+      <div className="min-w-0 rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <FormEditor
+          canManageAi={canManageAi}
+          hasPendingChanges={hasPendingChanges}
+          onAddField={(sectionId) =>
+            updateReadyEditor((current) => ({
+              ...current,
+              sections: current.sections.map((section) =>
+                section.id === sectionId
+                  ? {
+                      ...section,
+                      fields: [
+                        ...section.fields,
+                        createEmptyFormField(
+                          current.sections.reduce(
+                            (total, item) => total + item.fields.length,
+                            0,
+                          ),
+                          section.name,
+                        ),
+                      ],
+                    }
+                  : section,
+              ),
+            }))
+          }
+          onAddSection={() =>
+            updateReadyEditor((current) => ({
+              ...current,
+              sections: [
+                ...current.sections,
+                createEmptyFormSection(current.sections.length),
+              ],
+            }))
+          }
+          onBack={handleBackToList}
+          onDescriptionChange={(description) =>
+            updateReadyEditor((current) => ({
+              ...current,
+              detail: { ...current.detail, description },
+            }))
+          }
+          onMoveField={(sectionId, fieldIndex, direction) =>
+            updateReadyEditor((current) => ({
+              ...current,
+              sections: current.sections.map((section) =>
+                section.id === sectionId
+                  ? { ...section, fields: moveItem(section.fields, fieldIndex, direction) }
+                  : section,
+              ),
+            }))
+          }
+          onMoveSection={(sectionId, direction) =>
+            updateReadyEditor((current) => ({
+              ...current,
+              sections: moveItem(
+                current.sections,
+                current.sections.findIndex((section) => section.id === sectionId),
+                direction,
+              ),
+            }))
+          }
+          onNameChange={(name) =>
+            updateReadyEditor((current) => ({
+              ...current,
+              detail: { ...current.detail, name },
+            }))
+          }
+          onRemoveField={(sectionId, fieldIndex) =>
+            updateReadyEditor((current) => ({
+              ...current,
+              sections: current.sections.map((section) =>
+                section.id === sectionId
+                  ? {
+                      ...section,
+                      fields: section.fields.filter((_, index) => index !== fieldIndex),
+                    }
+                  : section,
+              ),
+            }))
+          }
+          onRemoveSection={(sectionId) =>
+            updateReadyEditor((current) => ({
+              ...current,
+              sections: current.sections.filter((section) => section.id !== sectionId),
+            }))
+          }
+          onRenameSection={(sectionId, name) =>
+            updateReadyEditor((current) => ({
+              ...current,
+              sections: current.sections.map((section) =>
+                section.id === sectionId ? { ...section, name } : section,
+              ),
+            }))
+          }
+          onSave={() => void saveForm()}
+          onUpdateField={(sectionId, fieldIndex, field) =>
+            updateReadyEditor((current) => ({
+              ...current,
+              sections: current.sections.map((section) =>
+                section.id === sectionId
+                  ? {
+                      ...section,
+                      fields: section.fields.map((item, index) =>
+                        index === fieldIndex ? field : item,
+                      ),
+                    }
+                  : section,
+              ),
+            }))
+          }
+          state={editor}
+        />
+      </div>
+
+      <FormConfirmDiscardDialog
+        isOpen={isConfirmDiscardOpen}
+        onCancel={() => setIsConfirmDiscardOpen(false)}
+        onConfirm={handleConfirmDiscard}
+      />
     </div>
   );
 }
 
 function FormCatalogCard({ item, onSelect }: FormCatalogCardProps) {
   return (
-    <button
-      className="w-full rounded-xl border border-slate-200 p-4 text-left outline-none transition hover:border-teal-400 hover:bg-teal-50/60 focus-visible:ring-2 focus-visible:ring-teal-500"
-      onClick={() => onSelect(item)}
-      type="button"
-    >
-      <p className="font-semibold text-slate-900">{item.name}</p>
-      <p className="mt-1 text-xs leading-5 text-slate-500">{item.processName}</p>
-      <p className="mt-2 font-mono text-[0.7rem] text-teal-800">
-        {item.key} · v{item.version}
-      </p>
-    </button>
+    <div className="flex flex-col justify-between rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition hover:border-teal-300 hover:shadow-md">
+      <div>
+        <div className="flex items-start justify-between gap-3">
+          <span className="inline-flex items-center rounded-lg bg-teal-50 px-2.5 py-1 text-xs font-semibold text-teal-800">
+            {item.processName}
+          </span>
+          <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 font-mono text-[0.7rem] font-medium text-slate-600">
+            v{item.version}
+          </span>
+        </div>
+
+        <h2 className="mt-3 text-lg font-bold text-slate-900">{item.name}</h2>
+
+        <p className="mt-2 text-sm leading-6 text-slate-600">
+          {item.description?.trim() ||
+            `Formulário padrão associado ao processo ${item.processName}.`}
+        </p>
+      </div>
+
+      <div className="mt-6 border-t border-slate-100 pt-4">
+        <div className="flex items-center justify-between gap-3">
+          <span className="font-mono text-xs text-slate-500">{item.key}</span>
+          <button
+            className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-teal-700 px-4 text-xs font-semibold text-white outline-none transition hover:bg-teal-800 focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2"
+            onClick={() => onSelect(item)}
+            type="button"
+          >
+            <span>Configurar formulário</span>
+            <ArrowRight aria-hidden="true" className="size-3.5" />
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
 function FormEditor({
   state,
   canManageAi,
+  hasPendingChanges,
+  onBack,
   onNameChange,
   onDescriptionChange,
   onAddSection,
@@ -504,13 +591,33 @@ function FormEditor({
   return (
     <div>
       <header className="border-b border-slate-200 p-5 sm:p-6">
+        {onBack && (
+          <div className="mb-4">
+            <button
+              className="inline-flex items-center gap-2 rounded-lg py-1 text-sm font-semibold text-teal-700 outline-none transition hover:text-teal-900 focus-visible:ring-2 focus-visible:ring-teal-500"
+              onClick={onBack}
+              type="button"
+            >
+              <ArrowLeft aria-hidden="true" className="size-4" />
+              <span>Voltar para a lista de formulários</span>
+            </button>
+          </div>
+        )}
+
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="font-mono text-xs font-bold text-teal-700">
-              {state.item.processKey} / {state.detail.key} · v{state.detail.version}
-            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="font-mono text-xs font-bold text-teal-700">
+                {state.item.processKey} / {state.detail.key} · v{state.detail.version}
+              </p>
+              {hasPendingChanges && (
+                <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800">
+                  Alterações não salvas
+                </span>
+              )}
+            </div>
             <h2 className="mt-1 text-xl font-bold text-slate-900">
-              Editar definição
+              {state.detail.name || "Editar formulário"}
             </h2>
           </div>
           <button
@@ -524,13 +631,13 @@ function FormEditor({
             ) : (
               <Save aria-hidden="true" className="size-4" />
             )}
-            {state.isSaving ? "Salvando…" : "Salvar definição"}
+            {state.isSaving ? "Salvando…" : "Salvar formulário"}
           </button>
         </div>
 
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
           <label className="text-sm font-semibold text-slate-800">
-            Nome
+            Nome do formulário
             <input
               className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 px-3 text-sm font-normal outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20"
               disabled={state.isSaving}
@@ -972,6 +1079,61 @@ function FormPageMessage({
           {actionLabel}
         </button>
       )}
+    </div>
+  );
+}
+
+function FormConfirmDiscardDialog({
+  isOpen,
+  onCancel,
+  onConfirm,
+}: FormConfirmDiscardDialogProps) {
+  const dialogRef = useAccessibleDialog(isOpen, false, onCancel);
+  if (!isOpen) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] grid place-items-center bg-slate-950/55 p-4"
+      role="presentation"
+    >
+      <div
+        aria-labelledby="discard-changes-title"
+        aria-modal="true"
+        className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"
+        ref={dialogRef}
+        role="dialog"
+        tabIndex={-1}
+      >
+        <div className="flex size-12 items-center justify-center rounded-full bg-amber-100 text-amber-700">
+          <AlertCircle aria-hidden="true" className="size-6" />
+        </div>
+        <h2
+          className="mt-4 text-xl font-bold text-slate-900"
+          id="discard-changes-title"
+        >
+          Descartar alterações?
+        </h2>
+        <p className="mt-2 text-sm leading-6 text-slate-600">
+          Você possui modificações não salvas neste formulário. Ao voltar para a
+          lista de formulários, todas as alterações pendentes serão perdidas.
+        </p>
+        <div className="mt-6 flex flex-wrap justify-end gap-3">
+          <button
+            className="min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-slate-700 outline-none transition hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-teal-500"
+            onClick={onCancel}
+            type="button"
+          >
+            Continuar editando
+          </button>
+          <button
+            className="min-h-11 rounded-xl bg-rose-600 px-4 text-sm font-semibold text-white outline-none transition hover:bg-rose-700 focus-visible:ring-2 focus-visible:ring-rose-500"
+            onClick={onConfirm}
+            type="button"
+          >
+            Descartar alterações
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

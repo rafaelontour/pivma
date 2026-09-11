@@ -22,11 +22,13 @@ export async function GET() {
     });
   }
 
+  const user = result.data.user ?? result.data;
+
   return NextResponse.json({
-    id: result.data.id,
-    username: result.data.username,
-    email: result.data.email,
-    full_name: result.data.full_name,
+    id: user.id ?? result.data.id ?? "",
+    username: user.username ?? result.data.username ?? "",
+    email: user.email ?? result.data.email ?? "",
+    full_name: user.full_name ?? result.data.full_name ?? null,
     permissions: result.data.access.global_permissions,
     profiles: result.data.access.profiles,
     isAdministrator:

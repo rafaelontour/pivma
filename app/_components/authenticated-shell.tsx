@@ -228,7 +228,7 @@ export function AuthenticatedShell({
               activePage === "operational-observability" ||
               activePage === "ai-observability"
                 ? "max-w-none"
-                : activePage === "processes"
+                : activePage === "processes" || activePage === "forms"
                   ? "max-w-[100rem]"
                   : "max-w-6xl"
             }`}
