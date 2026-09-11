@@ -6,18 +6,16 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   Activity,
-  Bot,
   BrainCircuit,
   ClipboardCheck,
   House,
   LayoutDashboard,
   FilePenLine,
-  ListChecks,
   LoaderCircle,
   LogOut,
   PanelLeftClose,
   PanelLeftOpen,
-  UsersRound,
+  Settings,
 } from "lucide-react";
 import { toast } from "sonner";
 import type {
@@ -116,6 +114,13 @@ export function AuthenticatedShell({
     "ai_evaluations.manage",
   ].some((permission) => session.user.permissions.includes(permission));
   const canViewTriage = session.user.permissions.includes("triage.review");
+  const canManageForms =
+    session.user.isAdministrator ||
+    session.user.permissions.includes("rbac.read") ||
+    session.user.profiles.some((profile) => profile.name === "Grupo Gestor");
+  const canManageUsers = session.user.permissions.includes("users.read");
+  const canViewSettings =
+    canManageForms || canViewAiEvaluations || canManageUsers;
   const heading = getPageHeading(
     activePage,
     session.user.full_name || session.user.username,
@@ -204,19 +209,13 @@ export function AuthenticatedShell({
 
       <Sidebar
         activePage={activePage}
-        canManageForms={
-          session.user.isAdministrator ||
-          session.user.permissions.includes("rbac.read") ||
-          session.user.profiles.some((profile) => profile.name === "Grupo Gestor")
-        }
-        canManageUsers={session.user.permissions.includes("users.read")}
         canViewSubmissions={session.user.profiles.some(
           (profile) => profile.name === "Proponente",
         )}
-        canViewAiEvaluations={canViewAiEvaluations}
         canViewProcesses={canViewProcesses}
         canViewTriage={canViewTriage}
         canViewObservability={session.user.isAdministrator}
+        canViewSettings={canViewSettings}
         expanded={isSidebarExpanded}
         user={session.user}
       />
@@ -265,13 +264,11 @@ export function AuthenticatedShell({
 
 function Sidebar({
   activePage,
-  canManageForms,
-  canManageUsers,
   canViewSubmissions,
-  canViewAiEvaluations,
   canViewProcesses,
   canViewTriage,
   canViewObservability,
+  canViewSettings,
   expanded,
   user,
 }: SidebarProps) {
@@ -352,43 +349,31 @@ function Sidebar({
           </Link>
         )}
 
-        {canManageForms && (
+        {canViewSettings && (
           <Link
-            aria-current={activePage === "forms" ? "page" : undefined}
-            aria-label="Formulários"
-            className={`mt-2 ${linkClassName(activePage === "forms")}`}
-            href="/formularios"
+            aria-current={
+              activePage === "settings" ||
+              activePage === "forms" ||
+              activePage === "ai-evaluations" ||
+              activePage === "users"
+                ? "page"
+                : undefined
+            }
+            aria-label="Configurações"
+            className={`mt-2 ${linkClassName(
+              activePage === "settings" ||
+                activePage === "forms" ||
+                activePage === "ai-evaluations" ||
+                activePage === "users",
+            )}`}
+            href="/configuracoes"
           >
-            <ListChecks aria-hidden="true" className="size-5 shrink-0" strokeWidth={2.2} />
-            {expanded && <span>Formulários</span>}
-          </Link>
-        )}
-
-        {canViewAiEvaluations && (
-          <Link
-            aria-current={activePage === "ai-evaluations" ? "page" : undefined}
-            aria-label="Avaliações por IA"
-            className={`mt-2 ${linkClassName(activePage === "ai-evaluations")}`}
-            href="/avaliacoes-ia"
-          >
-            <Bot aria-hidden="true" className="size-5 shrink-0" strokeWidth={2.2} />
-            {expanded && <span>Avaliações por IA</span>}
-          </Link>
-        )}
-
-        {canManageUsers && (
-          <Link
-            aria-current={activePage === "users" ? "page" : undefined}
-            aria-label="Usuários"
-            className={`mt-2 ${linkClassName(activePage === "users")}`}
-            href="/usuarios"
-          >
-            <UsersRound
+            <Settings
               aria-hidden="true"
               className="size-5 shrink-0"
               strokeWidth={2.2}
             />
-            {expanded && <span>Usuários</span>}
+            {expanded && <span>Configurações</span>}
           </Link>
         )}
 
@@ -462,6 +447,15 @@ function SessionLoading() {
 }
 
 function getPageHeading(page: SidebarProps["activePage"], username: string) {
+  if (page === "settings") {
+    return {
+      eyebrow: "Administração",
+      title: "Configurações",
+      description:
+        "Gerencie parâmetros da plataforma, formulários de submissão, critérios de IA e diretório de contas.",
+    };
+  }
+
   if (page === "operational-observability") {
     return {
       eyebrow: "Administração",
