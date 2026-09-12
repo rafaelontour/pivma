@@ -163,7 +163,14 @@ export type SubmitSubmissionResult = {
   artifact_id?: string | null;
 };
 
+export type SubmissionAcceptedEvent = {
+  processId: string;
+  process: ProcessInstance | null;
+};
+
 export type SubmissionFormOperation = "idle" | "saving" | "submitting";
+
+export type SubmissionFormViewMode = "draft" | "submitted";
 
 export type SubmissionCatalogState =
   | { kind: "loading" }
@@ -188,12 +195,14 @@ export type SubmissionDialogState =
       kind: "error";
       template: SubmissionTemplate;
       process: ProcessInstance;
+      viewMode: SubmissionFormViewMode;
       message: string;
     }
   | {
       kind: "ready";
       template: SubmissionTemplate;
       process: ProcessInstance;
+      viewMode: SubmissionFormViewMode;
       form: SubmissionForm;
     };
 
@@ -203,6 +212,21 @@ export type SubmissionFieldInputs = Record<
   string,
   SubmissionFieldInputValue
 >;
+
+export type SubmissionAttachments = Record<
+  string,
+  SubmissionAttachment | null
+>;
+
+export type SubmissionFormSection = {
+  key: string;
+  name: string;
+  fields: DynamicFormField[];
+};
+
+export type DynamicFormValidationMode = "partial" | "complete";
+
+export type DynamicFormValidationErrors = Record<string, string>;
 
 export type SubmissionTemplateCardProps = {
   template: SubmissionTemplate;
@@ -232,7 +256,7 @@ export type SubmissionFormDialogProps = {
   onClose: () => void;
   onRetry: () => void;
   onSaved: () => void;
-  onSubmitted: () => void;
+  onSubmitted: (event: SubmissionAcceptedEvent) => void;
 };
 
 export type SubmissionDraftCardProps = {
@@ -252,6 +276,8 @@ export type SubmittedSubmissionCardProps = {
 export type DynamicFormFieldControlProps = {
   field: DynamicFormField;
   value: SubmissionFieldInputValue | undefined;
+  error?: string;
+  attachment?: SubmissionAttachment | null;
   disabled: boolean;
   onChange: (value: SubmissionFieldInputValue) => void;
   onAttachmentChange?: (attachment: SubmissionAttachment | null) => void;
@@ -273,9 +299,16 @@ export type DynamicFormFieldHelpProps = {
   helpId: string | undefined;
 };
 
-export type DynamicFormValidationResult =
-  | { valid: true }
-  | { valid: false; fieldKey: string; message: string };
+export type DynamicFormFieldErrorProps = {
+  error: string | undefined;
+  errorId: string | undefined;
+};
+
+export type DynamicFormValidationResult = {
+  valid: boolean;
+  errors: DynamicFormValidationErrors;
+  firstFieldKey: string | null;
+};
 
 export type SubmissionDialogContentProps = {
   processId: string;
@@ -293,6 +326,9 @@ export type SubmissionDialogContentProps = {
 export type SubmissionTrackingCardProps = {
   submission: ProcessInstance;
   templateName: string;
+  isOpening: boolean;
+  isOpeningLocked: boolean;
+  onOpen: (submission: ProcessInstance) => void;
   onProcessChanged: () => void;
 };
 

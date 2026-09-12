@@ -47,7 +47,7 @@ export function LoginForm({ onRegister }: LoginFormProps) {
         | LoginCurrentUser
         | null;
 
-      if (!userResponse.ok || !userPayload?.username || !userPayload.email) {
+      if (!userResponse.ok || !userPayload?.username) {
         setFormState({ kind: "idle" });
         toast.error("Sua sessão foi iniciada, mas não foi possível carregar seu perfil.");
         return;

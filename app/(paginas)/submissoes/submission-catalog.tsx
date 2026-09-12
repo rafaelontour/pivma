@@ -1,9 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import {
   AlertCircle,
   Check,
+  ChevronLeft,
+  ChevronRight,
   FileCheck2,
   FileClock,
   FilePenLine,
@@ -19,12 +22,15 @@ import { DynamicFormFieldControl } from "@/components/dynamic-form-field";
 import {
   buildDynamicFormInputs,
   buildDynamicFormValues,
+  groupDynamicFormSections,
   validateDynamicFormValues,
 } from "@/components/formulario";
 import type { ProcessInstance } from "@/types/Processo";
 import type { ApiMessage, ApiRecord } from "@/types/Servico";
 import type {
   DynamicFormField,
+  DynamicFormValidationErrors,
+  DynamicFormValidationMode,
   SaveSubmissionDraftResult,
   SubmissionCatalogMessageProps,
   SubmissionCatalogState,
@@ -34,8 +40,11 @@ import type {
   SubmissionDraftsState,
   SubmissionFieldInputs,
   SubmissionForm,
+  SubmissionFormSection,
+  SubmissionAttachments,
   SubmissionFormDialogProps,
   SubmissionFormOperation,
+  SubmissionFormViewMode,
   SubmissionIdentificationDialogProps,
   SubmissionTab,
   SubmissionTemplate,
@@ -64,7 +73,7 @@ export function SubmissionCatalog() {
   });
   const [submittedState, setSubmittedState] =
     useState<SubmittedSubmissionsState>({ kind: "loading" });
-  const [openingDraftId, setOpeningDraftId] = useState<string | null>(null);
+  const [openingProcessId, setOpeningProcessId] = useState<string | null>(null);
   const [identificationTemplate, setIdentificationTemplate] =
     useState<SubmissionTemplate | null>(null);
   const [submissionTitle, setSubmissionTitle] = useState("");
@@ -159,24 +168,27 @@ export function SubmissionCatalog() {
     }
   }
 
-  async function openDraft(draft: ProcessInstance) {
+  async function openSubmissionForm(
+    process: ProcessInstance,
+    viewMode: SubmissionFormViewMode,
+  ) {
     if (isCreatingRef.current || isOpeningRef.current) {
       return;
     }
 
     isOpeningRef.current = true;
-    setOpeningDraftId(draft.id);
+    setOpeningProcessId(process.id);
 
     const availableTemplates = state.kind === "ready" ? state.templates : [];
     const template = availableTemplates.find(
-      (candidate) => candidate.key === draft.template_key,
-    ) ?? buildFallbackTemplate(draft);
+      (candidate) => candidate.key === process.template_key,
+    ) ?? buildFallbackTemplate(process);
 
     try {
-      await loadForm(template, draft);
+      await loadForm(template, process, viewMode);
     } finally {
       isOpeningRef.current = false;
-      setOpeningDraftId(null);
+      setOpeningProcessId(null);
     }
   }
 
@@ -198,6 +210,7 @@ export function SubmissionCatalog() {
   async function loadForm(
     template: SubmissionTemplate,
     process: ProcessInstance,
+    viewMode: SubmissionFormViewMode = "draft",
   ) {
     try {
       const response = await fetch(`/api/submissions/${process.id}/form`, {
@@ -210,21 +223,37 @@ export function SubmissionCatalog() {
           kind: "error",
           template,
           process,
+          viewMode,
           message: getApiMessage(
             payload,
-            "O rascunho foi criado, mas o formulário não pôde ser carregado.",
+            viewMode === "draft"
+              ? "O rascunho foi criado, mas o formulário não pôde ser carregado."
+              : "Não foi possível carregar o formulário desta submissão.",
           ),
         });
         return;
       }
 
-      setDialog({ kind: "ready", template, process, form: payload });
+      setDialog({
+        kind: "ready",
+        template,
+        process,
+        viewMode,
+        form:
+          viewMode === "submitted" && !payload.is_submitted
+            ? { ...payload, is_submitted: true }
+            : payload,
+      });
     } catch {
       setDialog({
         kind: "error",
         template,
         process,
-        message: "O rascunho foi criado, mas o formulário não pôde ser carregado.",
+        viewMode,
+        message:
+          viewMode === "draft"
+            ? "O rascunho foi criado, mas o formulário não pôde ser carregado."
+            : "Não foi possível carregar o formulário desta submissão.",
       });
     }
   }
@@ -352,10 +381,12 @@ export function SubmissionCatalog() {
               return (
                 <SubmissionDraftCard
                   draft={draft}
-                  isOpening={openingDraftId === draft.id}
-                  isOpeningLocked={openingDraftId !== null || creatingTemplateKey !== null}
+                  isOpening={openingProcessId === draft.id}
+                  isOpeningLocked={openingProcessId !== null || creatingTemplateKey !== null}
                   key={draft.id}
-                  onOpen={(selectedDraft) => void openDraft(selectedDraft)}
+                  onOpen={(selectedDraft) =>
+                    void openSubmissionForm(selectedDraft, "draft")
+                  }
                   templateName={templateName ?? draft.template_key}
                 />
               );
@@ -455,7 +486,14 @@ export function SubmissionCatalog() {
 
               return (
                 <SubmissionTrackingCard
+                  isOpening={openingProcessId === submission.id}
+                  isOpeningLocked={
+                    openingProcessId !== null || creatingTemplateKey !== null
+                  }
                   key={submission.id}
+                  onOpen={(selectedSubmission) =>
+                    void openSubmissionForm(selectedSubmission, "submitted")
+                  }
                   onProcessChanged={() => {
                     refreshDrafts();
                     refreshSubmittedSubmissions();
@@ -517,7 +555,7 @@ export function SubmissionCatalog() {
           {state.templates.map((template) => (
             <SubmissionTemplateCard
               isCreating={creatingTemplateKey === template.key}
-              isCreationLocked={creatingTemplateKey !== null || openingDraftId !== null}
+              isCreationLocked={creatingTemplateKey !== null || openingProcessId !== null}
               key={template.id}
               onSelect={(selectedTemplate) => void selectTemplate(selectedTemplate)}
               template={template}
@@ -532,13 +570,47 @@ export function SubmissionCatalog() {
         <SubmissionFormDialog
           key={`${dialog.process.id}-${dialog.kind}`}
           onClose={() => setDialog({ kind: "closed" })}
-          onRetry={() => void loadForm(dialog.template, dialog.process)}
+          onRetry={() =>
+            void loadForm(dialog.template, dialog.process, dialog.viewMode)
+          }
           onSaved={refreshDrafts}
-          onSubmitted={() => {
+          onSubmitted={({ processId, process }) => {
             setDialog({ kind: "closed" });
+
+            if (process?.status === "SUBMISSION") {
+              setActiveTab("drafts");
+              refreshDrafts();
+              refreshSubmittedSubmissions();
+              return;
+            }
+
             setActiveTab("submitted");
-            refreshDrafts();
-            refreshSubmittedSubmissions();
+            setDraftsState((current) =>
+              current.kind === "ready"
+                ? {
+                    kind: "ready",
+                    drafts: current.drafts.filter(
+                      (draft) => draft.id !== processId,
+                    ),
+                  }
+                : current,
+            );
+
+            if (process) {
+              setSubmittedState((current) => ({
+                kind: "ready",
+                submissions: [
+                  process,
+                  ...(current.kind === "ready"
+                    ? current.submissions.filter(
+                        (submission) => submission.id !== process.id,
+                      )
+                    : []),
+                ],
+              }));
+            } else {
+              refreshSubmittedSubmissions();
+            }
           }}
           state={dialog}
         />
@@ -593,7 +665,7 @@ function SubmissionTemplateCard({
   );
 }
 
-function SubmissionIdentificationDialog({
+export function SubmissionIdentificationDialog({
   template,
   title,
   isCreating,
@@ -603,7 +675,7 @@ function SubmissionIdentificationDialog({
 }: SubmissionIdentificationDialogProps) {
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/50 p-4" role="presentation">
-      <div aria-labelledby="submission-identification-title" aria-modal="true" className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl" role="dialog">
+      <div aria-labelledby="submission-identification-title" aria-modal="true" className="w-[90vw] max-w-none rounded-2xl bg-white p-6 shadow-2xl" role="dialog">
         <FilePlus2 aria-hidden="true" className="size-8 text-teal-700" />
         <h2 className="mt-3 text-xl font-bold text-slate-900" id="submission-identification-title">Identifique sua submissão</h2>
         <p className="mt-2 text-sm leading-6 text-slate-600">Informe um título significativo para “{template.name}”. O processo só será criado depois desta confirmação.</p>
@@ -673,7 +745,7 @@ function SubmissionDraftCard({
   );
 }
 
-function SubmissionFormDialog({
+export function SubmissionFormDialog({
   state,
   onClose,
   onRetry,
@@ -693,6 +765,7 @@ function SubmissionFormDialog({
   async function saveDraft() {
     if (
       state.kind !== "ready" ||
+      state.viewMode === "submitted" ||
       state.form.is_submitted ||
       operationRef.current !== "idle"
     ) {
@@ -733,18 +806,10 @@ function SubmissionFormDialog({
   async function submitForAnalysis() {
     if (
       state.kind !== "ready" ||
+      state.viewMode === "submitted" ||
       state.form.is_submitted ||
       operationRef.current !== "idle"
     ) {
-      return;
-    }
-
-    const validation = validateDynamicFormValues(state.form.fields, inputs);
-    if (!validation.valid) {
-      toast.error(validation.message);
-      document
-        .getElementById(`dynamic-form-field-${validation.fieldKey}`)
-        ?.focus();
       return;
     }
 
@@ -768,8 +833,9 @@ function SubmissionFormDialog({
         return;
       }
 
+      const process = await requestSubmissionProcess(state.process.id);
       toast.success("Submissão enviada para análise.");
-      onSubmitted();
+      onSubmitted({ processId: state.process.id, process });
     } catch {
       toast.error("Não foi possível conectar ao serviço de submissões.");
     } finally {
@@ -785,11 +851,11 @@ function SubmissionFormDialog({
       className="fixed inset-0 z-50 grid place-items-center bg-slate-950/50 p-3 backdrop-blur-[2px] sm:p-6"
       role="dialog"
     >
-      <div className="flex max-h-[94dvh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+      <div className="flex max-h-[94dvh] w-[90vw] max-w-none flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
         <header className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200 px-5 py-4 sm:px-6">
           <div className="min-w-0">
             <p className="font-mono text-xs font-bold uppercase tracking-wide text-teal-700">
-              {state.process.code} · Rascunho
+              {state.process.code} · {state.viewMode === "submitted" ? "Submissão" : "Rascunho"}
             </p>
             <h2
               className="mt-1 truncate text-xl font-bold text-slate-900"
@@ -814,10 +880,16 @@ function SubmissionFormDialog({
             <div className="rounded-xl border border-rose-200 bg-rose-50 p-5">
               <AlertCircle aria-hidden="true" className="size-6 text-rose-700" />
               <p className="mt-3 text-sm leading-6 text-rose-800">{state.message}</p>
-              <p className="mt-2 text-xs leading-5 text-rose-700">
-                A estrutura {state.process.code} já existe. Nenhum valor digitado
-                é enviado enquanto Salvar rascunho não for acionado.
-              </p>
+              {state.viewMode === "draft" ? (
+                <p className="mt-2 text-xs leading-5 text-rose-700">
+                  A estrutura {state.process.code} já existe. Nenhum valor digitado
+                  é enviado enquanto Salvar rascunho não for acionado.
+                </p>
+              ) : (
+                <p className="mt-2 text-xs leading-5 text-rose-700">
+                  A submissão permanece registrada e pode ser consultada novamente.
+                </p>
+              )}
               <button
                 className="mt-4 rounded-lg bg-rose-800 px-4 py-2 text-sm font-semibold text-white outline-none focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:ring-offset-2"
                 onClick={onRetry}
@@ -829,8 +901,13 @@ function SubmissionFormDialog({
           </div>
         ) : (
           <SubmissionDialogContent
-            form={state.form}
+            form={
+              state.viewMode === "submitted" && !state.form.is_submitted
+                ? { ...state.form, is_submitted: true }
+                : state.form
+            }
             inputs={inputs}
+            key={state.form.form_instance_id}
             operation={operation}
             processId={state.process.id}
             onFieldChange={updateField}
@@ -843,7 +920,7 @@ function SubmissionFormDialog({
   );
 }
 
-function SubmissionDialogContent({
+export function SubmissionDialogContent({
   processId,
   form,
   inputs,
@@ -852,16 +929,174 @@ function SubmissionDialogContent({
   onSave,
   onSubmit,
 }: SubmissionDialogContentProps) {
-  const orderedFields = [...form.fields].sort(
-    (first, second) => first.order_index - second.order_index,
+  const sections = useMemo(
+    () => groupDynamicFormSections(form.fields),
+    [form.fields],
   );
-  const sections = [...new Set(orderedFields.map((field) => field.section?.trim() || "Geral"))];
+  const [activeSectionKey, setActiveSectionKey] = useState(
+    () => sections[0]?.key ?? "",
+  );
+  const [validationErrors, setValidationErrors] = useState<
+    DynamicFormValidationErrors
+  >({});
+  const [attachments, setAttachments] = useState<SubmissionAttachments>(() =>
+    Object.fromEntries(
+      form.fields
+        .filter((field) => field.field_type === "file_upload")
+        .map((field) => [field.field_key, field.attachment ?? null]),
+    ),
+  );
+  const activeSectionIndex = Math.max(
+    0,
+    sections.findIndex((section) => section.key === activeSectionKey),
+  );
+  const activeSection = sections[activeSectionIndex];
+  const isFirstSection = activeSectionIndex === 0;
+  const isLastSection = activeSectionIndex === sections.length - 1;
+  const isBusy = operation !== "idle";
+
+  function updateErrorsForFields(
+    fields: DynamicFormField[],
+    nextErrors: DynamicFormValidationErrors,
+  ) {
+    const fieldKeys = new Set(fields.map((field) => field.field_key));
+
+    setValidationErrors((current) => {
+      const updated = { ...current };
+      for (const fieldKey of fieldKeys) {
+        delete updated[fieldKey];
+      }
+      return { ...updated, ...nextErrors };
+    });
+  }
+
+  function focusSection(
+    sectionIndex: number,
+    fieldKey?: string | null,
+    focusTab = false,
+  ) {
+    const section = sections[sectionIndex];
+    if (!section) {
+      return;
+    }
+
+    setActiveSectionKey(section.key);
+    window.setTimeout(() => {
+      const targetId = fieldKey
+        ? `dynamic-form-field-${fieldKey}`
+        : focusTab
+          ? getSectionTabId(form.form_instance_id, section.key)
+          : getSectionPanelId(form.form_instance_id, section.key);
+      document.getElementById(targetId)?.focus();
+    }, 0);
+  }
+
+  function validateFields(
+    fields: DynamicFormField[],
+    mode: DynamicFormValidationMode,
+  ) {
+    const result = validateDynamicFormValues(fields, inputs, mode);
+    updateErrorsForFields(fields, result.errors);
+    return result;
+  }
+
+  function moveToSection(targetIndex: number, focusTab = false) {
+    if (targetIndex < 0 || targetIndex >= sections.length || targetIndex === activeSectionIndex) {
+      return;
+    }
+
+    if (targetIndex < activeSectionIndex || form.is_submitted) {
+      focusSection(targetIndex, null, focusTab);
+      return;
+    }
+
+    const prerequisiteFields = sections
+      .slice(0, targetIndex)
+      .flatMap((section) => section.fields);
+    const result = validateFields(prerequisiteFields, "complete");
+
+    if (!result.valid) {
+      const invalidSectionIndex = findSectionIndexByFieldKey(
+        sections,
+        result.firstFieldKey,
+      );
+      focusSection(invalidSectionIndex, result.firstFieldKey);
+      toast.error("Revise os campos destacados antes de avançar.");
+      return;
+    }
+
+    focusSection(targetIndex, null, focusTab);
+  }
+
+  function handleFieldChange(field: DynamicFormField, value: string | boolean) {
+    onFieldChange(field.field_key, value);
+
+    if (!validationErrors[field.field_key]) {
+      return;
+    }
+
+    const nextInputs = { ...inputs, [field.field_key]: value };
+    const result = validateDynamicFormValues([field], nextInputs, "complete");
+    updateErrorsForFields([field], result.errors);
+  }
+
+  function handleSave() {
+    const result = validateFields(form.fields, "partial");
+    if (!result.valid) {
+      const invalidSectionIndex = findSectionIndexByFieldKey(
+        sections,
+        result.firstFieldKey,
+      );
+      focusSection(invalidSectionIndex, result.firstFieldKey);
+      toast.error("Revise os campos preenchidos antes de salvar o rascunho.");
+      return;
+    }
+    onSave();
+  }
+
+  function handleSubmit() {
+    const result = validateFields(form.fields, "complete");
+    if (!result.valid) {
+      const invalidSectionIndex = findSectionIndexByFieldKey(
+        sections,
+        result.firstFieldKey,
+      );
+      focusSection(invalidSectionIndex, result.firstFieldKey);
+      toast.error("Revise os campos destacados antes de enviar a submissão.");
+      return;
+    }
+    onSubmit();
+  }
+
+  function handleTabKeyDown(
+    event: ReactKeyboardEvent<HTMLButtonElement>,
+    sectionIndex: number,
+  ) {
+    let targetIndex: number | null = null;
+
+    if (event.key === "ArrowRight") {
+      targetIndex = Math.min(sectionIndex + 1, sections.length - 1);
+    } else if (event.key === "ArrowLeft") {
+      targetIndex = Math.max(sectionIndex - 1, 0);
+    } else if (event.key === "Home") {
+      targetIndex = 0;
+    } else if (event.key === "End") {
+      targetIndex = sections.length - 1;
+    }
+
+    if (targetIndex === null || targetIndex === sectionIndex) {
+      return;
+    }
+
+    event.preventDefault();
+    moveToSection(targetIndex, true);
+  }
 
   return (
     <>
-      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-6">
+      <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5 sm:px-6">
         {form.is_submitted && (
-          <div className="mb-5 flex items-start gap-3 rounded-xl border border-teal-200 bg-teal-50 p-4 text-sm text-teal-900">
+          <div className="mb-5 mt-5 flex items-start gap-3 rounded-xl border border-teal-200 bg-teal-50 p-4 text-sm text-teal-900">
             <Check aria-hidden="true" className="mt-0.5 size-5 shrink-0" />
             Este formulário já foi submetido e está disponível somente para
             consulta.
@@ -869,35 +1104,138 @@ function SubmissionDialogContent({
         )}
 
         <form className="grid gap-5" onSubmit={(event) => event.preventDefault()}>
-          {sections.map((section) => (
-            <fieldset className="grid gap-5 rounded-2xl border border-slate-200 p-4 sm:p-5" key={section}>
-              <legend className="px-2 text-sm font-bold uppercase tracking-wide text-teal-800">{section}</legend>
-              {orderedFields.filter((field) => (field.section?.trim() || "Geral") === section).map((field) => (
+          <div
+            aria-label="Seções do formulário"
+            className="sticky top-0 z-10 -mx-5 overflow-x-auto border-b border-slate-200 bg-white px-5 sm:-mx-6 sm:px-6"
+            role="tablist"
+          >
+            <div className="flex min-w-max gap-1">
+              {sections.map((section, sectionIndex) => {
+                const isActive = sectionIndex === activeSectionIndex;
+                const hasErrors = section.fields.some(
+                  (field) => Boolean(validationErrors[field.field_key]),
+                );
+                const tabId = getSectionTabId(form.form_instance_id, section.key);
+                const panelId = getSectionPanelId(form.form_instance_id, section.key);
+
+                return (
+                  <button
+                    aria-controls={panelId}
+                    aria-selected={isActive}
+                    className={`relative inline-flex min-h-11 items-center gap-2 rounded-t-lg border-b-2 px-4 py-2 text-sm font-semibold outline-none transition focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-teal-500 ${isActive ? "border-teal-700 bg-teal-50 text-teal-900" : "border-transparent text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}
+                    disabled={isBusy}
+                    id={tabId}
+                    key={section.key}
+                    onClick={() => moveToSection(sectionIndex)}
+                    onKeyDown={(event) => handleTabKeyDown(event, sectionIndex)}
+                    role="tab"
+                    tabIndex={isActive ? 0 : -1}
+                    type="button"
+                  >
+                    <span>{section.name}</span>
+                    {hasErrors && (
+                      <span className="inline-flex items-center text-rose-700">
+                        <AlertCircle aria-hidden="true" className="size-4" />
+                        <span className="sr-only">Contém erros</span>
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div
+            aria-labelledby={getSectionTabId(
+              form.form_instance_id,
+              activeSection.key,
+            )}
+            className="outline-none"
+            id={getSectionPanelId(form.form_instance_id, activeSection.key)}
+            role="tabpanel"
+            tabIndex={-1}
+          >
+            <fieldset className="grid gap-5 rounded-2xl border border-slate-200 p-4 sm:p-5">
+              <legend className="px-2 text-sm font-bold uppercase tracking-wide text-teal-800">
+                {activeSection.name}
+              </legend>
+              {activeSection.fields.map((field) => (
                 <DynamicFormFieldControl
+                  attachment={attachments[field.field_key]}
                   disabled={form.is_submitted || operation !== "idle"}
+                  error={validationErrors[field.field_key]}
                   field={field}
                   key={field.field_key}
-                  onChange={(value) => onFieldChange(field.field_key, value)}
+                  onChange={(value) => handleFieldChange(field, value)}
+                  onAttachmentChange={(attachment) =>
+                    setAttachments((current) => ({
+                      ...current,
+                      [field.field_key]: attachment,
+                    }))
+                  }
                   processId={processId}
                   value={inputs[field.field_key]}
                 />
               ))}
             </fieldset>
-          ))}
+
+            {!form.is_submitted && (
+              <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  {!isFirstSection && (
+                    <button
+                      className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 outline-none transition hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-60"
+                      disabled={isBusy}
+                      onClick={() => moveToSection(activeSectionIndex - 1)}
+                      type="button"
+                    >
+                      <ChevronLeft aria-hidden="true" className="size-4" />
+                      Voltar
+                    </button>
+                  )}
+                </div>
+                {!isLastSection ? (
+                  <button
+                    className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-teal-700 px-4 py-2 text-sm font-semibold text-white outline-none transition hover:bg-teal-800 focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-60"
+                    disabled={isBusy}
+                    onClick={() => moveToSection(activeSectionIndex + 1)}
+                    type="button"
+                  >
+                    Avançar
+                    <ChevronRight aria-hidden="true" className="size-4" />
+                  </button>
+                ) : (
+                  <button
+                    className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-teal-700 px-4 py-2 text-sm font-semibold text-white outline-none transition hover:bg-teal-800 focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-60"
+                    disabled={isBusy}
+                    onClick={handleSubmit}
+                    type="button"
+                  >
+                    {operation === "submitting" ? (
+                      <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
+                    ) : (
+                      <Send aria-hidden="true" className="size-4" />
+                    )}
+                    {operation === "submitting" ? "Enviando…" : "Enviar para análise"}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
         </form>
       </div>
 
-      <footer className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:px-6">
-        <p className="text-xs leading-5 text-slate-500">
-          Somente os valores confirmados em Salvar rascunho ficam disponíveis
-          para continuar depois.
-        </p>
-        {!form.is_submitted && (
+      {!form.is_submitted && (
+        <footer className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:px-6">
+          <p className="text-xs leading-5 text-slate-500">
+            Somente os valores confirmados em Salvar rascunho ficam disponíveis
+            para continuar depois.
+          </p>
           <div className="flex flex-wrap justify-end gap-2">
             <button
               className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-teal-700 bg-white px-4 py-2 text-sm font-semibold text-teal-800 outline-none transition hover:bg-teal-50 focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-60"
-              disabled={operation !== "idle"}
-              onClick={onSave}
+              disabled={isBusy}
+              onClick={handleSave}
               type="button"
             >
               {operation === "saving" ? (
@@ -907,24 +1245,33 @@ function SubmissionDialogContent({
               )}
               {operation === "saving" ? "Salvando…" : "Salvar rascunho"}
             </button>
-            <button
-              className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-teal-700 px-4 py-2 text-sm font-semibold text-white outline-none transition hover:bg-teal-800 focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-60"
-              disabled={operation !== "idle"}
-              onClick={onSubmit}
-              type="button"
-            >
-              {operation === "submitting" ? (
-                <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
-              ) : (
-                <Send aria-hidden="true" className="size-4" />
-              )}
-              {operation === "submitting" ? "Enviando…" : "Enviar para análise"}
-            </button>
           </div>
-        )}
-      </footer>
+        </footer>
+      )}
     </>
   );
+}
+
+function findSectionIndexByFieldKey(
+  sections: SubmissionFormSection[],
+  fieldKey: string | null,
+) {
+  if (!fieldKey) {
+    return 0;
+  }
+
+  const sectionIndex = sections.findIndex((section) =>
+    section.fields.some((field) => field.field_key === fieldKey),
+  );
+  return sectionIndex >= 0 ? sectionIndex : 0;
+}
+
+function getSectionTabId(formInstanceId: string, sectionKey: string) {
+  return `submission-form-tab-${formInstanceId}-${sectionKey}`;
+}
+
+function getSectionPanelId(formInstanceId: string, sectionKey: string) {
+  return `submission-form-panel-${formInstanceId}-${sectionKey}`;
 }
 
 function SubmissionCatalogMessage({
@@ -1126,6 +1473,21 @@ async function requestSubmittedSubmissions(): Promise<SubmittedSubmissionsState>
       kind: "error",
       message: "Não foi possível conectar ao serviço de submissões.",
     };
+  }
+}
+
+async function requestSubmissionProcess(
+  processId: string,
+): Promise<ProcessInstance | null> {
+  try {
+    const response = await fetch(`/api/submissions/${processId}`, {
+      cache: "no-store",
+    });
+    const payload = (await response.json().catch(() => null)) as unknown;
+
+    return response.ok && isProcessInstance(payload) ? payload : null;
+  } catch {
+    return null;
   }
 }
 

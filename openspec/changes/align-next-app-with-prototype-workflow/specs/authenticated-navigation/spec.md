@@ -76,3 +76,12 @@ A área autenticada MUST apresentar os fluxos como módulos do produto e MUST NO
 
 - **WHEN** uma pessoa abre um dos novos módulos no frontend Next.js
 - **THEN** a interface usa a sessão existente, o shell compartilhado e mensagens orientadas à tarefa sem expor utilitários da demo
+
+### Requirement: Ocupação integral da área de conteúdo
+
+O shell autenticado SHALL disponibilizar toda a largura e toda a altura úteis entre o cabeçalho, a barra lateral e os limites da viewport para o conteúdo variável de cada módulo. A área compartilhada MUST NOT aplicar limites máximos de largura diferentes entre páginas.
+
+#### Scenario: Módulo autenticado ocupa o espaço disponível
+
+- **WHEN** uma pessoa abre qualquer módulo dentro do shell autenticado
+- **THEN** o cabeçalho da página, o conteúdo variável e o rodapé usam toda a largura disponível, e o conteúdo variável pode crescer para preencher a altura restante

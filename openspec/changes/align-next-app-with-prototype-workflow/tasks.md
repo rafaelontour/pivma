@@ -120,3 +120,9 @@
   - A matriz mantém todas as ações e a única exclusão sem contrato; a promoção de cada linha a verificada depende das evidências autenticadas registradas nas tarefas 2.9, 3.9, 4.10, 5.12, 6.10, 7.6 e 8.9.
 - [x] 9.7 Executar `openspec validate align-next-app-with-prototype-workflow --strict` e manter proposta, specs, design e tarefas coerentes com a implementação final
   - `pnpm lint`, `pnpm build` e a validação estrita passaram após a integração de triagem, Kanban, navegação e observabilidade.
+
+## 10. Ocupação da área de conteúdo
+
+- [x] 10.1 Remover os limites de largura por página do shell autenticado e permitir que o conteúdo variável preencha toda a largura e altura disponíveis
+- [x] 10.2 Validar o ajuste compartilhado com lint, TypeScript e validação estrita da change
+  - Lint, TypeScript, 17 testes automatizados e validação estrita passaram após a remoção dos limites de largura do shell.

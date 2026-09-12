@@ -10,10 +10,13 @@ import type {
   DynamicFormField,
   DynamicFormOption,
   DynamicFormOptionValue,
+  DynamicFormValidationErrors,
+  DynamicFormValidationMode,
   DynamicFormValidationResult,
   DynamicFormValue,
   SubmissionFieldInputs,
   SubmissionForm,
+  SubmissionFormSection,
 } from "@/types/Submissao";
 
 export const FORM_FIELD_TYPES = [
@@ -45,6 +48,32 @@ export function groupFormSections(fields: FormTemplateField[]) {
   return sections.length > 0
     ? sections
     : [{ id: createSectionId("Geral", 0), name: "Geral", fields: [] }];
+}
+
+export function groupDynamicFormSections(fields: DynamicFormField[]) {
+  const sections: SubmissionFormSection[] = [];
+
+  for (const field of [...fields].sort(
+    (left, right) => left.order_index - right.order_index,
+  )) {
+    const name = field.section?.trim() || "Geral";
+    let section = sections.find((candidate) => candidate.name === name);
+
+    if (!section) {
+      section = {
+        key: createSectionId(name, sections.length),
+        name,
+        fields: [],
+      };
+      sections.push(section);
+    }
+
+    section.fields.push(field);
+  }
+
+  return sections.length > 0
+    ? sections
+    : [{ key: createSectionId("Geral", 0), name: "Geral", fields: [] }];
 }
 
 export function flattenFormSections(sections: FormEditorSection[]) {
@@ -248,82 +277,135 @@ export function buildDynamicFormValues(
 export function validateDynamicFormValues(
   fields: DynamicFormField[],
   inputs: SubmissionFieldInputs,
+  mode: DynamicFormValidationMode = "complete",
 ): DynamicFormValidationResult {
+  const errors: DynamicFormValidationErrors = {};
+
   for (const field of [...fields].sort(
     (first, second) => first.order_index - second.order_index,
   )) {
     const value = inputs[field.field_key];
+    const hasInput = Object.hasOwn(inputs, field.field_key);
 
     if (!isSupportedDynamicFormField(field.field_type)) {
-      if (field.is_required) {
-        return {
-          valid: false,
-          fieldKey: field.field_key,
-          message: `O campo obrigatório “${field.label}” usa um tipo ainda não suportado.`,
-        };
+      if (mode === "complete" && field.is_required) {
+        addFieldValidationError(
+          errors,
+          field,
+          `O campo obrigatório “${field.label}” usa um tipo ainda não suportado.`,
+        );
       }
       continue;
     }
 
     if (field.field_type === "file_upload") {
-      if (field.is_required && !hasDynamicFormFileReference(value)) {
-        return {
-          valid: false,
-          fieldKey: field.field_key,
-          message: `Selecione o arquivo obrigatório: ${field.label}.`,
-        };
+      if (!hasDynamicFormFileReference(value)) {
+        if (mode === "complete" && field.is_required) {
+          addFieldValidationError(
+            errors,
+            field,
+            `Selecione o arquivo obrigatório: ${field.label}.`,
+          );
+        }
       }
       continue;
     }
 
     if (field.field_type === "boolean") {
-      if (field.is_required && typeof value !== "boolean") {
-        return requiredFieldError(field);
+      if (!hasInput) {
+        if (mode === "complete" && field.is_required) {
+          addFieldValidationError(errors, field, requiredFieldError(field));
+        }
+      } else if (typeof value !== "boolean") {
+        addFieldValidationError(
+          errors,
+          field,
+          fieldValidationError(field, "Informe uma opção válida"),
+        );
       }
       continue;
     }
 
-    const textValue = typeof value === "string" ? value.trim() : "";
-    if (field.is_required && textValue === "") {
-      return requiredFieldError(field);
-    }
-
-    if (textValue === "") {
+    const isEmpty = !hasInput || (typeof value === "string" && value.trim() === "");
+    if (isEmpty) {
+      if (mode === "complete" && field.is_required) {
+        addFieldValidationError(errors, field, requiredFieldError(field));
+      }
       continue;
     }
+
+    if (typeof value !== "string") {
+      addFieldValidationError(
+        errors,
+        field,
+        fieldValidationError(field, "Informe um valor válido"),
+      );
+      continue;
+    }
+
+    const textValue = value.trim();
 
     if (field.field_type === "integer" || field.field_type === "float") {
       const numericValue = Number(textValue);
       if (!Number.isFinite(numericValue)) {
-        return fieldValidationError(field, "Informe um número válido");
-      }
-      if (field.field_type === "integer" && !Number.isInteger(numericValue)) {
-        return fieldValidationError(field, "Informe um número inteiro");
-      }
-
-      const minimum = getDynamicFormNumericRule(field, "min");
-      const maximum = getDynamicFormNumericRule(field, "max");
-      if (minimum !== undefined && numericValue < minimum) {
-        return fieldValidationError(field, `Informe um valor maior ou igual a ${minimum}`);
-      }
-      if (maximum !== undefined && numericValue > maximum) {
-        return fieldValidationError(field, `Informe um valor menor ou igual a ${maximum}`);
+        addFieldValidationError(
+          errors,
+          field,
+          fieldValidationError(field, "Informe um número válido"),
+        );
+      } else if (field.field_type === "integer" && !Number.isInteger(numericValue)) {
+        addFieldValidationError(
+          errors,
+          field,
+          fieldValidationError(field, "Informe um número inteiro"),
+        );
+      } else {
+        const minimum = getDynamicFormNumericRule(field, "min");
+        const maximum = getDynamicFormNumericRule(field, "max");
+        if (minimum !== undefined && numericValue < minimum) {
+          addFieldValidationError(
+            errors,
+            field,
+            fieldValidationError(
+              field,
+              `Informe um valor maior ou igual a ${minimum}`,
+            ),
+          );
+        } else if (maximum !== undefined && numericValue > maximum) {
+          addFieldValidationError(
+            errors,
+            field,
+            fieldValidationError(
+              field,
+              `Informe um valor menor ou igual a ${maximum}`,
+            ),
+          );
+        }
       }
     }
 
-    const minimumLength = getDynamicFormNumericRule(field, "min_length");
-    const maximumLength = getDynamicFormNumericRule(field, "max_length");
-    if (minimumLength !== undefined && textValue.length < minimumLength) {
-      return fieldValidationError(
-        field,
-        `Informe ao menos ${minimumLength} caracteres`,
-      );
-    }
-    if (maximumLength !== undefined && textValue.length > maximumLength) {
-      return fieldValidationError(
-        field,
-        `Informe no máximo ${maximumLength} caracteres`,
-      );
+    if (field.field_type === "text" || field.field_type === "textarea") {
+      const minimumLength = getDynamicFormNumericRule(field, "min_length");
+      const maximumLength = getDynamicFormNumericRule(field, "max_length");
+      if (minimumLength !== undefined && textValue.length < minimumLength) {
+        addFieldValidationError(
+          errors,
+          field,
+          fieldValidationError(
+            field,
+            `Informe ao menos ${minimumLength} caracteres`,
+          ),
+        );
+      } else if (maximumLength !== undefined && textValue.length > maximumLength) {
+        addFieldValidationError(
+          errors,
+          field,
+          fieldValidationError(
+            field,
+            `Informe no máximo ${maximumLength} caracteres`,
+          ),
+        );
+      }
     }
 
     if (
@@ -332,11 +414,24 @@ export function validateDynamicFormValues(
         (option) => serializeDynamicFormOption(option.value) === value,
       )
     ) {
-      return fieldValidationError(field, "Selecione uma opção válida");
+      addFieldValidationError(
+        errors,
+        field,
+        fieldValidationError(field, "Selecione uma opção válida"),
+      );
+    }
+
+    if (field.field_type === "date" && !isValidDynamicFormDate(textValue)) {
+      addFieldValidationError(
+        errors,
+        field,
+        fieldValidationError(field, "Informe uma data válida"),
+      );
     }
   }
 
-  return { valid: true };
+  const firstFieldKey = Object.keys(errors)[0] ?? null;
+  return { valid: firstFieldKey === null, errors, firstFieldKey };
 }
 
 export function getDynamicFormOptions(
@@ -423,19 +518,41 @@ export function getDynamicFormNumericRule(
   return typeof value === "number" ? value : undefined;
 }
 
-function requiredFieldError(field: DynamicFormField): DynamicFormValidationResult {
+function requiredFieldError(field: DynamicFormField) {
   return fieldValidationError(field, "Este campo é obrigatório");
 }
 
 function fieldValidationError(
   field: DynamicFormField,
   message: string,
-): DynamicFormValidationResult {
-  return {
-    valid: false,
-    fieldKey: field.field_key,
-    message: `${message}: ${field.label}.`,
-  };
+){
+  return `${message}: ${field.label}.`;
+}
+
+function addFieldValidationError(
+  errors: DynamicFormValidationErrors,
+  field: DynamicFormField,
+  message: string,
+) {
+  errors[field.field_key] ??= message;
+}
+
+function isValidDynamicFormDate(value: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) {
+    return false;
+  }
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
+  );
 }
 
 function isDynamicFormOptionValue(

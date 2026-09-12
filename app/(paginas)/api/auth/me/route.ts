@@ -23,10 +23,10 @@ export async function GET() {
   }
 
   return NextResponse.json({
-    id: result.data.id,
-    username: result.data.username,
-    email: result.data.email,
-    full_name: result.data.full_name,
+    id: result.data.user.id,
+    username: result.data.user.username,
+    email: result.data.user.email,
+    full_name: result.data.user.full_name,
     permissions: result.data.access.global_permissions,
     profiles: result.data.access.profiles,
     isAdministrator:

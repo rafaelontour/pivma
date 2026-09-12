@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertCircle, Bot, CheckCircle2, Clock3, LoaderCircle, RefreshCw, Send, XCircle } from "lucide-react";
+import { AlertCircle, Bot, CheckCircle2, Clock3, FileText, LoaderCircle, RefreshCw, Send, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { useAccessibleDialog } from "@/components/accessible-dialog";
 import type { ProcessInstance } from "@/types/Processo";
@@ -16,7 +16,7 @@ import type { ApiRecord } from "@/types/Servico";
 
 const POLL_INTERVAL_MS = 5000;
 
-export function SubmissionTrackingCard({ submission, templateName, onProcessChanged }: SubmissionTrackingCardProps) {
+export function SubmissionTrackingCard({ submission, templateName, isOpening, isOpeningLocked, onOpen, onProcessChanged }: SubmissionTrackingCardProps) {
   const [process, setProcess] = useState(submission);
   const [evaluation, setEvaluation] = useState<SubmissionPreEvaluation | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -79,7 +79,10 @@ export function SubmissionTrackingCard({ submission, templateName, onProcessChan
       {evaluation && <SubmissionPreEvaluationPanel compact evaluation={evaluation} />}
       {!evaluation && process.status !== "AI_PRE_EVALUATION" && <p className="mt-4 rounded-xl bg-slate-50 p-3 text-xs leading-5 text-slate-600">O processo seguiu no fluxo sem relatório de IA disponível para esta sessão.</p>}
       {error && <p className="mt-3 text-xs leading-5 text-rose-700" role="alert">{error}</p>}
-      <button className="mt-4 inline-flex min-h-9 w-fit items-center gap-2 rounded-lg border border-teal-700 px-3 text-xs font-bold text-teal-800 outline-none hover:bg-teal-50 focus-visible:ring-2 focus-visible:ring-teal-500 disabled:opacity-60" disabled={isRefreshing} onClick={() => void refresh()} type="button">{isRefreshing ? <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" /> : <RefreshCw aria-hidden="true" className="size-3.5" />}Atualizar</button>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button className="inline-flex min-h-9 w-fit items-center gap-2 rounded-lg border border-teal-700 px-3 text-xs font-bold text-teal-800 outline-none hover:bg-teal-50 focus-visible:ring-2 focus-visible:ring-teal-500 disabled:opacity-60" disabled={isOpeningLocked} onClick={() => onOpen(process)} type="button">{isOpening ? <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" /> : <FileText aria-hidden="true" className="size-3.5" />}{isOpening ? "Abrindo…" : "Ver formulário"}</button>
+        <button className="inline-flex min-h-9 w-fit items-center gap-2 rounded-lg border border-slate-300 px-3 text-xs font-bold text-slate-700 outline-none hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-teal-500 disabled:opacity-60" disabled={isRefreshing} onClick={() => void refresh()} type="button">{isRefreshing ? <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" /> : <RefreshCw aria-hidden="true" className="size-3.5" />}Atualizar</button>
+      </div>
     </article>
   );
 }

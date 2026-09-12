@@ -223,17 +223,7 @@ export function AuthenticatedShell({
 
       <section className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <div className="min-h-0 flex-1 overflow-y-auto">
-          <div
-            className={`mx-auto flex min-h-full w-full flex-col px-5 py-6 sm:px-8 sm:py-9 lg:px-12 ${
-              activePage === "submissions" ||
-              activePage === "operational-observability" ||
-              activePage === "ai-observability"
-                ? "max-w-none"
-                : activePage === "processes"
-                  ? "max-w-[100rem]"
-                  : "max-w-6xl"
-            }`}
-          >
+          <div className="flex min-h-full w-full max-w-none flex-col px-5 py-6 sm:px-8 sm:py-9 lg:px-12">
             <div className="flex items-start justify-between gap-5 border-b border-slate-300 pb-6">
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.18em] text-teal-700">
@@ -251,7 +241,7 @@ export function AuthenticatedShell({
               </span>
             </div>
 
-            {children}
+            <div className="flex min-h-0 w-full flex-1 flex-col">{children}</div>
 
             <footer className="border-t border-slate-300 pt-5 text-xs text-slate-500">
               pi*VMA · Plataforma Integrada de Validação de Métodos Alternativos

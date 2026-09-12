@@ -14,6 +14,7 @@ import {
 import type {
   DynamicFormField,
   DynamicFormFieldControlProps,
+  DynamicFormFieldErrorProps,
   DynamicFormFieldHelpProps,
   DynamicFormFieldLabelProps,
   DynamicFormFieldValueProps,
@@ -26,6 +27,8 @@ import type { ApiRecord } from "@/types/Servico";
 export function DynamicFormFieldControl({
   field,
   value,
+  error,
+  attachment: persistedAttachment,
   disabled,
   onChange,
   onAttachmentChange,
@@ -33,13 +36,14 @@ export function DynamicFormFieldControl({
 }: DynamicFormFieldControlProps) {
   const [fileError, setFileError] = useState<string | null>(null);
   const [attachment, setAttachment] = useState<SubmissionAttachment | null>(
-    field.attachment ?? null,
+    persistedAttachment ?? field.attachment ?? null,
   );
   const [isChangingAttachment, setIsChangingAttachment] = useState(false);
   const fieldId = `dynamic-form-field-${field.field_key}`;
   const helpId = field.help_text ? `${fieldId}-help` : undefined;
+  const validationErrorId = error ? `${fieldId}-error` : undefined;
   const inputClassName =
-    "mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500";
+    `mt-2 min-h-11 w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:ring-2 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 ${error ? "border-rose-400 focus:border-rose-500 focus:ring-rose-500/20" : "border-slate-300 focus:border-teal-500 focus:ring-teal-500/20"}`;
 
   async function uploadAttachment(file: File) {
     if (!processId) {
@@ -96,7 +100,8 @@ export function DynamicFormFieldControl({
 
   if (field.field_type === "file_upload") {
     const constraintsId = `${fieldId}-constraints`;
-    const errorId = fileError ? `${fieldId}-error` : undefined;
+    const displayedError = fileError ?? error;
+    const errorId = displayedError ? `${fieldId}-error` : undefined;
     const describedBy = [helpId, constraintsId, errorId]
       .filter(Boolean)
       .join(" ");
@@ -106,7 +111,7 @@ export function DynamicFormFieldControl({
         <input
           accept={getFileAccept(field)}
           aria-describedby={describedBy}
-          aria-invalid={fileError ? true : undefined}
+          aria-invalid={displayedError ? true : undefined}
           className={`${inputClassName} cursor-pointer p-1.5 file:mr-3 file:rounded-lg file:border-0 file:bg-teal-700 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-white hover:file:bg-teal-800`}
           disabled={disabled || isChangingAttachment}
           id={fieldId}
@@ -135,15 +140,7 @@ export function DynamicFormFieldControl({
         {isChangingAttachment && <p className="mt-2 flex items-center gap-2 text-xs font-semibold text-teal-800"><LoaderCircle aria-hidden="true" className="size-4 animate-spin" />Atualizando anexo…</p>}
         {attachment && <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-teal-200 bg-teal-50 p-3"><div className="min-w-0 flex-1"><p className="truncate text-xs font-bold text-teal-950">{attachment.filename}</p><p className="mt-1 text-[0.68rem] text-teal-800">{formatFileSize(attachment.size)} · {attachment.extension.toUpperCase()}</p></div>{processId && <a className="inline-flex min-h-9 items-center gap-1 rounded-lg border border-teal-300 bg-white px-2.5 text-xs font-bold text-teal-800 outline-none focus-visible:ring-2 focus-visible:ring-teal-500" href={`/api/submissions/${processId}/attachments/${encodeURIComponent(field.field_key)}`}><Download aria-hidden="true" className="size-3.5" />Baixar</a>}{!disabled && <button aria-label={`Remover ${attachment.filename}`} className="grid size-9 place-items-center rounded-lg text-rose-700 outline-none hover:bg-rose-50 focus-visible:ring-2 focus-visible:ring-rose-500" disabled={isChangingAttachment} onClick={() => void removeAttachment()} type="button"><Trash2 aria-hidden="true" className="size-4" /></button>}</div>}
         <FieldHelp field={field} helpId={helpId} />
-        {fileError && (
-          <p
-            className="mt-2 text-xs font-semibold text-rose-700"
-            id={errorId}
-            role="alert"
-          >
-            {fileError}
-          </p>
-        )}
+        <FieldError error={displayedError ?? undefined} errorId={errorId} />
       </div>
     );
   }
@@ -159,6 +156,7 @@ export function DynamicFormFieldControl({
           O tipo de campo “{field.field_type}” ainda não é suportado pela
           interface.
         </p>
+        <FieldError error={error} errorId={validationErrorId} />
       </div>
     );
   }
@@ -167,11 +165,12 @@ export function DynamicFormFieldControl({
     return (
       <div>
         <label
-          className="flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-800 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-teal-500"
+          className={`flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border bg-white px-4 py-3 text-sm font-semibold text-slate-800 has-[:focus-visible]:ring-2 ${error ? "border-rose-400 has-[:focus-visible]:ring-rose-500" : "border-slate-300 has-[:focus-visible]:ring-teal-500"}`}
           htmlFor={fieldId}
         >
           <input
-            aria-describedby={helpId}
+            aria-describedby={[helpId, validationErrorId].filter(Boolean).join(" ") || undefined}
+            aria-invalid={error ? true : undefined}
             checked={value === true}
             className="size-4 accent-teal-700"
             disabled={disabled}
@@ -185,6 +184,7 @@ export function DynamicFormFieldControl({
           </span>
         </label>
         <FieldHelp field={field} helpId={helpId} />
+        <FieldError error={error} errorId={validationErrorId} />
       </div>
     );
   }
@@ -194,7 +194,8 @@ export function DynamicFormFieldControl({
       <FieldLabel field={field} fieldId={fieldId} />
       {field.field_type === "textarea" ? (
         <textarea
-          aria-describedby={helpId}
+          aria-describedby={[helpId, validationErrorId].filter(Boolean).join(" ") || undefined}
+          aria-invalid={error ? true : undefined}
           className={`${inputClassName} min-h-28 resize-y`}
           disabled={disabled}
           id={fieldId}
@@ -206,7 +207,8 @@ export function DynamicFormFieldControl({
         />
       ) : field.field_type === "select" ? (
         <select
-          aria-describedby={helpId}
+          aria-describedby={[helpId, validationErrorId].filter(Boolean).join(" ") || undefined}
+          aria-invalid={error ? true : undefined}
           className={inputClassName}
           disabled={disabled}
           id={fieldId}
@@ -226,7 +228,8 @@ export function DynamicFormFieldControl({
         </select>
       ) : (
         <input
-          aria-describedby={helpId}
+          aria-describedby={[helpId, validationErrorId].filter(Boolean).join(" ") || undefined}
+          aria-invalid={error ? true : undefined}
           className={inputClassName}
           disabled={disabled}
           id={fieldId}
@@ -242,6 +245,7 @@ export function DynamicFormFieldControl({
         />
       )}
       <FieldHelp field={field} helpId={helpId} />
+      <FieldError error={error} errorId={validationErrorId} />
     </div>
   );
 }
@@ -279,6 +283,18 @@ function FieldHelp({
   return field.help_text ? (
     <p className="mt-2 text-xs leading-5 text-slate-500" id={helpId}>
       {field.help_text}
+    </p>
+  ) : null;
+}
+
+function FieldError({ error, errorId }: DynamicFormFieldErrorProps) {
+  return error && errorId ? (
+    <p
+      className="mt-2 text-xs font-semibold text-rose-700"
+      id={errorId}
+      role="alert"
+    >
+      {error}
     </p>
   ) : null;
 }

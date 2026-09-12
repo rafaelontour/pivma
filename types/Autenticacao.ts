@@ -18,10 +18,6 @@ export type SessionAccessScope = {
 };
 
 export type CurrentSessionUser = {
-  id: string;
-  username: string;
-  email: string;
-  full_name: string | null;
   user: {
     id: string;
     username: string;
