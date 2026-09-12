@@ -126,3 +126,9 @@
 - [x] 10.1 Remover os limites de largura por página do shell autenticado e permitir que o conteúdo variável preencha toda a largura e altura disponíveis
 - [x] 10.2 Validar o ajuste compartilhado com lint, TypeScript e validação estrita da change
   - Lint, TypeScript, 17 testes automatizados e validação estrita passaram após a remoção dos limites de largura do shell.
+
+## 11. Persistência da barra lateral
+
+- [x] 11.1 Persistir a escolha de expandir ou recolher a barra lateral e restaurá-la após navegação ou atualização, mantendo o padrão responsivo quando não houver preferência
+- [x] 11.2 Cobrir a restauração da preferência com teste automatizado e validar lint, TypeScript e a change
+  - A preferência recolhida foi verificada após remontagem do shell; lint, TypeScript, 19 testes automatizados e validação estrita passaram.

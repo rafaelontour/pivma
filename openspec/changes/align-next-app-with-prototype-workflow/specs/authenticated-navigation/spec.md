@@ -85,3 +85,17 @@ O shell autenticado SHALL disponibilizar toda a largura e toda a altura úteis e
 
 - **WHEN** uma pessoa abre qualquer módulo dentro do shell autenticado
 - **THEN** o cabeçalho da página, o conteúdo variável e o rodapé usam toda a largura disponível, e o conteúdo variável pode crescer para preencher a altura restante
+
+### Requirement: Persistência da barra lateral
+
+O shell autenticado SHALL preservar no navegador a preferência explícita da pessoa por manter a barra lateral expandida ou recolhida. Na ausência de preferência salva, o estado inicial SHALL acompanhar o tamanho da viewport.
+
+#### Scenario: Navegação preserva menu recolhido
+
+- **WHEN** a pessoa recolhe a barra lateral e abre outro item de menu ou atualiza a página
+- **THEN** o novo shell restaura a barra lateral recolhida
+
+#### Scenario: Primeira abertura usa o tamanho da tela
+
+- **WHEN** a pessoa abre a área autenticada sem possuir uma preferência salva
+- **THEN** a barra lateral inicia expandida no desktop e recolhida em uma viewport menor

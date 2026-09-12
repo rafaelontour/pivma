@@ -29,6 +29,10 @@ import { PROCESS_KANBAN_PERMISSION_CODES } from "@/types/Processo";
 import type { ApiMessage, ApiRecord } from "@/types/Servico";
 import type { CurrentUser } from "@/types/Usuario";
 
+const SIDEBAR_PREFERENCE_KEY = "pivma:sidebar";
+const SIDEBAR_EXPANDED = "expanded";
+const SIDEBAR_COLLAPSED = "collapsed";
+
 export function AuthenticatedShell({
   activePage,
   children,
@@ -78,11 +82,26 @@ export function AuthenticatedShell({
 
   useEffect(() => {
     const desktopViewport = window.matchMedia("(min-width: 768px)");
-    const followViewport = () => setIsSidebarExpanded(desktopViewport.matches);
-    followViewport();
+    const followViewport = () => {
+      const savedPreference = getSidebarPreference();
+      setIsSidebarExpanded(savedPreference ?? desktopViewport.matches);
+    };
+    const initialSync = window.setTimeout(followViewport, 0);
+
     desktopViewport.addEventListener("change", followViewport);
-    return () => desktopViewport.removeEventListener("change", followViewport);
+    return () => {
+      window.clearTimeout(initialSync);
+      desktopViewport.removeEventListener("change", followViewport);
+    };
   }, []);
+
+  function toggleSidebar() {
+    setIsSidebarExpanded((currentValue) => {
+      const nextValue = !currentValue;
+      saveSidebarPreference(nextValue);
+      return nextValue;
+    });
+  }
 
   async function handleLogout() {
     setIsLoggingOut(true);
@@ -133,7 +152,7 @@ export function AuthenticatedShell({
                 : "Expandir menu lateral"
             }
             className="inline-flex size-10 shrink-0 items-center justify-center rounded-lg border border-slate-300 bg-slate-50 text-slate-600 outline-none transition hover:border-teal-500 hover:bg-teal-50 hover:text-teal-800 focus-visible:ring-2 focus-visible:ring-teal-500"
-            onClick={() => setIsSidebarExpanded((value) => !value)}
+            onClick={toggleSidebar}
             type="button"
           >
             {isSidebarExpanded ? (
@@ -532,6 +551,35 @@ function getPageHeading(page: SidebarProps["activePage"], username: string) {
 
 function getInitials(username: string) {
   return username.trim().slice(0, 2).toUpperCase() || "PV";
+}
+
+function getSidebarPreference() {
+  try {
+    const preference = window.localStorage.getItem(SIDEBAR_PREFERENCE_KEY);
+
+    if (preference === SIDEBAR_EXPANDED) {
+      return true;
+    }
+
+    if (preference === SIDEBAR_COLLAPSED) {
+      return false;
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+function saveSidebarPreference(isExpanded: boolean) {
+  try {
+    window.localStorage.setItem(
+      SIDEBAR_PREFERENCE_KEY,
+      isExpanded ? SIDEBAR_EXPANDED : SIDEBAR_COLLAPSED,
+    );
+  } catch {
+    // O padrão responsivo continua disponível quando o armazenamento é bloqueado.
+  }
 }
 
 function formatRoles(roles: string[]) {
