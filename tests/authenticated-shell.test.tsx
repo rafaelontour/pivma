@@ -91,6 +91,34 @@ describe("AuthenticatedShell", () => {
     ).toBeInTheDocument();
     expect(window.localStorage.getItem("pivma:sidebar")).toBeNull();
   });
+
+  it("oculta os atalhos de observabilidade e os selos do shell", async () => {
+    setViewport(true);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ ...CURRENT_USER, isAdministrator: true }),
+      }),
+    );
+
+    render(
+      <AuthenticatedShell activePage="home">
+        <p>Conteúdo administrativo</p>
+      </AuthenticatedShell>,
+    );
+
+    await screen.findByText("Conteúdo administrativo");
+    expect(
+      screen.queryByRole("link", { name: "Observabilidade operacional" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Observabilidade de IA" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Ambiente seguro")).not.toBeInTheDocument();
+    expect(screen.queryByText("pi*VMA", { selector: "span" })).not.toBeInTheDocument();
+  });
 });
 
 function setViewport(matches: boolean) {

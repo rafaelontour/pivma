@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   AlertTriangle,
   Eye,
@@ -67,9 +68,17 @@ const STATUS_PRESENTATIONS: readonly ProcessStatusPresentation[] = [
 export function ProcessKanban() {
   const [state, setState] = useState<ProcessKanbanState>({ kind: "loading" });
   const [details, setDetails] = useState<ProcessDetailsState>({ kind: "closed" });
+  const [headingActionsTarget, setHeadingActionsTarget] =
+    useState<HTMLElement | null>(null);
   const isRefreshingRef = useRef(false);
   const boardControllerRef = useRef<AbortController | null>(null);
   const detailsControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    setHeadingActionsTarget(
+      document.getElementById("authenticated-page-heading-actions"),
+    );
+  }, []);
 
   const refreshSnapshot = useCallback(async (preserveSnapshot: boolean) => {
     if (isRefreshingRef.current) {
@@ -253,117 +262,125 @@ export function ProcessKanban() {
   const columns = buildColumns(state.processes);
 
   return (
-    <div className="flex flex-1 flex-col py-6">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div aria-live="polite" className="text-xs text-slate-500">
-          {state.isStale ? (
-            <span className="inline-flex items-center gap-2 font-semibold text-amber-800">
-              <AlertTriangle aria-hidden="true" className="size-4" />
-              Os dados podem estar desatualizados.
-            </span>
-          ) : (
-            <span>
-              Última atualização: {formatDateTime(state.updatedAt)}
-            </span>
-          )}
-        </div>
-        <button
-          className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 outline-none transition hover:border-teal-500 hover:bg-teal-50 hover:text-teal-800 focus-visible:ring-2 focus-visible:ring-teal-500 disabled:cursor-wait disabled:opacity-60"
-          disabled={state.isRefreshing}
-          onClick={() => void refreshSnapshot(true)}
-          type="button"
-        >
-          <RefreshCw
-            aria-hidden="true"
-            className={`size-4 ${state.isRefreshing ? "animate-spin" : ""}`}
-          />
-          {state.isRefreshing ? "Atualizando…" : "Atualizar quadro"}
-        </button>
-      </div>
-
-      {state.processes.length === 0 && (
-        <div
-          className="mb-4 rounded-xl border border-dashed border-slate-300 bg-white/70 px-5 py-4 text-sm text-slate-600"
-          role="status"
-        >
-          Ainda não existem processos acessíveis para exibir neste quadro.
-        </div>
-      )}
-
-      <section
-        aria-label="Quadro de processos por estado"
-        className="min-w-0 overflow-x-auto pb-4"
-      >
-        <div
-          className="grid w-max min-w-full grid-flow-col auto-cols-[minmax(15rem,1fr)] items-start gap-3"
-          style={{
-            gridTemplateColumns: `repeat(${columns.length}, minmax(15rem, 1fr))`,
-          }}
-        >
-          {columns.map((column) => (
-            <section
-              aria-labelledby={`column-${column.key}`}
-              className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-slate-100/80 shadow-sm"
-              key={column.key}
+    <>
+      {headingActionsTarget &&
+        createPortal(
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            <div aria-live="polite" className="text-xs text-slate-500">
+              {state.isStale ? (
+                <span className="inline-flex items-center gap-2 font-semibold text-amber-800">
+                  <AlertTriangle aria-hidden="true" className="size-4" />
+                  Os dados podem estar desatualizados.
+                </span>
+              ) : (
+                <span>
+                  Última atualização: {formatDateTime(state.updatedAt)}
+                </span>
+              )}
+            </div>
+            <button
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 outline-none transition hover:border-teal-500 hover:bg-teal-50 hover:text-teal-800 focus-visible:ring-2 focus-visible:ring-teal-500 disabled:cursor-wait disabled:opacity-60"
+              disabled={state.isRefreshing}
+              onClick={() => void refreshSnapshot(true)}
+              type="button"
             >
-              <header className={`border-t-4 bg-white px-4 py-4 ${getBorderTone(column.tone)}`}>
-                <div className="flex min-w-0 items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <h2
-                      className="break-words text-sm font-bold text-slate-900"
-                      id={`column-${column.key}`}
-                    >
-                      {column.label}
-                    </h2>
-                    <p className="mt-1 break-words text-xs leading-5 text-slate-500">
-                      {column.description}
-                    </p>
+              <RefreshCw
+                aria-hidden="true"
+                className={`size-4 ${state.isRefreshing ? "animate-spin" : ""}`}
+              />
+              {state.isRefreshing ? "Atualizando…" : "Atualizar quadro"}
+            </button>
+          </div>,
+          headingActionsTarget,
+        )}
+
+      <div className="flex min-h-0 flex-1 flex-col py-6">
+        {state.processes.length === 0 && (
+          <div
+            className="mb-4 rounded-xl border border-dashed border-slate-300 bg-white/70 px-5 py-4 text-sm text-slate-600"
+            role="status"
+          >
+            Ainda não existem processos acessíveis para exibir neste quadro.
+          </div>
+        )}
+
+        <div className="min-h-0 flex-1">
+          <section
+            aria-label="Quadro de processos por estado"
+            className="h-full min-h-0 min-w-0 overflow-x-auto pb-4"
+          >
+            <div
+              className="grid h-full min-h-0 min-w-full grid-flow-col auto-cols-[minmax(13rem,1fr)] items-stretch gap-3"
+              style={{
+                gridTemplateColumns: `repeat(${columns.length}, minmax(325px, 1fr))`,
+              }}
+            >
+              {columns.map((column) => (
+                <section
+                  aria-labelledby={`column-${column.key}`}
+                  className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-slate-100/80 shadow-sm"
+                  key={column.key}
+                >
+                  <header className={`border-t-4 bg-white px-4 py-4 ${getBorderTone(column.tone)}`}>
+                    <div className="flex min-w-0 items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <h2
+                          className="wrap-break-word text-sm font-bold text-slate-900"
+                          id={`column-${column.key}`}
+                        >
+                          {column.label}
+                        </h2>
+                        <p className="mt-1 wrap-break-word text-xs leading-5 text-slate-500">
+                          {column.description}
+                        </p>
+                      </div>
+                      <span
+                        aria-label={`${column.processes.length} processos`}
+                        className={`grid min-w-7 place-items-center rounded-full px-2 py-1 text-xs font-bold ${getBadgeTone(column.tone)}`}
+                      >
+                        {column.processes.length}
+                      </span>
+                    </div>
+                  </header>
+
+                  <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
+                    {column.processes.length === 0 ? (
+                      <p className="rounded-xl border border-dashed border-slate-300 bg-white/50 px-4 py-6 text-center text-xs text-slate-500">
+                        Nenhum processo neste estado.
+                      </p>
+                    ) : (
+                      column.processes.map((process) => (
+                        <ProcessCard
+                          key={process.id}
+                          onViewDetails={(selectedProcess) =>
+                            void openDetails(selectedProcess)
+                          }
+                          process={process}
+                        />
+                      ))
+                    )}
                   </div>
-                  <span
-                    aria-label={`${column.processes.length} processos`}
-                    className={`grid min-w-7 place-items-center rounded-full px-2 py-1 text-xs font-bold ${getBadgeTone(column.tone)}`}
-                  >
-                    {column.processes.length}
-                  </span>
-                </div>
-              </header>
-
-              <div className="max-h-[calc(100dvh-23rem)] min-h-32 space-y-3 overflow-y-auto p-3">
-                {column.processes.length === 0 ? (
-                  <p className="rounded-xl border border-dashed border-slate-300 bg-white/50 px-4 py-6 text-center text-xs text-slate-500">
-                    Nenhum processo neste estado.
-                  </p>
-                ) : (
-                  column.processes.map((process) => (
-                    <ProcessCard
-                      key={process.id}
-                      onViewDetails={(selectedProcess) =>
-                        void openDetails(selectedProcess)
-                      }
-                      process={process}
-                    />
-                  ))
-                )}
-              </div>
-            </section>
-          ))}
+                </section>
+              ))}
+            </div>
+          </section>
         </div>
-      </section>
 
-      {details.kind !== "closed" && (
-        <ProcessDetailsDialog
-          onClose={closeDetails}
-          onRetry={() => void openDetails(details.process)}
-          state={details}
-        />
-      )}
-    </div>
+        {details.kind !== "closed" && (
+          <ProcessDetailsDialog
+            onClose={closeDetails}
+            onRetry={() => void openDetails(details.process)}
+            state={details}
+          />
+        )}
+      </div>
+    </>
   );
 }
 
 function ProcessCard({ process, onViewDetails }: ProcessCardProps) {
   return (
-    <article className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white p-3 shadow-sm shadow-slate-300/30 xl:p-4">
+    <article className="w-full min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white p-3 shadow-sm shadow-slate-300/30 xl:p-4">
       <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
         <span className="min-w-0 break-all font-mono text-[11px] font-bold uppercase tracking-wide text-teal-700">
           {process.code}
@@ -372,7 +389,7 @@ function ProcessCard({ process, onViewDetails }: ProcessCardProps) {
           {process.status}
         </span>
       </div>
-      <h3 className="mt-3 min-w-0 break-words text-sm font-bold leading-5 text-slate-900">
+      <h3 className="mt-3 min-w-0 wrap-break-word text-sm font-bold leading-5 text-slate-900">
         {process.title}
       </h3>
       <button
@@ -480,7 +497,7 @@ function DetailItem({ label, value }: ProcessDetailItemProps) {
       <dt className="text-xs font-bold uppercase tracking-wide text-slate-500">
         {label}
       </dt>
-      <dd className="mt-1 break-words text-sm font-semibold text-slate-800">
+      <dd className="mt-1 wrap-break-word text-sm font-semibold text-slate-800">
         {value}
       </dd>
     </div>

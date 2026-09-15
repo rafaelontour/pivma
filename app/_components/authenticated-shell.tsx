@@ -5,9 +5,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
-  Activity,
+  // Activity,
   Bot,
-  BrainCircuit,
+  // BrainCircuit,
   ClipboardCheck,
   House,
   LayoutDashboard,
@@ -201,9 +201,6 @@ export function AuthenticatedShell({
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="hidden rounded-full border border-teal-700/20 bg-teal-600/10 px-3 py-1 text-xs font-semibold text-teal-800 sm:block">
-            Ambiente seguro
-          </span>
           <button
             aria-label="Encerrar sessão"
             className="inline-flex size-10 items-center justify-center rounded-full border border-slate-300 bg-slate-50 text-slate-600 outline-none transition hover:border-teal-500 hover:bg-teal-50 hover:text-teal-800 focus-visible:ring-2 focus-visible:ring-teal-500 disabled:cursor-wait disabled:opacity-60"
@@ -242,9 +239,15 @@ export function AuthenticatedShell({
 
       <section className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <div className="min-h-0 flex-1 overflow-y-auto">
-          <div className="flex min-h-full w-full max-w-none flex-col px-5 py-6 sm:px-8 sm:py-9 lg:px-12">
-            <div className="flex items-start justify-between gap-5 border-b border-slate-300 pb-6">
-              <div>
+          <div
+            className={`flex w-full max-w-none flex-col px-5 py-6 sm:px-8 sm:py-9 lg:px-12 ${
+              activePage === "processes"
+                ? "h-full min-h-0"
+                : "min-h-full"
+            }`}
+          >
+            <div className="flex flex-wrap items-start justify-between gap-5 border-b border-slate-300 pb-6">
+              <div className="min-w-0 flex-1">
                 <p className="text-xs font-bold uppercase tracking-[0.18em] text-teal-700">
                   {heading.eyebrow}
                 </p>
@@ -255,9 +258,12 @@ export function AuthenticatedShell({
                   {heading.description}
                 </p>
               </div>
-              <span className="hidden rounded-full border border-teal-700/20 bg-teal-600/10 px-3 py-1 text-xs font-semibold text-teal-800 sm:block">
-                pi*VMA
-              </span>
+              {activePage === "processes" && (
+                <div
+                  className="flex w-full shrink-0 justify-end sm:mt-5 sm:w-auto"
+                  id="authenticated-page-heading-actions"
+                />
+              )}
             </div>
 
             <div className="flex min-h-0 w-full flex-1 flex-col">{children}</div>
@@ -280,7 +286,7 @@ function Sidebar({
   canViewAiEvaluations,
   canViewProcesses,
   canViewTriage,
-  canViewObservability,
+  // canViewObservability,
   expanded,
   user,
 }: SidebarProps) {
@@ -401,6 +407,7 @@ function Sidebar({
           </Link>
         )}
 
+        {/* Ocultos temporariamente; páginas e autorização permanecem implementadas.
         {canViewObservability && (
           <>
             <Link
@@ -422,7 +429,7 @@ function Sidebar({
               {expanded && <span>Observabilidade de IA</span>}
             </Link>
           </>
-        )}
+        )} */}
       </nav>
 
       <div className="mt-auto border-t border-slate-200 pt-4">
