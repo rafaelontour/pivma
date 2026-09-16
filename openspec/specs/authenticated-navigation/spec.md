@@ -101,12 +101,12 @@ O sistema SHALL apresentar o item de navegação Usuários para pessoas cuja ses
 
 ### Requirement: Acesso às submissões do proponente
 
-O sistema SHALL apresentar o item Submissões na navegação de pessoas autenticadas que possam iniciar processos como proponente. O item MUST possuir nome e ícone acessíveis e indicar quando a página estiver ativa.
+O sistema SHALL apresentar o item Submissões na navegação de todas as pessoas com sessão autenticada válida, sem restringir a exibição a perfis específicos como proponente. O item MUST possuir nome e ícone acessíveis e indicar quando a página de submissões estiver ativa. A página de submissões MUST permanecer acessível para qualquer usuário autenticado.
 
 #### Scenario: Pessoa autenticada acessa submissões
 
-- **WHEN** uma pessoa autenticada pode criar uma submissão
-- **THEN** o sistema apresenta o item Submissões e permite abrir o catálogo de templates
+- **WHEN** uma pessoa possui uma sessão autenticada válida
+- **THEN** o sistema apresenta o item Submissões na barra lateral e permite acessar o catálogo de submissões
 
 #### Scenario: Item Submissões está ativo
 
