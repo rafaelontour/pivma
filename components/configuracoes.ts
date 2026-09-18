@@ -66,7 +66,7 @@ export function getSettingsModules(
       iconName: "ListChecks",
       isAllowed: capabilities.canManageForms,
       deniedReason:
-        "Seu perfil não possui permissão para gerenciar templates de formulário.",
+        "Seu perfil não possui permissão para gerenciar os formulários de processo.",
     },
     {
       id: "ai-evaluations",

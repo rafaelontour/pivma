@@ -36,6 +36,7 @@ import type {
   FormEditorFieldProps,
   FormEditorSection,
   FormEditorState,
+  FormEvaluationAssignment,
   FormFieldEditorProps,
   FormOrderButtonsProps,
   FormPageMessageProps,
@@ -47,6 +48,10 @@ import type {
   FormTemplateField,
 } from "@/types/Formulario";
 import type { ApiRecord } from "@/types/Servico";
+import {
+  FieldAiRuleModal,
+  FieldAiRuleSection,
+} from "./field-ai-rule-manager";
 
 const FIELD_TYPE_LABELS = {
   text: "Texto curto",
@@ -69,6 +74,7 @@ export function FormTemplateManager() {
   const [reloadKey, setReloadKey] = useState(0);
   const [hasPendingChanges, setHasPendingChanges] = useState(false);
   const [isConfirmDiscardOpen, setIsConfirmDiscardOpen] = useState(false);
+  const [selectedAiField, setSelectedAiField] = useState<FormTemplateField | null>(null);
   const selectionRequestId = useRef(0);
 
   useEffect(() => {
@@ -220,6 +226,68 @@ export function FormTemplateManager() {
     setHasPendingChanges(false);
   }
 
+  async function handleUnlinkAiRule(
+    field: FormTemplateField,
+    assignmentId: string,
+  ) {
+    if (editor.kind !== "ready") return;
+
+    updateReadyEditor((current) => ({
+      ...current,
+      sections: current.sections.map((section) => ({
+        ...section,
+        fields: section.fields.map((f) =>
+          f.field_key === field.field_key
+            ? { ...f, ai_evaluation_enabled: false }
+            : f,
+        ),
+      })),
+    }));
+
+    try {
+      const allCurrentAssignments = Object.values(editor.assignments).flat();
+      const updatedAssignments = allCurrentAssignments
+        .filter(
+          (a) =>
+            a.id !== assignmentId && !a.field_keys?.includes(field.field_key),
+        )
+        .map((a) => ({
+          definition_id: a.definition_id,
+          pinned_version_id: a.pinned_version_id ?? null,
+          target_type: a.target_type as any,
+          field_keys: a.field_keys ?? [],
+          enabled: a.enabled !== false,
+        }));
+
+      const res = await fetch(
+        `/api/ai-evaluations/assignments/${encodeURIComponent(editor.item.key)}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ assignments: updatedAssignments }),
+        },
+      );
+      const payload = await res.json().catch(() => null);
+      if (res.ok && payload && Array.isArray(payload.assignments)) {
+        const mapped: Record<string, FormEvaluationAssignment[]> = {};
+        for (const item of payload.assignments) {
+          for (const k of item.field_keys ?? []) {
+            if (!mapped[k]) mapped[k] = [];
+            mapped[k].push(item);
+          }
+        }
+        setEditor((current) =>
+          current.kind === "ready"
+            ? { ...current, assignments: mapped }
+            : current,
+        );
+        toast.success("Avaliação por IA desvinculada deste campo.");
+      }
+    } catch {
+      toast.error("Não foi possível sincronizar a desvinculação com o servidor.");
+    }
+  }
+
   async function saveForm() {
     if (editor.kind !== "ready" || editor.isSaving) return;
 
@@ -298,27 +366,16 @@ export function FormTemplateManager() {
   if (editor.kind === "closed") {
     return (
       <div className="flex-1 pb-12 pt-2">
-        <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.14em] text-teal-700">
-              Gestão de formulários
-            </p>
-            <h1 className="mt-1 text-2xl font-bold text-slate-900">
-              Formulários dos processos
-            </h1>
-            <p className="mt-1 text-sm text-slate-600">
-              Selecione um formulário abaixo para configurar seções, campos e critérios de avaliação de IA.
-            </p>
-          </div>
-          <button
-            aria-label="Atualizar lista de formulários"
-            className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm outline-none transition hover:bg-slate-50 hover:text-teal-800 focus-visible:ring-2 focus-visible:ring-teal-500"
-            onClick={() => setReloadKey((value) => value + 1)}
-            type="button"
-          >
-            <RefreshCw aria-hidden="true" className="size-4" />
-            <span>Atualizar lista</span>
-          </button>
+        <div className="mb-6">
+          <p className="text-xs font-bold uppercase tracking-[0.14em] text-teal-700">
+            Gestão de formulários
+          </p>
+          <h1 className="mt-1 text-2xl font-bold text-slate-900">
+            Formulários dos processos
+          </h1>
+          <p className="mt-1 text-sm text-slate-600">
+            Selecione um formulário abaixo para configurar seções, campos e critérios de avaliação de IA.
+          </p>
         </div>
 
         {catalog.kind === "loading" ? (
@@ -520,6 +577,8 @@ export function FormTemplateManager() {
               ),
             }))
           }
+          onOpenAiModal={(field) => setSelectedAiField(field)}
+          onUnlinkAiRule={handleUnlinkAiRule}
           state={editor}
         />
       </div>
@@ -529,6 +588,43 @@ export function FormTemplateManager() {
         onCancel={() => setIsConfirmDiscardOpen(false)}
         onConfirm={handleConfirmDiscard}
       />
+
+      {selectedAiField && editor.kind === "ready" && (
+        <FieldAiRuleModal
+          allFields={flattenFormSections(editor.sections)}
+          existingAssignments={Object.values(editor.assignments).flat()}
+          field={selectedAiField}
+          isOpen={Boolean(selectedAiField)}
+          onClose={() => setSelectedAiField(null)}
+          onRuleLinked={(newAssignments) => {
+            const mapped: Record<string, FormEvaluationAssignment[]> = {};
+            for (const item of newAssignments) {
+              for (const k of item.field_keys ?? []) {
+                if (!mapped[k]) mapped[k] = [];
+                mapped[k].push(item);
+              }
+            }
+            setEditor((curr) => {
+              if (curr.kind !== "ready") return curr;
+              return {
+                ...curr,
+                assignments: mapped,
+                sections: curr.sections.map((s) => ({
+                  ...s,
+                  fields: s.fields.map((f) =>
+                    f.field_key === selectedAiField.field_key
+                      ? { ...f, ai_evaluation_enabled: true }
+                      : f,
+                  ),
+                })),
+              };
+            });
+            setHasPendingChanges(true);
+            setSelectedAiField(null);
+          }}
+          templateKey={editor.item.key}
+        />
+      )}
     </div>
   );
 }
@@ -547,16 +643,10 @@ function FormCatalogCard({ item, onSelect }: FormCatalogCardProps) {
         </div>
 
         <h2 className="mt-3 text-lg font-bold text-slate-900">{item.name}</h2>
-
-        <p className="mt-2 text-sm leading-6 text-slate-600">
-          {item.description?.trim() ||
-            `Formulário padrão associado ao processo ${item.processName}.`}
-        </p>
       </div>
 
       <div className="mt-6 border-t border-slate-100 pt-4">
-        <div className="flex items-center justify-between gap-3">
-          <span className="font-mono text-xs text-slate-500">{item.key}</span>
+        <div className="flex items-center justify-end">
           <button
             className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-teal-700 px-4 text-xs font-semibold text-white outline-none transition hover:bg-teal-800 focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2"
             onClick={() => onSelect(item)}
@@ -587,7 +677,11 @@ function FormEditor({
   onRemoveField,
   onMoveField,
   onSave,
+  onOpenAiModal,
+  onUnlinkAiRule,
 }: FormEditorProps) {
+  const allFields = flattenFormSections(state.sections);
+
   return (
     <div>
       <header className="border-b border-slate-200 p-5 sm:p-6">
@@ -667,6 +761,7 @@ function FormEditor({
       <div className="grid gap-4 p-5 sm:p-6">
         {state.sections.map((section, index) => (
           <FormSectionEditor
+            allFields={allFields}
             assignments={state.assignments}
             canManageAi={canManageAi}
             disabled={state.isSaving}
@@ -674,12 +769,14 @@ function FormEditor({
             templateKey={state.detail.key}
             onAddField={() => onAddField(section.id)}
             onMove={(direction) => onMoveSection(section.id, direction)}
-            onRemove={() => onRemoveSection(section.id)}
-            onRemoveField={(fieldIndex) => onRemoveField(section.id, fieldIndex)}
-            onRename={(name) => onRenameSection(section.id, name)}
             onMoveField={(fieldIndex, direction) =>
               onMoveField(section.id, fieldIndex, direction)
             }
+            onOpenAiModal={onOpenAiModal}
+            onRemove={() => onRemoveSection(section.id)}
+            onRemoveField={(fieldIndex) => onRemoveField(section.id, fieldIndex)}
+            onRename={(name) => onRenameSection(section.id, name)}
+            onUnlinkAiRule={onUnlinkAiRule}
             onUpdateField={(fieldIndex, field) =>
               onUpdateField(section.id, fieldIndex, field)
             }
@@ -711,6 +808,7 @@ function FormSectionEditor({
   assignments,
   canManageAi,
   disabled,
+  allFields,
   onRename,
   onRemove,
   onMove,
@@ -718,6 +816,8 @@ function FormSectionEditor({
   onUpdateField,
   onRemoveField,
   onMoveField,
+  onOpenAiModal,
+  onUnlinkAiRule,
 }: FormSectionEditorProps) {
   return (
     <section className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
@@ -757,6 +857,7 @@ function FormSectionEditor({
         ) : (
           section.fields.map((field, index) => (
             <FormFieldEditor
+              allFields={allFields}
               assignment={assignments[field.field_key] ?? []}
               canManageAi={canManageAi}
               canMoveDown={index < section.fields.length - 1}
@@ -765,11 +866,17 @@ function FormSectionEditor({
               field={field}
               fieldIndex={index}
               key={`${field.field_key}:${index}`}
-              templateKey={templateKey}
               onChange={(value) => onUpdateField(index, value)}
               onMove={(direction) => onMoveField(index, direction)}
+              onOpenAiModal={onOpenAiModal ? () => onOpenAiModal(field) : undefined}
               onRemove={() => onRemoveField(index)}
+              onUnlinkAiRule={
+                onUnlinkAiRule
+                  ? (assignmentId) => onUnlinkAiRule(field, assignmentId)
+                  : undefined
+              }
               sectionId={section.id}
+              templateKey={templateKey}
             />
           ))
         )}
@@ -796,11 +903,14 @@ function FormFieldEditor({
   assignment,
   canManageAi,
   disabled,
+  allFields,
   onChange,
   onRemove,
   onMove,
   canMoveUp,
   canMoveDown,
+  onOpenAiModal,
+  onUnlinkAiRule,
 }: FormFieldEditorProps) {
   const inputId = `form-editor-${sectionId}-${fieldIndex}`;
 
@@ -991,69 +1101,19 @@ function FormFieldEditor({
         </div>
       )}
 
-      <div className="mt-4 rounded-xl border border-violet-200 bg-violet-50/70 p-4">
-        <label className="flex items-center gap-3 text-sm font-semibold text-violet-950">
-          <input
-            checked={field.ai_evaluation_enabled}
-            className="size-4 accent-violet-700"
-            disabled={disabled}
-            onChange={(event) =>
-              onChange({ ...field, ai_evaluation_enabled: event.target.checked })
-            }
-            type="checkbox"
-          />
-          <Bot aria-hidden="true" className="size-4" />
-          Habilitar avaliação por IA
-        </label>
-        {field.ai_evaluation_enabled && (
-          <FieldInput
-            inputId={`${inputId}-ai-context`}
-            label="Instruções de contexto para IA"
-            wide
-          >
-            <textarea
-              className={`${EDITOR_INPUT_CLASS} min-h-20 py-2`}
-              disabled={disabled}
-              id={`${inputId}-ai-context`}
-              onChange={(event) =>
-                onChange({
-                  ...field,
-                  ai_context_instructions: event.target.value || null,
-                })
-              }
-              value={field.ai_context_instructions ?? ""}
-            />
-          </FieldInput>
-        )}
-
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          {assignment.length === 0 ? (
-            <span className="text-xs text-violet-800">Nenhuma avaliação associada.</span>
-          ) : (
-            assignment.map((item) => (
-              <span
-                className="rounded-full border border-violet-300 bg-white px-2.5 py-1 text-xs font-semibold text-violet-900"
-                key={item.id}
-              >
-                {item.definition_name}
-                {item.effective_version_number
-                  ? ` · v${item.effective_version_number}`
-                  : ""}
-              </span>
-            ))
-          )}
-          {canManageAi ? (
-            <Link
-              className="ml-auto text-xs font-bold text-violet-800 underline decoration-violet-300 underline-offset-4 outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
-              href={`/avaliacoes-ia?template=${encodeURIComponent(templateKey)}&field=${encodeURIComponent(field.field_key)}`}
-            >
-              Gerenciar associações
-            </Link>
-          ) : (
-            <span className="ml-auto text-xs text-violet-700">Associações somente para leitura</span>
-          )}
-        </div>
-      </div>
+      <FieldAiRuleSection
+        allFields={allFields ?? []}
+        assignment={assignment}
+        canManageAi={canManageAi}
+        disabled={disabled}
+        field={field}
+        onOpenRuleConfig={() => onOpenAiModal?.()}
+        onToggleAi={(enabled) =>
+          onChange({ ...field, ai_evaluation_enabled: enabled })
+        }
+        onUnlinkRule={(assignmentId) => onUnlinkAiRule?.(assignmentId)}
+        templateKey={templateKey}
+      />
     </article>
   );
 }

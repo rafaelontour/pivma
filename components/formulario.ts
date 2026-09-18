@@ -1,10 +1,15 @@
 import type {
+  FieldAiRuleCheckType,
+  FieldAiRuleQuickDraft,
+  FieldAiRuleScope,
+  FieldAiRuleSeverity,
   FormDefinitionValidation,
   FormEditorSection,
   FormFieldOption,
   FormTemplateField,
   UpdateFormTemplateInput,
 } from "@/types/Formulario";
+import type { AiEvaluationTargetType } from "@/types/AvaliacaoIa";
 import type { ApiRecord } from "@/types/Servico";
 import type {
   DynamicFormField,
@@ -507,4 +512,128 @@ function createSectionId(name: string, index: number) {
 
 function isRecord(value: unknown): value is ApiRecord {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+export const AI_SEVERITY_OPTIONS: { value: FieldAiRuleSeverity; label: string }[] = [
+  { value: "info", label: "Informativo" },
+  { value: "low", label: "Baixa" },
+  { value: "medium", label: "Média" },
+  { value: "high", label: "Alta" },
+  { value: "critical", label: "Crítica" },
+];
+
+export const AI_CHECK_TYPE_OPTIONS: {
+  value: FieldAiRuleCheckType;
+  label: string;
+  description: string;
+}[] = [
+  {
+    value: "presence",
+    label: "Presença",
+    description: "Verifica se uma informação essencial está presente na resposta.",
+  },
+  {
+    value: "conformity",
+    label: "Conformidade",
+    description: "Verifica se a resposta segue uma diretriz, norma ou formato específico.",
+  },
+  {
+    value: "quality",
+    label: "Qualidade",
+    description: "Avalia a clareza, completude, fundamentação ou coerência do texto.",
+  },
+  {
+    value: "cross_field_consistency",
+    label: "Consistência",
+    description: "Compara informações entre dois ou mais campos para evitar contradições.",
+  },
+  {
+    value: "comparison",
+    label: "Comparação",
+    description: "Confronta dados com parâmetros de referência técnicos.",
+  },
+];
+
+export const AI_SCOPE_OPTIONS: {
+  value: FieldAiRuleScope;
+  label: string;
+  description: string;
+}[] = [
+  {
+    value: "field",
+    label: "Somente este campo",
+    description: "A IA avaliará exclusivamente o conteúdo digitado neste campo.",
+  },
+  {
+    value: "cross_field",
+    label: "Este campo + outros campos",
+    description: "A IA confrontará a resposta deste campo com outros campos selecionados do formulário.",
+  },
+  {
+    value: "form",
+    label: "Todo o formulário",
+    description: "A IA terá visão abrangente de todas as respostas do formulário durante a análise.",
+  },
+];
+
+export function mapSeverityToLabel(severity: string): string {
+  const match = AI_SEVERITY_OPTIONS.find((item) => item.value === severity);
+  return match ? match.label : severity;
+}
+
+export function mapCheckTypeToLabel(checkType: string): string {
+  const match = AI_CHECK_TYPE_OPTIONS.find((item) => item.value === checkType);
+  return match ? match.label : checkType;
+}
+
+export function mapScopeToLabel(scope: FieldAiRuleScope): string {
+  const match = AI_SCOPE_OPTIONS.find((item) => item.value === scope);
+  return match ? match.label : scope;
+}
+
+export function mapScopeToTargetType(scope: FieldAiRuleScope): AiEvaluationTargetType {
+  switch (scope) {
+    case "cross_field":
+      return "field_set";
+    case "form":
+      return "form";
+    case "field":
+    default:
+      return "field";
+  }
+}
+
+export function validateAiRuleDraft(draft: FieldAiRuleQuickDraft): {
+  valid: boolean;
+  errors: string[];
+} {
+  const errors: string[] = [];
+
+  if (!draft.name.trim()) {
+    errors.push("Informe um nome para a regra.");
+  }
+
+  if (!draft.objective.trim()) {
+    errors.push("Descreva o que a IA deve avaliar (objetivo).");
+  }
+
+  const enabledCriteria = draft.criteria.filter((c) => c.enabled);
+  if (enabledCriteria.length === 0) {
+    errors.push("A regra precisa de ao menos um critério ativo.");
+  } else {
+    for (let i = 0; i < enabledCriteria.length; i++) {
+      if (!enabledCriteria[i].statement.trim()) {
+        errors.push(`O critério ${i + 1} precisa ter um texto descritivo.`);
+      }
+    }
+  }
+
+  if (draft.scope === "cross_field" && draft.selectedFieldKeys.length === 0) {
+    errors.push("Selecione os outros campos a serem considerados na análise cruzada.");
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+  };
 }
