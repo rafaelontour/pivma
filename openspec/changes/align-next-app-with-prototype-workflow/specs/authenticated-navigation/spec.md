@@ -2,7 +2,7 @@
 
 ### Requirement: Acesso às submissões do proponente
 
-O sistema SHALL apresentar o item Submissões na navegação de sessões com o perfil global oficial `Proponente`. O item MUST possuir nome e ícone acessíveis e indicar quando a página estiver ativa. Um papel local `proponent` vinculado à participação em um processo MUST NOT, isoladamente, apresentar esse destino para uma conta de outro perfil.
+O sistema SHALL apresentar o item Submissões na navegação de sessões com o perfil global oficial `Proponente`. Enquanto a integração devolver uma conta proponente sem perfis nem permissões globais, o sistema MAY reconhecer como compatibilidade a presença do papel local `proponent`; essa compatibilidade MUST NOT ser aplicada a uma sessão que possua outro perfil ou permissão global. O item MUST possuir nome e ícone acessíveis e indicar quando a página estiver ativa. Um papel local `proponent` vinculado à participação em um processo MUST NOT, isoladamente, apresentar esse destino para uma conta de outro perfil.
 
 #### Scenario: Perfil Proponente acessa submissões
 
@@ -13,6 +13,11 @@ O sistema SHALL apresentar o item Submissões na navegação de sessões com o p
 
 - **WHEN** a sessão possui somente o perfil global `Administrador`, ainda que participe de um processo com o papel local `proponent`
 - **THEN** o sistema não apresenta o item Submissões na navegação administrativa
+
+#### Scenario: Conta proponente ainda não possui perfil global
+
+- **WHEN** a sessão não possui perfil nem permissão global e possui o papel local `proponent`
+- **THEN** o sistema apresenta o item Submissões pela regra de compatibilidade
 
 #### Scenario: Pessoa acumula os dois perfis
 

@@ -91,6 +91,7 @@
   - Todos os links possuem `aria-label` e `aria-current`; a sidebar acompanha a mudança entre viewport móvel e desktop e permanece recolhível por teclado.
 - [ ] 7.6 Verificar acesso direto e visibilidade do menu para proponente, leitor de IA, gestor de IA, triador e administrador
   - Em 11/09/2026, sessões reais confirmaram que o perfil oficial `Proponente` deve ver Início e Submissões, enquanto o perfil `Administrador` deve ver Início e os módulos administrativos autorizados, sem Submissões. O papel local `proponent` não pode decidir a navegação global porque também aparece na sessão administradora por participação em processos. A regra do shell foi corrigida e passou por lint, TypeScript e build; a matriz completa ainda aguarda sessões válidas dos perfis especializados de leitura/gestão de IA e triagem.
+  - Em 16/09/2026, a conta proponente disponível na API publicada retornou `profiles: []`, `global_permissions: []` e escopos com o papel `proponent`, embora consiga consultar os templates de submissão. O shell passou a aceitar esse formato somente na ausência total de perfil e permissão global, preservando a exclusão de contas administrativas que apenas participem localmente como proponentes.
 
 ## 8. Observabilidade administrativa
 

@@ -226,9 +226,7 @@ export function AuthenticatedShell({
           session.user.profiles.some((profile) => profile.name === "Grupo Gestor")
         }
         canManageUsers={session.user.permissions.includes("users.read")}
-        canViewSubmissions={session.user.profiles.some(
-          (profile) => profile.name === "Proponente",
-        )}
+        canViewSubmissions={canAccessSubmissions(session.user)}
         canViewAiEvaluations={canViewAiEvaluations}
         canViewProcesses={canViewProcesses}
         canViewTriage={canViewTriage}
@@ -475,6 +473,20 @@ function SessionLoading() {
       </div>
     </main>
   );
+}
+
+function canAccessSubmissions(user: CurrentUser) {
+  const hasOfficialProponentProfile = user.profiles.some(
+    (profile) =>
+      profile.active &&
+      profile.name.toLocaleLowerCase("pt-BR") === "proponente",
+  );
+  const hasUnassignedProponentScope =
+    user.profiles.length === 0 &&
+    user.permissions.length === 0 &&
+    user.roles.includes("proponent");
+
+  return hasOfficialProponentProfile || hasUnassignedProponentScope;
 }
 
 function getPageHeading(page: SidebarProps["activePage"], username: string) {

@@ -92,6 +92,67 @@ describe("AuthenticatedShell", () => {
     expect(window.localStorage.getItem("pivma:sidebar")).toBeNull();
   });
 
+  it("exibe Submissões para uma conta proponente ainda sem perfil global", async () => {
+    setViewport(true);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          ...CURRENT_USER,
+          profiles: [],
+          roles: ["proponent"],
+        }),
+      }),
+    );
+
+    render(
+      <AuthenticatedShell activePage="home">
+        <p>Conteúdo do proponente</p>
+      </AuthenticatedShell>,
+    );
+
+    expect(
+      await screen.findByRole("link", { name: "Submissões" }),
+    ).toHaveAttribute("href", "/submissoes");
+  });
+
+  it("não usa o papel local proponent para liberar Submissões a outro perfil", async () => {
+    setViewport(true);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          ...CURRENT_USER,
+          permissions: ["rbac.read"],
+          roles: ["proponent"],
+          profiles: [
+            {
+              id: "profile-admin",
+              name: "Administrador",
+              active: true,
+            },
+          ],
+          isAdministrator: true,
+        }),
+      }),
+    );
+
+    render(
+      <AuthenticatedShell activePage="home">
+        <p>Conteúdo administrativo</p>
+      </AuthenticatedShell>,
+    );
+
+    await screen.findByText("Conteúdo administrativo");
+    expect(
+      screen.queryByRole("link", { name: "Submissões" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("oculta os atalhos de observabilidade e os selos do shell", async () => {
     setViewport(true);
     vi.stubGlobal(
