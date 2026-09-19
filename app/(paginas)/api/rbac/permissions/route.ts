@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { internalApiErrorResponse } from "@/app/(paginas)/api/_shared/responses";
 import { listPermissionDefinitions } from "@/services/Perfil";
 
 export const runtime = "nodejs";
@@ -15,19 +16,14 @@ export async function GET() {
   const result = await listPermissionDefinitions(accessToken);
 
   if (!result.ok) {
-    if (result.status === 401) {
-      cookieStore.delete("access_token");
-    }
-
-    const status = result.status === 401 || result.status === 403 ? result.status : 502;
-    const message =
-      status === 401
-        ? "Sua sessão não é mais válida."
-        : status === 403
-          ? "Você não tem permissão para consultar códigos de permissão."
-          : "Não foi possível consultar os códigos de permissão no momento.";
-
-    return NextResponse.json({ message }, { status });
+    return internalApiErrorResponse(result.status, {
+      cookieStore,
+      fallbackMessage:
+        "Não foi possível consultar os códigos de permissão no momento.",
+      messages: {
+        403: "Você não tem permissão para consultar códigos de permissão.",
+      },
+    });
   }
 
   return NextResponse.json(result.data);

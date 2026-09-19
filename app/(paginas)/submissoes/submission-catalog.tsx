@@ -12,18 +12,19 @@ import {
   RefreshCw,
   Save,
   Send,
-  Trash2,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { DynamicFormFieldControl } from "@/components/dynamic-form-field";
+import {
+  buildDynamicFormInputs,
+  buildDynamicFormValues,
+  validateDynamicFormValues,
+} from "@/components/formulario";
 import type { ProcessInstance } from "@/types/Processo";
 import type { ApiMessage, ApiRecord } from "@/types/Servico";
 import type {
   DynamicFormField,
-  DynamicFormFieldControlProps,
-  DynamicFormOption,
-  DynamicFormOptionValue,
-  DynamicFormValue,
   SaveSubmissionDraftResult,
   SubmissionCatalogMessageProps,
   SubmissionCatalogState,
@@ -31,18 +32,23 @@ import type {
   SubmissionDialogState,
   SubmissionDraftCardProps,
   SubmissionDraftsState,
-  SubmissionDeleteDialogProps,
   SubmissionFieldInputs,
   SubmissionForm,
   SubmissionFormDialogProps,
   SubmissionFormOperation,
+  SubmissionIdentificationDialogProps,
   SubmissionTab,
   SubmissionTemplate,
   SubmissionTemplateCardProps,
-  SubmittedSubmissionCardProps,
   SubmittedSubmissionsState,
   SubmitSubmissionResult,
 } from "@/types/Submissao";
+import {
+  DirectReviewDialog,
+  requestPreEvaluation,
+  SubmissionPreEvaluationPanel,
+  SubmissionTrackingCard,
+} from "./submission-pre-evaluation";
 
 export function SubmissionCatalog() {
   const [activeTab, setActiveTab] = useState<SubmissionTab>("drafts");
@@ -59,9 +65,9 @@ export function SubmissionCatalog() {
   const [submittedState, setSubmittedState] =
     useState<SubmittedSubmissionsState>({ kind: "loading" });
   const [openingDraftId, setOpeningDraftId] = useState<string | null>(null);
-  const [deletingDraft, setDeletingDraft] = useState<ProcessInstance | null>(
-    null,
-  );
+  const [identificationTemplate, setIdentificationTemplate] =
+    useState<SubmissionTemplate | null>(null);
+  const [submissionTitle, setSubmissionTitle] = useState("");
   const isCreatingRef = useRef(false);
   const isOpeningRef = useRef(false);
 
@@ -107,7 +113,18 @@ export function SubmissionCatalog() {
   }, [dialog.kind]);
 
   async function selectTemplate(template: SubmissionTemplate) {
+    if (isCreatingRef.current || isOpeningRef.current) return;
+    setSubmissionTitle("");
+    setIdentificationTemplate(template);
+  }
+
+  async function createIdentifiedSubmission() {
+    const template = identificationTemplate;
     if (isCreatingRef.current || isOpeningRef.current) {
+      return;
+    }
+    if (!template || submissionTitle.trim().length < 3 || submissionTitle.trim().length > 255) {
+      toast.error("Informe um título entre 3 e 255 caracteres.");
       return;
     }
 
@@ -118,7 +135,7 @@ export function SubmissionCatalog() {
       const createResponse = await fetch("/api/submissions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ templateKey: template.key }),
+        body: JSON.stringify({ templateKey: template.key, title: submissionTitle.trim() }),
       });
       const createPayload = (await createResponse.json().catch(() => null)) as unknown;
 
@@ -132,6 +149,7 @@ export function SubmissionCatalog() {
       toast.success(
         `Formulário ${createPayload.code} iniciado. O preenchimento ainda não foi salvo.`,
       );
+      setIdentificationTemplate(null);
       await loadForm(template, createPayload);
     } catch {
       toast.error("Não foi possível conectar ao serviço de submissões.");
@@ -337,7 +355,6 @@ export function SubmissionCatalog() {
                   isOpening={openingDraftId === draft.id}
                   isOpeningLocked={openingDraftId !== null || creatingTemplateKey !== null}
                   key={draft.id}
-                  onDelete={setDeletingDraft}
                   onOpen={(selectedDraft) => void openDraft(selectedDraft)}
                   templateName={templateName ?? draft.template_key}
                 />
@@ -437,8 +454,12 @@ export function SubmissionCatalog() {
                   : undefined;
 
               return (
-                <SubmittedSubmissionCard
+                <SubmissionTrackingCard
                   key={submission.id}
+                  onProcessChanged={() => {
+                    refreshDrafts();
+                    refreshSubmittedSubmissions();
+                  }}
                   submission={submission}
                   templateName={templateName ?? submission.template_key}
                 />
@@ -523,21 +544,14 @@ export function SubmissionCatalog() {
         />
       )}
 
-      {deletingDraft && (
-        <SubmissionDeleteDialog
-          draft={deletingDraft}
-          onClose={() => setDeletingDraft(null)}
-          onDeleted={(draftId) => {
-            setDraftsState((current) =>
-              current.kind === "ready"
-                ? {
-                    kind: "ready",
-                    drafts: current.drafts.filter((draft) => draft.id !== draftId),
-                  }
-                : current,
-            );
-            setDeletingDraft(null);
-          }}
+      {identificationTemplate && (
+        <SubmissionIdentificationDialog
+          isCreating={creatingTemplateKey !== null}
+          onClose={() => setIdentificationTemplate(null)}
+          onConfirm={() => void createIdentifiedSubmission()}
+          onTitleChange={setSubmissionTitle}
+          template={identificationTemplate}
+          title={submissionTitle}
         />
       )}
     </div>
@@ -579,14 +593,45 @@ function SubmissionTemplateCard({
   );
 }
 
+function SubmissionIdentificationDialog({
+  template,
+  title,
+  isCreating,
+  onTitleChange,
+  onClose,
+  onConfirm,
+}: SubmissionIdentificationDialogProps) {
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/50 p-4" role="presentation">
+      <div aria-labelledby="submission-identification-title" aria-modal="true" className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl" role="dialog">
+        <FilePlus2 aria-hidden="true" className="size-8 text-teal-700" />
+        <h2 className="mt-3 text-xl font-bold text-slate-900" id="submission-identification-title">Identifique sua submissão</h2>
+        <p className="mt-2 text-sm leading-6 text-slate-600">Informe um título significativo para “{template.name}”. O processo só será criado depois desta confirmação.</p>
+        <label className="mt-4 grid gap-1.5 text-sm font-semibold text-slate-800">Título<input autoFocus className="min-h-11 rounded-xl border border-slate-300 px-3 font-normal outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20" disabled={isCreating} maxLength={255} minLength={3} onChange={(event) => onTitleChange(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") onConfirm(); }} placeholder="Ex.: Validação do método de irritação ocular" value={title} /></label>
+        <div className="mt-5 flex justify-end gap-3"><button className="min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-bold text-slate-700 outline-none focus-visible:ring-2 focus-visible:ring-teal-500" disabled={isCreating} onClick={onClose} type="button">Cancelar</button><button className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-teal-700 px-4 text-sm font-bold text-white outline-none focus-visible:ring-2 focus-visible:ring-teal-500 disabled:opacity-60" disabled={isCreating || title.trim().length < 3} onClick={onConfirm} type="button">{isCreating && <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />}Criar e abrir formulário</button></div>
+      </div>
+    </div>
+  );
+}
+
 function SubmissionDraftCard({
   draft,
   templateName,
   isOpening,
   isOpeningLocked,
   onOpen,
-  onDelete,
 }: SubmissionDraftCardProps) {
+  const [evaluation, setEvaluation] = useState<import("@/types/Submissao").SubmissionPreEvaluation | null>(null);
+  const [directReviewOpen, setDirectReviewOpen] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    void requestPreEvaluation(draft.id).then((result) => {
+      if (active) setEvaluation(result);
+    });
+    return () => { active = false; };
+  }, [draft.id]);
+
   return (
     <article className="flex min-h-52 flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-300/30">
       <div className="flex items-start justify-between gap-3">
@@ -602,6 +647,9 @@ function SubmissionDraftCard({
       </p>
       <h3 className="mt-1 text-base font-bold text-slate-900">{draft.title}</h3>
       <p className="mt-1 flex-1 text-sm leading-6 text-slate-600">{templateName}</p>
+      {evaluation?.consolidated_result === "negative" && (
+        <SubmissionPreEvaluationPanel compact evaluation={evaluation} />
+      )}
       <div className="mt-4 flex flex-wrap gap-2">
         <button
           className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg border border-teal-700 px-3 py-1.5 text-xs font-semibold text-teal-800 outline-none transition hover:bg-teal-50 focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2 disabled:cursor-wait disabled:border-slate-300 disabled:text-slate-400"
@@ -616,145 +664,12 @@ function SubmissionDraftCard({
           )}
           {isOpening ? "Abrindo…" : "Retomar edição"}
         </button>
-        <button
-          aria-label={`Excluir rascunho ${draft.code}`}
-          className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-700 outline-none transition hover:border-rose-300 hover:bg-rose-50 focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400"
-          disabled={isOpeningLocked}
-          onClick={() => onDelete(draft)}
-          title="Excluir rascunho"
-          type="button"
-        >
-          <Trash2 aria-hidden="true" className="size-3.5" />
-          Excluir
-        </button>
-      </div>
-    </article>
-  );
-}
-
-function SubmittedSubmissionCard({
-  submission,
-  templateName,
-}: SubmittedSubmissionCardProps) {
-  return (
-    <article className="flex min-h-52 flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-300/30">
-      <div className="flex items-start justify-between gap-3">
-        <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-teal-100 text-teal-800">
-          <FileCheck2 aria-hidden="true" className="size-5" />
-        </div>
-        <span className="max-w-40 rounded-full bg-teal-100 px-2.5 py-1 text-center text-[11px] font-bold uppercase tracking-wide text-teal-800">
-          {formatProcessStatus(submission.status)}
-        </span>
-      </div>
-      <p className="mt-4 font-mono text-[11px] font-bold uppercase tracking-[0.1em] text-teal-700">
-        {submission.code}
-      </p>
-      <h3 className="mt-1 text-base font-bold text-slate-900">
-        {submission.title}
-      </h3>
-      <p className="mt-1 flex-1 text-sm leading-6 text-slate-600">
-        {templateName}
-      </p>
-    </article>
-  );
-}
-
-function SubmissionDeleteDialog({
-  draft,
-  onClose,
-  onDeleted,
-}: SubmissionDeleteDialogProps) {
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape" && !isDeleting) {
-        onClose();
-      }
-    }
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [isDeleting, onClose]);
-
-  async function confirmDeletion() {
-    setIsDeleting(true);
-    setError(null);
-
-    try {
-      const response = await fetch(`/api/submissions/${draft.id}`, {
-        method: "DELETE",
-      });
-      const payload = (await response.json().catch(() => null)) as unknown;
-
-      if (!response.ok) {
-        setError(getApiMessage(payload, "Não foi possível excluir o rascunho."));
-        return;
-      }
-
-      toast.success(getApiMessage(payload, "Rascunho excluído com sucesso."));
-      onDeleted(draft.id);
-    } catch {
-      setError("Não foi possível conectar ao serviço de submissões.");
-    } finally {
-      setIsDeleting(false);
-    }
-  }
-
-  return (
-    <div
-      aria-describedby="delete-draft-description"
-      aria-labelledby="delete-draft-title"
-      aria-modal="true"
-      className="fixed inset-0 z-[60] grid place-items-center bg-slate-950/50 p-4 backdrop-blur-[2px]"
-      role="alertdialog"
-    >
-      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
-        <div className="grid size-11 place-items-center rounded-xl bg-rose-100 text-rose-700">
-          <Trash2 aria-hidden="true" className="size-5" />
-        </div>
-        <h2 className="mt-4 text-xl font-bold text-slate-900" id="delete-draft-title">
-          Excluir rascunho?
-        </h2>
-        <p className="mt-2 text-sm leading-6 text-slate-600" id="delete-draft-description">
-          Você está prestes a excluir <strong>{draft.code}</strong>. Essa ação não
-          poderá ser desfeita.
-        </p>
-
-        {error && (
-          <div className="mt-4 flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm leading-5 text-rose-800" role="alert">
-            <AlertCircle aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-            {error}
-          </div>
+        {evaluation?.consolidated_result === "negative" && !evaluation.direct_review_request && (
+          <button className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg border border-violet-300 px-3 py-1.5 text-xs font-semibold text-violet-800 outline-none hover:bg-violet-50 focus-visible:ring-2 focus-visible:ring-violet-500" disabled={isOpeningLocked} onClick={() => setDirectReviewOpen(true)} type="button">Solicitar revisão humana</button>
         )}
-
-        <div className="mt-6 flex flex-wrap justify-end gap-3">
-          <button
-            autoFocus
-            className="min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-slate-700 outline-none transition hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-slate-400 disabled:cursor-wait disabled:opacity-60"
-            disabled={isDeleting}
-            onClick={onClose}
-            type="button"
-          >
-            Cancelar
-          </button>
-          <button
-            className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-rose-700 px-4 text-sm font-semibold text-white outline-none transition hover:bg-rose-800 focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-60"
-            disabled={isDeleting}
-            onClick={() => void confirmDeletion()}
-            type="button"
-          >
-            {isDeleting ? (
-              <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
-            ) : (
-              <Trash2 aria-hidden="true" className="size-4" />
-            )}
-            {isDeleting ? "Excluindo…" : "Excluir rascunho"}
-          </button>
-        </div>
       </div>
-    </div>
+      <DirectReviewDialog isOpen={directReviewOpen} onClose={() => setDirectReviewOpen(false)} onConfirmed={() => window.location.reload()} process={draft} />
+    </article>
   );
 }
 
@@ -766,7 +681,7 @@ function SubmissionFormDialog({
   onSubmitted,
 }: SubmissionFormDialogProps) {
   const [inputs, setInputs] = useState<SubmissionFieldInputs>(() =>
-    state.kind === "ready" ? buildInputs(state.form) : {},
+    state.kind === "ready" ? buildDynamicFormInputs(state.form) : {},
   );
   const [operation, setOperation] = useState<SubmissionFormOperation>("idle");
   const operationRef = useRef<SubmissionFormOperation>("idle");
@@ -792,7 +707,7 @@ function SubmissionFormDialog({
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          values: buildDraftValues(state.form.fields, inputs),
+          values: buildDynamicFormValues(state.form.fields, inputs, false),
         }),
       });
       const payload = (await response.json().catch(() => null)) as
@@ -824,17 +739,12 @@ function SubmissionFormDialog({
       return;
     }
 
-    const missingRequiredFile = state.form.fields.find(
-      (field) =>
-        field.field_type === "file_upload" &&
-        field.is_required &&
-        !hasSelectedFile(inputs[field.field_key]),
-    );
-
-    if (missingRequiredFile) {
-      toast.error(
-        `Selecione o arquivo obrigatório: ${missingRequiredFile.label}.`,
-      );
+    const validation = validateDynamicFormValues(state.form.fields, inputs);
+    if (!validation.valid) {
+      toast.error(validation.message);
+      document
+        .getElementById(`dynamic-form-field-${validation.fieldKey}`)
+        ?.focus();
       return;
     }
 
@@ -846,7 +756,7 @@ function SubmissionFormDialog({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          values: buildSubmissionValues(state.form.fields, inputs),
+          values: buildDynamicFormValues(state.form.fields, inputs, true),
         }),
       });
       const payload = (await response.json().catch(() => null)) as unknown;
@@ -922,6 +832,7 @@ function SubmissionFormDialog({
             form={state.form}
             inputs={inputs}
             operation={operation}
+            processId={state.process.id}
             onFieldChange={updateField}
             onSave={() => void saveDraft()}
             onSubmit={() => void submitForAnalysis()}
@@ -933,6 +844,7 @@ function SubmissionFormDialog({
 }
 
 function SubmissionDialogContent({
+  processId,
   form,
   inputs,
   operation,
@@ -943,6 +855,7 @@ function SubmissionDialogContent({
   const orderedFields = [...form.fields].sort(
     (first, second) => first.order_index - second.order_index,
   );
+  const sections = [...new Set(orderedFields.map((field) => field.section?.trim() || "Geral"))];
 
   return (
     <>
@@ -956,14 +869,20 @@ function SubmissionDialogContent({
         )}
 
         <form className="grid gap-5" onSubmit={(event) => event.preventDefault()}>
-          {orderedFields.map((field) => (
-            <DynamicFormFieldControl
-              disabled={form.is_submitted}
-              field={field}
-              key={field.field_key}
-              onChange={(value) => onFieldChange(field.field_key, value)}
-              value={inputs[field.field_key]}
-            />
+          {sections.map((section) => (
+            <fieldset className="grid gap-5 rounded-2xl border border-slate-200 p-4 sm:p-5" key={section}>
+              <legend className="px-2 text-sm font-bold uppercase tracking-wide text-teal-800">{section}</legend>
+              {orderedFields.filter((field) => (field.section?.trim() || "Geral") === section).map((field) => (
+                <DynamicFormFieldControl
+                  disabled={form.is_submitted || operation !== "idle"}
+                  field={field}
+                  key={field.field_key}
+                  onChange={(value) => onFieldChange(field.field_key, value)}
+                  processId={processId}
+                  value={inputs[field.field_key]}
+                />
+              ))}
+            </fieldset>
           ))}
         </form>
       </div>
@@ -1008,187 +927,6 @@ function SubmissionDialogContent({
   );
 }
 
-function DynamicFormFieldControl({
-  field,
-  value,
-  disabled,
-  onChange,
-}: DynamicFormFieldControlProps) {
-  const [fileError, setFileError] = useState<string | null>(null);
-  const fieldId = `submission-field-${field.field_key}`;
-  const helpId = field.help_text ? `${fieldId}-help` : undefined;
-  const inputClassName =
-    "mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500";
-
-  if (field.field_type === "file_upload") {
-    const constraintsId = `${fieldId}-constraints`;
-    const errorId = fileError ? `${fieldId}-error` : undefined;
-    const describedBy = [helpId, constraintsId, errorId]
-      .filter(Boolean)
-      .join(" ");
-    const selectedFileName = typeof value === "string" ? value : "";
-
-    return (
-      <div>
-        <label
-          className="text-sm font-semibold text-slate-800"
-          htmlFor={fieldId}
-        >
-          {field.label}
-          {field.is_required && <span className="ml-1 text-rose-700">*</span>}
-        </label>
-        <input
-          accept={getFileAccept(field)}
-          aria-describedby={describedBy}
-          aria-invalid={fileError ? true : undefined}
-          className={`${inputClassName} cursor-pointer p-1.5 file:mr-3 file:rounded-lg file:border-0 file:bg-teal-700 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-white hover:file:bg-teal-800`}
-          disabled={disabled}
-          id={fieldId}
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-
-            if (!file) {
-              setFileError(null);
-              onChange("");
-              return;
-            }
-
-            const error = validateSelectedFile(file, field);
-            if (error) {
-              event.currentTarget.value = "";
-              setFileError(error);
-              onChange("");
-              return;
-            }
-
-            setFileError(null);
-            onChange(file.name);
-          }}
-          required={field.is_required}
-          type="file"
-        />
-        <p className="mt-2 text-xs leading-5 text-slate-500" id={constraintsId}>
-          {getFileConstraintMessage(field)} A seleção permanece somente neste
-          formulário e será enviada como referência ao concluir.
-        </p>
-        {selectedFileName && disabled && (
-          <p className="mt-2 text-xs font-semibold text-teal-800">
-            Referência registrada: {selectedFileName}
-          </p>
-        )}
-        {field.help_text && (
-          <p className="mt-2 text-xs leading-5 text-slate-500" id={helpId}>
-            {field.help_text}
-          </p>
-        )}
-        {fileError && (
-          <p className="mt-2 text-xs font-semibold text-rose-700" id={errorId} role="alert">
-            {fileError}
-          </p>
-        )}
-      </div>
-    );
-  }
-
-  if (!isSupportedField(field.field_type)) {
-    return (
-      <div className="rounded-xl border border-dashed border-amber-300 bg-amber-50 p-4">
-        <p className="text-sm font-semibold text-slate-800">
-          {field.label}
-          {field.is_required && <span className="ml-1 text-rose-700">*</span>}
-        </p>
-        <p className="mt-1 text-xs leading-5 text-amber-900">
-          O tipo de campo “${field.field_type}” ainda não é suportado pela
-          interface.
-        </p>
-      </div>
-    );
-  }
-
-  if (field.field_type === "boolean") {
-    return (
-      <div>
-        <label
-          className="flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-800 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-teal-500"
-          htmlFor={fieldId}
-        >
-          <input
-            aria-describedby={helpId}
-            checked={value === true}
-            className="size-4 accent-teal-700"
-            disabled={disabled}
-            id={fieldId}
-            onChange={(event) => onChange(event.target.checked)}
-            type="checkbox"
-          />
-          <span>
-            {field.label}
-            {field.is_required && <span className="ml-1 text-rose-700">*</span>}
-          </span>
-        </label>
-        {field.help_text && (
-          <p className="mt-2 text-xs leading-5 text-slate-500" id={helpId}>
-            {field.help_text}
-          </p>
-        )}
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      <label className="text-sm font-semibold text-slate-800" htmlFor={fieldId}>
-        {field.label}
-        {field.is_required && <span className="ml-1 text-rose-700">*</span>}
-      </label>
-      {field.field_type === "textarea" ? (
-        <textarea
-          aria-describedby={helpId}
-          className={`${inputClassName} min-h-28 resize-y`}
-          disabled={disabled}
-          id={fieldId}
-          onChange={(event) => onChange(event.target.value)}
-          value={typeof value === "string" ? value : ""}
-        />
-      ) : field.field_type === "select" ? (
-        <select
-          aria-describedby={helpId}
-          className={inputClassName}
-          disabled={disabled}
-          id={fieldId}
-          onChange={(event) => onChange(event.target.value)}
-          value={typeof value === "string" ? value : ""}
-        >
-          <option value="">Selecione uma opção</option>
-          {getOptions(field.options).map((option) => (
-            <option key={serializeOption(option.value)} value={serializeOption(option.value)}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      ) : (
-        <input
-          aria-describedby={helpId}
-          className={inputClassName}
-          disabled={disabled}
-          id={fieldId}
-          max={getNumericRule(field, "max")}
-          min={getNumericRule(field, "min")}
-          onChange={(event) => onChange(event.target.value)}
-          step={field.field_type === "float" ? "any" : undefined}
-          type={getInputType(field.field_type)}
-          value={typeof value === "string" ? value : ""}
-        />
-      )}
-      {field.help_text && (
-        <p className="mt-2 text-xs leading-5 text-slate-500" id={helpId}>
-          {field.help_text}
-        </p>
-      )}
-    </div>
-  );
-}
-
 function SubmissionCatalogMessage({
   title,
   description,
@@ -1216,30 +954,6 @@ function SubmissionCatalogMessage({
   );
 }
 
-function buildInputs(form: SubmissionForm): SubmissionFieldInputs {
-  const inputs: SubmissionFieldInputs = {};
-
-  for (const field of form.fields) {
-    const value = form.values[field.field_key];
-    if (value === undefined || value === null) {
-      continue;
-    }
-
-    if (field.field_type === "boolean" && typeof value === "boolean") {
-      inputs[field.field_key] = value;
-    } else if (field.field_type === "select" && isOptionValue(value)) {
-      inputs[field.field_key] = serializeOption(value);
-    } else if (
-      typeof value === "string" ||
-      typeof value === "number"
-    ) {
-      inputs[field.field_key] = String(value);
-    }
-  }
-
-  return inputs;
-}
-
 function buildFallbackTemplate(draft: ProcessInstance): SubmissionTemplate {
   return {
     id: draft.template_key,
@@ -1248,206 +962,6 @@ function buildFallbackTemplate(draft: ProcessInstance): SubmissionTemplate {
     description: null,
     is_active: false,
   };
-}
-
-function buildDraftValues(
-  fields: DynamicFormField[],
-  inputs: SubmissionFieldInputs,
-) {
-  return buildFormValues(fields, inputs, false);
-}
-
-function buildSubmissionValues(
-  fields: DynamicFormField[],
-  inputs: SubmissionFieldInputs,
-) {
-  return buildFormValues(fields, inputs, true);
-}
-
-function buildFormValues(
-  fields: DynamicFormField[],
-  inputs: SubmissionFieldInputs,
-  includeFileReferences: boolean,
-) {
-  const values: Record<string, DynamicFormValue> = {};
-
-  for (const field of fields) {
-    if (field.field_type === "file_upload") {
-      if (includeFileReferences && Object.hasOwn(inputs, field.field_key)) {
-        const value = inputs[field.field_key];
-        values[field.field_key] =
-          typeof value === "string" && value.trim() !== "" ? value : null;
-      }
-      continue;
-    }
-
-    if (
-      !isSupportedField(field.field_type) ||
-      !Object.hasOwn(inputs, field.field_key)
-    ) {
-      continue;
-    }
-
-    const value = inputs[field.field_key];
-
-    if (field.field_type === "integer" || field.field_type === "float") {
-      const normalized = typeof value === "string" ? value.trim() : "";
-      values[field.field_key] = normalized === "" ? null : Number(normalized);
-      continue;
-    }
-
-    if (field.field_type === "select" && typeof value === "string") {
-      const option = getOptions(field.options).find(
-        (candidate) => serializeOption(candidate.value) === value,
-      );
-      values[field.field_key] = option?.value ?? null;
-      continue;
-    }
-
-    values[field.field_key] = value;
-  }
-
-  return values;
-}
-
-function hasSelectedFile(value: unknown) {
-  return typeof value === "string" && value.trim().length > 0;
-}
-
-function getAllowedFileExtensions(field: DynamicFormField) {
-  const extensions = field.validation_rules?.allowed_extensions;
-
-  if (!Array.isArray(extensions)) {
-    return [];
-  }
-
-  return extensions
-    .filter((extension): extension is string => typeof extension === "string")
-    .map((extension) => extension.trim().toLowerCase().replace(/^\./, ""))
-    .filter(Boolean);
-}
-
-function getMaximumFileSizeMb(field: DynamicFormField) {
-  const maximum = field.validation_rules?.max_size_mb;
-  return typeof maximum === "number" && maximum > 0 ? maximum : undefined;
-}
-
-function getFileAccept(field: DynamicFormField) {
-  const extensions = getAllowedFileExtensions(field);
-  return extensions.length > 0
-    ? extensions.map((extension) => `.${extension}`).join(",")
-    : undefined;
-}
-
-function getFileConstraintMessage(field: DynamicFormField) {
-  const extensions = getAllowedFileExtensions(field);
-  const maximumSizeMb = getMaximumFileSizeMb(field);
-  const parts = [];
-
-  if (extensions.length > 0) {
-    parts.push(
-      `Formatos aceitos: ${extensions
-        .map((value) => value.toUpperCase())
-        .join(", ")}.`,
-    );
-  }
-
-  if (maximumSizeMb) {
-    parts.push(`Tamanho máximo: ${maximumSizeMb} MB.`);
-  }
-
-  return parts.length > 0 ? parts.join(" ") : "Selecione um arquivo válido.";
-}
-
-function validateSelectedFile(file: File, field: DynamicFormField) {
-  const extensions = getAllowedFileExtensions(field);
-  const extension = file.name.includes(".")
-    ? file.name.split(".").pop()?.toLowerCase()
-    : undefined;
-
-  if (extensions.length > 0 && (!extension || !extensions.includes(extension))) {
-    return `Selecione um arquivo nos formatos: ${extensions
-      .map((value) => value.toUpperCase())
-      .join(", ")}.`;
-  }
-
-  const maximumSizeMb = getMaximumFileSizeMb(field);
-  if (maximumSizeMb && file.size > maximumSizeMbToBytes(maximumSizeMb)) {
-    return `O arquivo deve ter no máximo ${maximumSizeMb} MB.`;
-  }
-
-  return null;
-}
-
-function maximumSizeMbToBytes(value: number) {
-  return value * 1024 * 1024;
-}
-
-function getOptions(options: unknown[] | null | undefined): DynamicFormOption[] {
-  if (!Array.isArray(options)) {
-    return [];
-  }
-
-  const normalized: DynamicFormOption[] = [];
-
-  for (const option of options) {
-    if (isOptionValue(option)) {
-      normalized.push({ value: option, label: String(option) });
-      continue;
-    }
-
-    if (
-      option &&
-      typeof option === "object" &&
-      "value" in option &&
-      isOptionValue(option.value)
-    ) {
-      normalized.push({
-        value: option.value,
-        label:
-          "label" in option && typeof option.label === "string"
-            ? option.label
-            : String(option.value),
-      });
-    }
-  }
-
-  return normalized;
-}
-
-function serializeOption(value: DynamicFormOptionValue) {
-  return JSON.stringify([typeof value, value]);
-}
-
-function getInputType(fieldType: string) {
-  if (fieldType === "integer" || fieldType === "float") return "number";
-  if (fieldType === "date") return "date";
-  return "text";
-}
-
-function getNumericRule(field: DynamicFormField, rule: "min" | "max") {
-  const value = field.validation_rules?.[rule];
-  return typeof value === "number" ? value : undefined;
-}
-
-function isSupportedField(fieldType: string) {
-  return [
-    "text",
-    "textarea",
-    "integer",
-    "float",
-    "boolean",
-    "select",
-    "date",
-  ].includes(fieldType);
-}
-
-function isOptionValue(value: unknown): value is DynamicFormOptionValue {
-  return (
-    typeof value === "string" ||
-    typeof value === "number" ||
-    typeof value === "boolean"
-  );
 }
 
 function isTemplateList(value: unknown): value is SubmissionTemplate[] {
@@ -1535,27 +1049,6 @@ function getApiMessage(value: unknown, fallback: string) {
   return isRecord(value) && typeof value.message === "string"
     ? value.message
     : fallback;
-}
-
-function formatProcessStatus(status: string) {
-  const knownLabels: Record<string, string> = {
-    TRIAGE: "Em triagem",
-    EVALUATION: "Em avaliação",
-    UNDER_EVALUATION: "Em avaliação",
-    COMPLETED: "Concluída",
-    CLOSED: "Encerrada",
-  };
-
-  if (knownLabels[status]) {
-    return knownLabels[status];
-  }
-
-  return status
-    .toLowerCase()
-    .split("_")
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
 }
 
 async function requestTemplates(): Promise<SubmissionCatalogState> {

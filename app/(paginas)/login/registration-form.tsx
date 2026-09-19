@@ -18,6 +18,7 @@ const USERNAME_PATTERN = /^[A-Za-z0-9._-]{3,64}$/;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function RegistrationForm({ onLogin }: RegistrationFormProps) {
+  const [fullName, setFullName] = useState("");
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -38,6 +39,7 @@ export function RegistrationForm({ onLogin }: RegistrationFormProps) {
   );
 
   const validationMessage = getValidationMessage({
+    fullName,
     username,
     email,
     passwordCriteria,
@@ -62,7 +64,12 @@ export function RegistrationForm({ onLogin }: RegistrationFormProps) {
       const response = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: username.trim(), email: email.trim(), password }),
+        body: JSON.stringify({
+          fullName: fullName.trim(),
+          username: username.trim(),
+          email: email.trim(),
+          password,
+        }),
       });
       const responseBody = (await response.json().catch(() => null)) as ApiMessage | null;
 
@@ -109,7 +116,27 @@ export function RegistrationForm({ onLogin }: RegistrationFormProps) {
         </p>
       </div>
 
-      <form className="grid grid-cols-2 gap-x-3 gap-y-3" onSubmit={handleSubmit}>
+      <form className="grid grid-cols-1 gap-x-3 gap-y-3 sm:grid-cols-2" onSubmit={handleSubmit}>
+        <div className="sm:col-span-2">
+          <Field label="Nome completo" htmlFor="full-name">
+            <input
+              aria-describedby="full-name-help"
+              autoComplete="name"
+              className={inputClassName}
+              id="full-name"
+              maxLength={255}
+              name="fullName"
+              onChange={(event) => setFullName(event.target.value)}
+              placeholder="Nome e sobrenome"
+              required
+              value={fullName}
+            />
+          </Field>
+          <p className="mt-1 text-[11px] text-slate-500" id="full-name-help">
+            Campo obrigatório, com até 255 caracteres.
+          </p>
+        </div>
+
         <Field label="Nome de usuário" htmlFor="username">
           <input
             autoComplete="username"
@@ -171,11 +198,13 @@ export function RegistrationForm({ onLogin }: RegistrationFormProps) {
           )}
         </div>
 
-        <PasswordChecklist criteria={passwordCriteria} />
+        <div className="sm:col-span-2">
+          <PasswordChecklist criteria={passwordCriteria} />
+        </div>
 
         <button
           aria-label={showPassword ? "Ocultar senhas" : "Mostrar senhas"}
-          className="col-span-2 flex items-center gap-2 text-xs font-medium text-slate-600 transition hover:text-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
+          className="flex items-center gap-2 text-xs font-medium text-slate-600 transition hover:text-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-500 sm:col-span-2"
           onClick={() => setShowPassword((visible) => !visible)}
           type="button"
         >
@@ -184,7 +213,7 @@ export function RegistrationForm({ onLogin }: RegistrationFormProps) {
         </button>
 
         <button
-          className="col-span-2 flex w-full items-center justify-center gap-2 rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-teal-900/20 transition hover:bg-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 focus:ring-offset-[#efeef1] disabled:cursor-not-allowed disabled:opacity-45"
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-teal-900/20 transition hover:bg-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 focus:ring-offset-[#efeef1] disabled:cursor-not-allowed disabled:opacity-45 sm:col-span-2"
           disabled={!canSubmit}
           type="submit"
         >
@@ -238,6 +267,7 @@ function PasswordInput({
       className={inputClassName}
       id={id}
       minLength={8}
+      maxLength={128}
       name={id}
       onChange={(event) => onChange(event.target.value)}
       placeholder="Digite uma senha forte"
@@ -252,7 +282,7 @@ function PasswordChecklist({
   criteria,
 }: PasswordChecklistProps) {
   return (
-    <ul aria-label="Requisitos da senha" className="col-span-2 grid grid-cols-2 gap-x-3 gap-y-1 rounded-xl bg-slate-100 px-3 py-2">
+    <ul aria-label="Requisitos da senha" className="grid grid-cols-1 gap-x-3 gap-y-1 rounded-xl bg-slate-100 px-3 py-2 sm:grid-cols-2">
       {criteria.map((criterion) => (
         <li className="flex items-center gap-2 text-xs text-slate-600" key={criterion.label}>
           <input
@@ -278,12 +308,19 @@ function isLoadingState(state: RegistrationFormState) {
 }
 
 function getValidationMessage({
+  fullName,
   username,
   email,
   passwordCriteria,
   passwordConfirmation,
   password,
 }: RegistrationValidationInput) {
+  const normalizedFullName = fullName.trim();
+
+  if (normalizedFullName.length < 1 || normalizedFullName.length > 255) {
+    return "Informe o nome completo com até 255 caracteres.";
+  }
+
   if (!USERNAME_PATTERN.test(username.trim())) {
     return "Use de 3 a 64 caracteres no nome de usuário: letras, números, ponto, sublinhado ou hífen.";
   }
@@ -294,6 +331,10 @@ function getValidationMessage({
 
   if (!passwordCriteria.every((criterion) => criterion.met)) {
     return "Sua senha ainda não atende a todos os requisitos indicados.";
+  }
+
+  if (password.length > 128) {
+    return "A senha deve ter no máximo 128 caracteres.";
   }
 
   if (password !== passwordConfirmation) {

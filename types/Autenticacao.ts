@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import type { AssignedPermissionProfile } from "./Rbac";
 import type { CurrentUser } from "./Usuario";
 
 export type AuthMode = "login" | "register";
@@ -9,18 +10,28 @@ export type LoginResult = {
   setCookies: string[];
 };
 
+export type SessionAccessScope = {
+  process_id: string;
+  institution_id: string | null;
+  laboratory_id: string | null;
+  roles: string[];
+};
+
 export type CurrentSessionUser = {
-  id: string;
-  username: string;
-  email: string;
+  id?: string;
+  username?: string;
+  email?: string;
+  full_name?: string | null;
+  user?: {
+    id: string;
+    username: string;
+    email: string;
+    full_name: string | null;
+  };
   access: {
+    profiles: AssignedPermissionProfile[];
     global_permissions: string[];
-    scopes: Array<{
-      process_id: string;
-      institution_id: string | null;
-      laboratory_id: string | null;
-      roles: string[];
-    }>;
+    scopes: SessionAccessScope[];
   };
 };
 
@@ -42,6 +53,7 @@ export type PasswordCriterion = {
 };
 
 export type RegistrationValidationInput = {
+  fullName: string;
   username: string;
   email: string;
   password: string;
@@ -50,6 +62,7 @@ export type RegistrationValidationInput = {
 };
 
 export type RegistrationInput = {
+  fullName: string;
   username: string;
   email: string;
   password: string;

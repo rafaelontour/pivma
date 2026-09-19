@@ -3,7 +3,7 @@ import type { InfoCardProps } from "@/types/Interface";
 
 export default function Page() {
   return (
-    <main className="relative isolate h-dvh overflow-hidden bg-[#efeef1] px-4 py-3 text-slate-800 sm:px-6 lg:px-8">
+    <main className="relative isolate min-h-dvh overflow-x-hidden bg-[#efeef1] px-4 py-3 text-slate-800 sm:px-6 lg:px-8">
       <div
         aria-hidden="true"
         className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,_rgba(20,184,166,0.13),_transparent_32%),radial-gradient(circle_at_bottom_right,_rgba(16,185,129,0.08),_transparent_28%)]"
@@ -13,7 +13,7 @@ export default function Page() {
         className="absolute inset-x-0 top-0 -z-10 h-px bg-gradient-to-r from-transparent via-teal-400/60 to-transparent"
       />
 
-      <div className="mx-auto flex h-full min-h-0 w-full max-w-6xl flex-col">
+      <div className="mx-auto flex min-h-[calc(100dvh-1.5rem)] w-full max-w-6xl flex-col">
         <header className="flex shrink-0 items-center gap-3 py-2 sm:py-3">
           <BrandMark />
           <div>

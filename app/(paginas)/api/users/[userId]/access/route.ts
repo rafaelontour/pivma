@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { internalApiErrorResponse } from "@/app/(paginas)/api/_shared/responses";
 import { getUserAccess } from "@/services/Perfil";
 
 export const runtime = "nodejs";
@@ -24,26 +25,18 @@ export async function GET(
   const result = await getUserAccess(accessToken, userId);
 
   if (!result.ok) {
-    if (result.status === 401) {
-      cookieStore.delete("access_token");
-    }
-
-    return accessErrorResponse(result.status);
+    return internalApiErrorResponse(result.status, {
+      cookieStore,
+      fallbackMessage:
+        "Não foi possível consultar os perfis do usuário no momento.",
+      messages: {
+        403: "Você não tem permissão para consultar os perfis deste usuário.",
+        404: "Usuário não encontrado.",
+      },
+    });
   }
 
   return NextResponse.json(result.data);
-}
-
-function accessErrorResponse(status: number | undefined) {
-  const responseStatus = status === 401 || status === 403 ? status : 502;
-  const message =
-    responseStatus === 401
-      ? "Sua sessão não é mais válida."
-      : responseStatus === 403
-        ? "Você não tem permissão para consultar os perfis deste usuário."
-        : "Não foi possível consultar os perfis do usuário no momento.";
-
-  return NextResponse.json({ message }, { status: responseStatus });
 }
 
 function isUuid(value: string) {

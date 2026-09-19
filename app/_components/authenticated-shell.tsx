@@ -5,6 +5,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
+  Activity,
+  BrainCircuit,
+  ClipboardCheck,
   House,
   LayoutDashboard,
   FilePenLine,
@@ -12,7 +15,7 @@ import {
   LogOut,
   PanelLeftClose,
   PanelLeftOpen,
-  UsersRound,
+  Settings,
 } from "lucide-react";
 import { toast } from "sonner";
 import type {
@@ -30,7 +33,7 @@ export function AuthenticatedShell({
 }: AuthenticatedShellProps) {
   const router = useRouter();
   const [session, setSession] = useState<SessionState>({ kind: "loading" });
-  const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
+  const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   useEffect(() => {
@@ -71,6 +74,14 @@ export function AuthenticatedShell({
     return () => controller.abort();
   }, [router]);
 
+  useEffect(() => {
+    const desktopViewport = window.matchMedia("(min-width: 768px)");
+    const followViewport = () => setIsSidebarExpanded(desktopViewport.matches);
+    followViewport();
+    desktopViewport.addEventListener("change", followViewport);
+    return () => desktopViewport.removeEventListener("change", followViewport);
+  }, []);
+
   async function handleLogout() {
     setIsLoggingOut(true);
 
@@ -98,7 +109,22 @@ export function AuthenticatedShell({
   const canViewProcesses = PROCESS_KANBAN_PERMISSION_CODES.some((permission) =>
     session.user.permissions.includes(permission),
   );
-  const heading = getPageHeading(activePage, session.user.username);
+  const canViewAiEvaluations = [
+    "ai_evaluations.read",
+    "ai_evaluations.manage",
+  ].some((permission) => session.user.permissions.includes(permission));
+  const canViewTriage = session.user.permissions.includes("triage.review");
+  const canManageForms =
+    session.user.isAdministrator ||
+    session.user.permissions.includes("rbac.read") ||
+    session.user.profiles.some((profile) => profile.name === "Grupo Gestor");
+  const canManageUsers = session.user.permissions.includes("users.read");
+  const canViewSettings =
+    canManageForms || canViewAiEvaluations || canManageUsers;
+  const heading = getPageHeading(
+    activePage,
+    session.user.full_name || session.user.username,
+  );
 
   return (
     <main className="grid h-dvh min-w-0 grid-cols-[auto_minmax(0,1fr)] grid-rows-[4.5rem_minmax(0,1fr)] overflow-hidden bg-[#efeef1] text-slate-800">
@@ -183,8 +209,13 @@ export function AuthenticatedShell({
 
       <Sidebar
         activePage={activePage}
-        canManageUsers={session.user.permissions.includes("users.read")}
+        canViewSubmissions={session.user.profiles.some(
+          (profile) => profile.name === "Proponente",
+        )}
         canViewProcesses={canViewProcesses}
+        canViewTriage={canViewTriage}
+        canViewObservability={session.user.isAdministrator}
+        canViewSettings={canViewSettings}
         expanded={isSidebarExpanded}
         user={session.user}
       />
@@ -193,9 +224,11 @@ export function AuthenticatedShell({
         <div className="min-h-0 flex-1 overflow-y-auto">
           <div
             className={`mx-auto flex min-h-full w-full flex-col px-5 py-6 sm:px-8 sm:py-9 lg:px-12 ${
-              activePage === "submissions"
+              activePage === "submissions" ||
+              activePage === "operational-observability" ||
+              activePage === "ai-observability"
                 ? "max-w-none"
-                : activePage === "processes"
+                : activePage === "processes" || activePage === "forms"
                   ? "max-w-[100rem]"
                   : "max-w-6xl"
             }`}
@@ -231,12 +264,16 @@ export function AuthenticatedShell({
 
 function Sidebar({
   activePage,
-  canManageUsers,
+  canViewSubmissions,
   canViewProcesses,
+  canViewTriage,
+  canViewObservability,
+  canViewSettings,
   expanded,
   user,
 }: SidebarProps) {
-  const initials = getInitials(user.username);
+  const displayName = user.full_name || user.username;
+  const initials = getInitials(displayName);
   const linkClassName = (active: boolean) =>
     `flex items-center rounded-xl py-3 text-sm font-semibold outline-none transition focus-visible:ring-2 focus-visible:ring-teal-500 ${
       expanded ? "gap-3 px-3" : "justify-center px-2"
@@ -264,19 +301,21 @@ function Sidebar({
           {expanded && <span>Início</span>}
         </Link>
 
-        <Link
-          aria-current={activePage === "submissions" ? "page" : undefined}
-          aria-label="Submissões"
-          className={`mt-2 ${linkClassName(activePage === "submissions")}`}
-          href="/submissoes"
-        >
-          <FilePenLine
-            aria-hidden="true"
-            className="size-5 shrink-0"
-            strokeWidth={2.2}
-          />
-          {expanded && <span>Submissões</span>}
-        </Link>
+        {canViewSubmissions && (
+          <Link
+            aria-current={activePage === "submissions" ? "page" : undefined}
+            aria-label="Submissões"
+            className={`mt-2 ${linkClassName(activePage === "submissions")}`}
+            href="/submissoes"
+          >
+            <FilePenLine
+              aria-hidden="true"
+              className="size-5 shrink-0"
+              strokeWidth={2.2}
+            />
+            {expanded && <span>Submissões</span>}
+          </Link>
+        )}
 
         {canViewProcesses && (
           <Link
@@ -294,20 +333,71 @@ function Sidebar({
           </Link>
         )}
 
-        {canManageUsers && (
+        {canViewTriage && (
           <Link
-            aria-current={activePage === "users" ? "page" : undefined}
-            aria-label="Usuários"
-            className={`mt-2 ${linkClassName(activePage === "users")}`}
-            href="/usuarios"
+            aria-current={activePage === "triage" ? "page" : undefined}
+            aria-label="Triagem"
+            className={`mt-2 ${linkClassName(activePage === "triage")}`}
+            href="/triagem"
           >
-            <UsersRound
+            <ClipboardCheck
               aria-hidden="true"
               className="size-5 shrink-0"
               strokeWidth={2.2}
             />
-            {expanded && <span>Usuários</span>}
+            {expanded && <span>Triagem</span>}
           </Link>
+        )}
+
+        {canViewSettings && (
+          <Link
+            aria-current={
+              activePage === "settings" ||
+              activePage === "forms" ||
+              activePage === "ai-evaluations" ||
+              activePage === "users"
+                ? "page"
+                : undefined
+            }
+            aria-label="Configurações"
+            className={`mt-2 ${linkClassName(
+              activePage === "settings" ||
+                activePage === "forms" ||
+                activePage === "ai-evaluations" ||
+                activePage === "users",
+            )}`}
+            href="/configuracoes"
+          >
+            <Settings
+              aria-hidden="true"
+              className="size-5 shrink-0"
+              strokeWidth={2.2}
+            />
+            {expanded && <span>Configurações</span>}
+          </Link>
+        )}
+
+        {canViewObservability && (
+          <>
+            <Link
+              aria-current={activePage === "operational-observability" ? "page" : undefined}
+              aria-label="Observabilidade operacional"
+              className={`mt-2 ${linkClassName(activePage === "operational-observability")}`}
+              href="/observabilidade/operacional"
+            >
+              <Activity aria-hidden="true" className="size-5 shrink-0" strokeWidth={2.2} />
+              {expanded && <span>Observabilidade operacional</span>}
+            </Link>
+            <Link
+              aria-current={activePage === "ai-observability" ? "page" : undefined}
+              aria-label="Observabilidade de IA"
+              className={`mt-2 ${linkClassName(activePage === "ai-observability")}`}
+              href="/observabilidade/ia"
+            >
+              <BrainCircuit aria-hidden="true" className="size-5 shrink-0" strokeWidth={2.2} />
+              {expanded && <span>Observabilidade de IA</span>}
+            </Link>
+          </>
         )}
       </nav>
 
@@ -316,20 +406,22 @@ function Sidebar({
           className={`flex items-center rounded-xl bg-slate-100 ${
             expanded ? "gap-3 p-3" : "justify-center p-2"
           }`}
-          title={expanded ? undefined : user.username}
+          title={expanded ? undefined : displayName}
         >
           <div className="grid size-9 shrink-0 place-items-center rounded-full bg-teal-600/10 text-xs font-bold text-teal-800 ring-1 ring-teal-700/20">
             {initials}
           </div>
-          {!expanded && <span className="sr-only">Perfil: {user.username}</span>}
+          {!expanded && <span className="sr-only">Perfil: {displayName}</span>}
           {expanded && (
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold text-slate-800">
-                {user.username}
+                {displayName}
               </p>
-              <p className="truncate text-xs text-slate-500">{user.email}</p>
+              <p className="truncate text-xs text-slate-500">
+                {user.username} · {user.email}
+              </p>
               <p className="mt-1 truncate text-xs font-medium text-teal-700">
-                Cargo: {formatRoles(user.roles)}
+                Perfis: {formatProfiles(user)}
               </p>
             </div>
           )}
@@ -355,6 +447,60 @@ function SessionLoading() {
 }
 
 function getPageHeading(page: SidebarProps["activePage"], username: string) {
+  if (page === "settings") {
+    return {
+      eyebrow: "Administração",
+      title: "Configurações",
+      description:
+        "Gerencie parâmetros da plataforma, formulários de submissão, critérios de IA e diretório de contas.",
+    };
+  }
+
+  if (page === "operational-observability") {
+    return {
+      eyebrow: "Administração",
+      title: "Observabilidade operacional",
+      description:
+        "Acompanhe eventos da plataforma, falhas, duração e correlações em tempo real.",
+    };
+  }
+
+  if (page === "ai-observability") {
+    return {
+      eyebrow: "Administração",
+      title: "Observabilidade de IA",
+      description:
+        "Inspecione execuções e etapas dos pipelines de IA sem expor dados fora da sessão administrativa.",
+    };
+  }
+
+  if (page === "triage") {
+    return {
+      eyebrow: "Análise BraCVAM",
+      title: "Triagem",
+      description:
+        "Revise a proposta, confronte as evidências da pré-avaliação e registre a decisão técnica.",
+    };
+  }
+
+  if (page === "ai-evaluations") {
+    return {
+      eyebrow: "Configuração de IA",
+      title: "Avaliações por IA",
+      description:
+        "Consulte objetivos, versões e critérios usados nas avaliações configuráveis da plataforma.",
+    };
+  }
+
+  if (page === "forms") {
+    return {
+      eyebrow: "Configuração BraCVAM",
+      title: "Formulários",
+      description:
+        "Edite os formulários vinculados aos processos, suas seções, campos e regras de preenchimento.",
+    };
+  }
+
   if (page === "submissions") {
     return {
       eyebrow: "Área do proponente",
@@ -406,6 +552,14 @@ function formatRoles(roles: string[]) {
     .join(" · ");
 }
 
+function formatProfiles(user: CurrentUser) {
+  if (user.profiles.length === 0) {
+    return formatRoles(user.roles);
+  }
+
+  return user.profiles.map((profile) => profile.name).join(" · ");
+}
+
 function isCurrentUser(value: unknown): value is CurrentUser {
   if (!value || typeof value !== "object") {
     return false;
@@ -416,8 +570,22 @@ function isCurrentUser(value: unknown): value is CurrentUser {
     typeof user.id === "string" &&
     typeof user.username === "string" &&
     typeof user.email === "string" &&
+    (typeof user.full_name === "string" || user.full_name === null) &&
     Array.isArray(user.permissions) &&
     user.permissions.every((permission) => typeof permission === "string") &&
+    Array.isArray(user.profiles) &&
+    user.profiles.every(
+      (profile) =>
+        profile &&
+        typeof profile === "object" &&
+        "id" in profile &&
+        typeof profile.id === "string" &&
+        "name" in profile &&
+        typeof profile.name === "string" &&
+        "active" in profile &&
+        typeof profile.active === "boolean",
+    ) &&
+    typeof user.isAdministrator === "boolean" &&
     Array.isArray(user.roles) &&
     user.roles.every((role) => typeof role === "string")
   );

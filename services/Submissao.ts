@@ -8,9 +8,15 @@ import type { CurrentSessionUser } from "@/types/Autenticacao";
 import type { ApiRecord, ServiceResult } from "@/types/Servico";
 import type {
   CreateProcessDraftInput,
+  DirectReviewInput,
+  DirectReviewResult,
   SaveSubmissionDraftInput,
   SaveSubmissionDraftResult,
+  SubmissionAttachmentDownload,
+  SubmissionAttachmentRemovedResult,
+  SubmissionAttachmentUploadResult,
   SubmissionForm,
+  SubmissionPreEvaluation,
   SubmissionTemplate,
   SubmitSubmissionResult,
 } from "@/types/Submissao";
@@ -260,24 +266,161 @@ export async function submitSubmission(
   return { ok: true, data: response.data };
 }
 
-export async function deleteSubmissionDraft(
+export async function getSubmissionPreEvaluation(
   accessToken: string,
   processId: string,
-): Promise<ServiceResult<null>> {
-  const [error] = await tryit(() =>
-    http.delete(`/processes/${processId}`, {
-      headers: {
-        Cookie: `access_token=${accessToken}`,
-        Origin: apiOrigin,
-      },
+): Promise<ServiceResult<SubmissionPreEvaluation>> {
+  const [error, response] = await tryit(() =>
+    http.get<unknown>(`/processes/${processId}/pre-evaluation`, {
+      headers: { Cookie: `access_token=${accessToken}` },
     }),
   )();
-
   if (error) {
     return { ok: false, status: getStatus(error) };
   }
+  const data = normalizePreEvaluation(response.data);
+  return data ? { ok: true, data } : { ok: false };
+}
 
-  return { ok: true, data: null };
+export async function requestSubmissionDirectReview(
+  accessToken: string,
+  processId: string,
+  input: DirectReviewInput,
+): Promise<ServiceResult<DirectReviewResult>> {
+  const [error, response] = await tryit(() =>
+    http.post<unknown>(
+      `/processes/${processId}/submission/direct-review`,
+      input,
+      { headers: { Cookie: `access_token=${accessToken}`, Origin: apiOrigin } },
+    ),
+  )();
+  if (error) return { ok: false, status: getStatus(error) };
+  return isDirectReviewResult(response.data)
+    ? { ok: true, data: response.data }
+    : { ok: false };
+}
+
+export async function uploadSubmissionAttachment(
+  accessToken: string,
+  processId: string,
+  fieldKey: string,
+  file: File,
+): Promise<ServiceResult<SubmissionAttachmentUploadResult>> {
+  const body = new FormData();
+  body.append("file", file, file.name);
+  const [error, response] = await tryit(() =>
+    http.post<unknown>(attachmentPath(processId, fieldKey), body, {
+      headers: { Cookie: `access_token=${accessToken}`, Origin: apiOrigin },
+    }),
+  )();
+  if (error) return { ok: false, status: getStatus(error) };
+  return isAttachmentUpload(response.data)
+    ? { ok: true, data: response.data }
+    : { ok: false };
+}
+
+export async function removeSubmissionAttachment(
+  accessToken: string,
+  processId: string,
+  fieldKey: string,
+): Promise<ServiceResult<SubmissionAttachmentRemovedResult>> {
+  const [error, response] = await tryit(() =>
+    http.delete<unknown>(attachmentPath(processId, fieldKey), {
+      headers: { Cookie: `access_token=${accessToken}`, Origin: apiOrigin },
+    }),
+  )();
+  if (error) return { ok: false, status: getStatus(error) };
+  return isAttachmentRemoved(response.data)
+    ? { ok: true, data: response.data }
+    : { ok: false };
+}
+
+export async function downloadSubmissionAttachment(
+  accessToken: string,
+  processId: string,
+  fieldKey: string,
+): Promise<ServiceResult<SubmissionAttachmentDownload>> {
+  const [error, response] = await tryit(() =>
+    http.get<ArrayBuffer>(attachmentPath(processId, fieldKey), {
+      headers: { Cookie: `access_token=${accessToken}` },
+      responseType: "arraybuffer",
+    }),
+  )();
+  if (error) return { ok: false, status: getStatus(error) };
+  return {
+    ok: true,
+    data: {
+      data: response.data,
+      contentType: typeof response.headers["content-type"] === "string"
+        ? response.headers["content-type"]
+        : "application/octet-stream",
+      contentDisposition: typeof response.headers["content-disposition"] === "string"
+        ? response.headers["content-disposition"]
+        : null,
+    },
+  };
+}
+
+function normalizePreEvaluation(value: unknown): SubmissionPreEvaluation | null {
+  if (!isRecord(value) || typeof value.run_id !== "string" || typeof value.correlation_id !== "string" || typeof value.status !== "string" || typeof value.started_at !== "string" || !isPreEvaluationSummary(value.summary)) return null;
+  const attentionPoints = value.attention_points ?? [];
+  const evaluations = value.evaluations ?? [];
+  const evaluatedContent = value.evaluated_content ?? [];
+  if (!Array.isArray(attentionPoints) || !attentionPoints.every(isAttentionPoint) || !Array.isArray(evaluations) || !evaluations.every(isEvaluationVersionUsed) || !Array.isArray(evaluatedContent) || !evaluatedContent.every(isEvaluatedContentField)) return null;
+  if (value.consolidated_result !== undefined && value.consolidated_result !== null && value.consolidated_result !== "positive" && value.consolidated_result !== "negative") return null;
+  return {
+    run_id: value.run_id,
+    correlation_id: value.correlation_id,
+    status: value.status,
+    consolidated_result: value.consolidated_result as "positive" | "negative" | null | undefined,
+    provider: optionalString(value.provider),
+    models_used: isRecord(value.models_used) ? value.models_used : {},
+    real_cost: typeof value.real_cost === "number" ? value.real_cost : 0,
+    started_at: value.started_at,
+    finished_at: optionalString(value.finished_at),
+    error_summary: optionalString(value.error_summary),
+    summary: value.summary,
+    attention_points: attentionPoints,
+    evaluations,
+    evaluated_content: evaluatedContent,
+    direct_review_request: isRecord(value.direct_review_request) ? value.direct_review_request : null,
+  };
+}
+
+function isPreEvaluationSummary(value: unknown): value is SubmissionPreEvaluation["summary"] {
+  return isRecord(value) && ["total", "compliant", "non_compliant", "partial", "indeterminate"].every((key) => typeof value[key] === "number");
+}
+
+function isAttentionPoint(value: unknown): value is NonNullable<SubmissionPreEvaluation["attention_points"]>[number] {
+  return isRecord(value) && typeof value.item_id === "string" && typeof value.criterion_statement === "string" && typeof value.check_type === "string" && typeof value.severity === "string" && typeof value.conclusion === "string" && typeof value.is_alert === "boolean";
+}
+
+function isEvaluationVersionUsed(value: unknown): value is NonNullable<SubmissionPreEvaluation["evaluations"]>[number] {
+  return isRecord(value) && typeof value.definition_name === "string" && typeof value.version_number === "number";
+}
+
+function isEvaluatedContentField(value: unknown): value is NonNullable<SubmissionPreEvaluation["evaluated_content"]>[number] {
+  return isRecord(value) && typeof value.field_key === "string" && typeof value.label === "string";
+}
+
+function isDirectReviewResult(value: unknown): value is DirectReviewResult {
+  return isRecord(value) && typeof value.process_status === "string" && typeof value.direct_review_request_id === "string";
+}
+
+function isAttachmentUpload(value: unknown): value is SubmissionAttachmentUploadResult {
+  return isRecord(value) && typeof value.field_key === "string" && isAttachment(value.attachment) && typeof value.replaced_previous === "boolean";
+}
+
+function isAttachmentRemoved(value: unknown): value is SubmissionAttachmentRemovedResult {
+  return isRecord(value) && typeof value.field_key === "string" && typeof value.removed === "boolean";
+}
+
+function isAttachment(value: unknown) {
+  return isRecord(value) && typeof value.artifact_id === "string" && typeof value.filename === "string" && typeof value.size === "number" && typeof value.extension === "string" && typeof value.checksum_sha256 === "string" && typeof value.uploaded_at === "string";
+}
+
+function attachmentPath(processId: string, fieldKey: string) {
+  return `/processes/${processId}/activities/${INITIAL_SUBMISSION_ACTIVITY_KEY}/form/fields/${encodeURIComponent(fieldKey)}/attachment`;
 }
 
 function isTemplate(value: unknown): value is SubmissionTemplate {
@@ -357,7 +500,8 @@ function isDynamicFormField(value: unknown) {
       Array.isArray(value.options)) &&
     (value.validation_rules === undefined ||
       value.validation_rules === null ||
-      isRecord(value.validation_rules))
+      isRecord(value.validation_rules)) &&
+    (value.attachment === undefined || value.attachment === null || isAttachment(value.attachment))
   );
 }
 
@@ -383,6 +527,10 @@ function isSubmitResult(value: unknown): value is SubmitSubmissionResult {
 
 function isRecord(value: unknown): value is ApiRecord {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function optionalString(value: unknown) {
+  return typeof value === "string" ? value : null;
 }
 
 function getStatus(error: Error) {

@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { internalApiErrorResponse } from "@/app/(paginas)/api/_shared/responses";
 import { getCurrentUser } from "@/services/Autenticacao";
 
 export const runtime = "nodejs";
@@ -15,25 +16,26 @@ export async function GET() {
   const result = await getCurrentUser(accessToken);
 
   if (!result.ok) {
-    if (result.status === 401) {
-      cookieStore.delete("access_token");
-    }
-
-    return NextResponse.json(
-      {
-        message: result.status
-          ? "Não foi possível validar sua sessão."
-          : "O serviço de autenticação está indisponível no momento.",
-      },
-      { status: result.status === 401 ? 401 : 502 },
-    );
+    return internalApiErrorResponse(result.status, {
+      fallbackMessage: "O serviço de autenticação está indisponível no momento.",
+      cookieStore,
+    });
   }
 
+  const user = result.data.user ?? result.data;
+
   return NextResponse.json({
-    id: result.data.id,
-    username: result.data.username,
-    email: result.data.email,
+    id: user.id ?? result.data.id ?? "",
+    username: user.username ?? result.data.username ?? "",
+    email: user.email ?? result.data.email ?? "",
+    full_name: user.full_name ?? result.data.full_name ?? null,
     permissions: result.data.access.global_permissions,
+    profiles: result.data.access.profiles,
+    isAdministrator:
+      result.data.access.global_permissions.includes("rbac.read") ||
+      result.data.access.profiles.some((profile) =>
+        profile.name.toLocaleLowerCase("pt-BR").includes("admin"),
+      ),
     roles: [
       ...new Set(
         result.data.access.scopes.flatMap((scope) => scope.roles),

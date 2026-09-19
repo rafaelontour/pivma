@@ -87,14 +87,66 @@ O sistema SHALL apresentar na barra lateral o nome de usuário e o e-mail do per
 
 ### Requirement: Acesso à gestão de usuários
 
-O sistema SHALL apresentar o item de navegação Usuários para pessoas cuja sessão possua a permissão de consultar usuários. A página de Usuários MUST continuar exigindo uma sessão válida e tratar a ausência de autorização sem revelar dados administrativos.
+O sistema SHALL disponibilizar o acesso à gestão de Usuários através da central de Configurações para pessoas cuja sessão possua a permissão de consultar usuários. A página de Usuários MUST continuar exigindo uma sessão válida e tratar a ausência de autorização sem revelar dados administrativos.
 
 #### Scenario: Pessoa autorizada acessa usuários
 
 - **WHEN** uma pessoa autenticada possui permissão para consultar usuários
-- **THEN** o sistema apresenta o item Usuários na barra lateral e permite acessar a listagem administrativa
+- **THEN** o sistema disponibiliza o módulo de Usuários em Configurações e permite acessar a listagem administrativa
 
 #### Scenario: Pessoa sem autorização acessa usuários
 
 - **WHEN** uma pessoa sem autorização tenta carregar dados da página de Usuários
 - **THEN** o sistema não apresenta dados administrativos e comunica que a consulta não é permitida
+
+### Requirement: Acesso à central de configurações na barra lateral
+
+O sistema SHALL apresentar o item de navegação Configurações na barra lateral persistente para pessoas cuja sessão possua autorização para consultar ou gerenciar ao menos um dos módulos de configuração (Formulários, Avaliações por IA ou Usuários). O item MUST possuir ícone reconhecível, rótulo textual legível quando a barra estiver expandida e indicação visual de ativo quando a pessoa estiver na página `/configuracoes`.
+
+#### Scenario: Sessão autorizada visualiza Configurações
+
+- **WHEN** uma pessoa autenticada possui permissão para formulários, avaliações por IA ou usuários
+- **THEN** o sistema exibe o item Configurações na barra lateral e permite navegar para `/configuracoes`
+
+#### Scenario: Sessão sem permissões de configuração
+
+- **WHEN** uma pessoa autenticada não possui permissão para nenhum dos módulos de configuração
+- **THEN** o sistema não exibe o item Configurações na barra lateral de navegação
+
+#### Scenario: Item Configurações está ativo
+
+- **WHEN** a pessoa está na página `/configuracoes`
+- **THEN** a barra lateral identifica Configurações como a localização ativa
+
+### Requirement: Acesso às submissões do proponente
+
+O sistema SHALL apresentar o item Submissões na navegação de pessoas autenticadas que possam iniciar processos como proponente. O item MUST possuir nome e ícone acessíveis e indicar quando a página estiver ativa.
+
+#### Scenario: Pessoa autenticada acessa submissões
+
+- **WHEN** uma pessoa autenticada pode criar uma submissão
+- **THEN** o sistema apresenta o item Submissões e permite abrir o catálogo de templates
+
+#### Scenario: Item Submissões está ativo
+
+- **WHEN** a pessoa está na página de submissões
+- **THEN** a barra lateral identifica Submissões como a localização atual
+
+### Requirement: Acesso ao Kanban de processos
+
+O sistema SHALL apresentar o item de navegação Processos para pessoas autorizadas da BraCVAM a consultar processos. O item MUST direcionar para o Kanban, possuir nome e ícone acessíveis e indicar visualmente quando a página estiver ativa.
+
+#### Scenario: Pessoa autorizada acessa o Kanban
+
+- **WHEN** uma pessoa autenticada possui permissão para consultar processos
+- **THEN** o sistema apresenta o item Processos na barra lateral e permite acessar o Kanban
+
+#### Scenario: Item Processos está ativo
+
+- **WHEN** a pessoa está na página do Kanban
+- **THEN** a barra lateral identifica o item Processos como a localização atual
+
+#### Scenario: Pessoa sem autorização não recebe o acesso administrativo
+
+- **WHEN** a sessão não possui permissão para consultar processos
+- **THEN** o sistema não apresenta o item Processos e não revela dados caso a URL seja acessada diretamente

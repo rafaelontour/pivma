@@ -4,6 +4,7 @@ import { isAxiosError } from "axios";
 import { tryit } from "radash";
 import { apiOrigin, http } from "./Http";
 import type {
+  CreatePermissionProfileInput,
   PermissionDefinition,
   PermissionProfile,
   UpdatePermissionProfileInput,
@@ -17,6 +18,26 @@ export async function listPermissionProfiles(
   const [error, response] = await tryit(() =>
     http.get<PermissionProfile[]>("/rbac/profiles", {
       headers: { Cookie: `access_token=${accessToken}` },
+    }),
+  )();
+
+  if (error) {
+    return { ok: false, status: getStatus(error) };
+  }
+
+  return { ok: true, data: response.data };
+}
+
+export async function createPermissionProfile(
+  accessToken: string,
+  input: CreatePermissionProfileInput,
+): Promise<ServiceResult<PermissionProfile>> {
+  const [error, response] = await tryit(() =>
+    http.post<PermissionProfile>("/rbac/profiles", input, {
+      headers: {
+        Cookie: `access_token=${accessToken}`,
+        Origin: apiOrigin,
+      },
     }),
   )();
 
