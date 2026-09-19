@@ -41,7 +41,7 @@ describe("AuthenticatedShell", () => {
     vi.unstubAllGlobals();
   });
 
-  it("preserva a barra recolhida quando o shell é montado novamente", async () => {
+  it("recalcula a barra pela viewport quando o shell é montado novamente", async () => {
     setViewport(true);
     const user = userEvent.setup();
     const firstRender = render(
@@ -59,7 +59,7 @@ describe("AuthenticatedShell", () => {
     expect(
       screen.getByRole("button", { name: "Expandir menu lateral" }),
     ).toBeInTheDocument();
-    expect(window.localStorage.getItem("pivma:sidebar")).toBe("collapsed");
+    expect(window.localStorage.getItem("pivma:sidebar")).toBeNull();
 
     firstRender.unmount();
     render(
@@ -71,7 +71,7 @@ describe("AuthenticatedShell", () => {
     await screen.findByText("Segundo conteúdo");
     await waitFor(() =>
       expect(
-        screen.getByRole("button", { name: "Expandir menu lateral" }),
+        screen.getByRole("button", { name: "Recolher menu lateral" }),
       ).toBeInTheDocument(),
     );
   });
@@ -92,7 +92,7 @@ describe("AuthenticatedShell", () => {
     expect(window.localStorage.getItem("pivma:sidebar")).toBeNull();
   });
 
-  it("exibe Submissões para uma conta proponente ainda sem perfil global", async () => {
+  it("não libera Submissões sem o perfil global Proponente", async () => {
     setViewport(true);
     vi.stubGlobal(
       "fetch",
@@ -113,9 +113,10 @@ describe("AuthenticatedShell", () => {
       </AuthenticatedShell>,
     );
 
+    await screen.findByText("Conteúdo do proponente");
     expect(
-      await screen.findByRole("link", { name: "Submissões" }),
-    ).toHaveAttribute("href", "/submissoes");
+      screen.queryByRole("link", { name: "Submissões" }),
+    ).not.toBeInTheDocument();
   });
 
   it("não usa o papel local proponent para liberar Submissões a outro perfil", async () => {
@@ -153,7 +154,7 @@ describe("AuthenticatedShell", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("oculta os atalhos de observabilidade e os selos do shell", async () => {
+  it("exibe observabilidade e os selos do shell para administradores", async () => {
     setViewport(true);
     vi.stubGlobal(
       "fetch",
@@ -172,13 +173,13 @@ describe("AuthenticatedShell", () => {
 
     await screen.findByText("Conteúdo administrativo");
     expect(
-      screen.queryByRole("link", { name: "Observabilidade operacional" }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("link", { name: "Observabilidade operacional" }),
+    ).toHaveAttribute("href", "/observabilidade/operacional");
     expect(
-      screen.queryByRole("link", { name: "Observabilidade de IA" }),
-    ).not.toBeInTheDocument();
-    expect(screen.queryByText("Ambiente seguro")).not.toBeInTheDocument();
-    expect(screen.queryByText("pi*VMA", { selector: "span" })).not.toBeInTheDocument();
+      screen.getByRole("link", { name: "Observabilidade de IA" }),
+    ).toHaveAttribute("href", "/observabilidade/ia");
+    expect(screen.getByText("Ambiente seguro")).toBeInTheDocument();
+    expect(screen.getByText("pi*VMA", { selector: "span" })).toBeInTheDocument();
   });
 });
 

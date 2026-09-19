@@ -54,9 +54,12 @@ import type {
   AiCriterionInput,
   AiEvaluationAssignmentInput,
   AiEvaluationDefinitionSummary,
+  AiEvaluationTargetType,
   AiEvaluationTestResult,
   AiEvaluationVersion,
+  SuggestAiCriteriaResult,
 } from "@/types/AvaliacaoIa";
+import type { ApiMessage } from "@/types/Servico";
 
 export function FieldAiRuleSection({
   templateKey,
@@ -446,7 +449,7 @@ export function FieldAiRuleModal({
           ...otherAssignments.map((a) => ({
             definition_id: a.definition_id,
             pinned_version_id: a.pinned_version_id ?? null,
-            target_type: a.target_type as any,
+            target_type: a.target_type as AiEvaluationTargetType,
             field_keys: a.field_keys ?? [],
             enabled: a.enabled !== false,
           })),
@@ -506,17 +509,27 @@ export function FieldAiRuleModal({
           target_type: mapScopeToTargetType(quickDraft.scope),
         }),
       });
-      const payload = await response.json().catch(() => null);
+      const payload = (await response.json().catch(() => null)) as
+        | ApiMessage
+        | SuggestAiCriteriaResult
+        | null;
 
-      if (!response.ok || !payload || !Array.isArray(payload.suggestions)) {
+      if (
+        !response.ok ||
+        !payload ||
+        !("suggestions" in payload) ||
+        !Array.isArray(payload.suggestions)
+      ) {
         toast.error(
-          payload?.message || "Não foi possível gerar sugestões de critérios.",
+          payload && "message" in payload
+            ? payload.message
+            : "Não foi possível gerar sugestões de critérios.",
         );
         return;
       }
 
       const generated: FieldAiRuleDraftCriterion[] = payload.suggestions.map(
-        (item: any, index: number) => ({
+        (item, index) => ({
           id: `crit_${Date.now()}_${index}`,
           statement: item.statement || "",
           check_type: (item.check_type || "quality") as FieldAiRuleCheckType,

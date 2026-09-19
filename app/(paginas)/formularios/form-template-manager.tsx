@@ -28,6 +28,9 @@ import {
   validateFormDefinition,
 } from "@/components/formulario";
 import type {
+  AiEvaluationTargetType,
+} from "@/types/AvaliacaoIa";
+import type {
   EvaluableFieldsResponse,
   FormCatalogCardProps,
   FormCatalogState,
@@ -254,7 +257,7 @@ export function FormTemplateManager() {
         .map((a) => ({
           definition_id: a.definition_id,
           pinned_version_id: a.pinned_version_id ?? null,
-          target_type: a.target_type as any,
+          target_type: a.target_type as AiEvaluationTargetType,
           field_keys: a.field_keys ?? [],
           enabled: a.enabled !== false,
         }));
