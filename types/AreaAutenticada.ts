@@ -17,6 +17,7 @@ export type AuthenticatedHomeProps = {
 
 export type AuthenticatedPage =
   | "home"
+  | "settings"
   | "users"
   | "processes"
   | "submissions"
@@ -33,13 +34,11 @@ export type AuthenticatedShellProps = {
 
 export type SidebarProps = {
   activePage: AuthenticatedPage;
-  canManageUsers: boolean;
-  canManageForms: boolean;
   canViewSubmissions: boolean;
-  canViewAiEvaluations: boolean;
   canViewProcesses: boolean;
   canViewTriage: boolean;
   canViewObservability: boolean;
+  canViewSettings: boolean;
   expanded: boolean;
   user: CurrentUser;
 };

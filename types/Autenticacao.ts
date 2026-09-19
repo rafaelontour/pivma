@@ -10,7 +10,7 @@ export type LoginResult = {
   setCookies: string[];
 };
 
-  type SessionAccessScope = {
+export type SessionAccessScope = {
   process_id: string;
   institution_id: string | null;
   laboratory_id: string | null;
@@ -18,7 +18,11 @@ export type LoginResult = {
 };
 
 export type CurrentSessionUser = {
-  user: {
+  id?: string;
+  username?: string;
+  email?: string;
+  full_name?: string | null;
+  user?: {
     id: string;
     username: string;
     email: string;

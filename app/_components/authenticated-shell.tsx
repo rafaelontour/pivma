@@ -5,19 +5,17 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
-  // Activity,
-  Bot,
-  // BrainCircuit,
+  Activity,
+  BrainCircuit,
   ClipboardCheck,
   House,
   LayoutDashboard,
   FilePenLine,
-  ListChecks,
   LoaderCircle,
   LogOut,
   PanelLeftClose,
   PanelLeftOpen,
-  UsersRound,
+  Settings,
 } from "lucide-react";
 import { toast } from "sonner";
 import type {
@@ -28,10 +26,6 @@ import type {
 import { PROCESS_KANBAN_PERMISSION_CODES } from "@/types/Processo";
 import type { ApiMessage, ApiRecord } from "@/types/Servico";
 import type { CurrentUser } from "@/types/Usuario";
-
-const SIDEBAR_PREFERENCE_KEY = "pivma:sidebar";
-const SIDEBAR_EXPANDED = "expanded";
-const SIDEBAR_COLLAPSED = "collapsed";
 
 export function AuthenticatedShell({
   activePage,
@@ -82,26 +76,11 @@ export function AuthenticatedShell({
 
   useEffect(() => {
     const desktopViewport = window.matchMedia("(min-width: 768px)");
-    const followViewport = () => {
-      const savedPreference = getSidebarPreference();
-      setIsSidebarExpanded(savedPreference ?? desktopViewport.matches);
-    };
-    const initialSync = window.setTimeout(followViewport, 0);
-
+    const followViewport = () => setIsSidebarExpanded(desktopViewport.matches);
+    followViewport();
     desktopViewport.addEventListener("change", followViewport);
-    return () => {
-      window.clearTimeout(initialSync);
-      desktopViewport.removeEventListener("change", followViewport);
-    };
+    return () => desktopViewport.removeEventListener("change", followViewport);
   }, []);
-
-  function toggleSidebar() {
-    setIsSidebarExpanded((currentValue) => {
-      const nextValue = !currentValue;
-      saveSidebarPreference(nextValue);
-      return nextValue;
-    });
-  }
 
   async function handleLogout() {
     setIsLoggingOut(true);
@@ -135,6 +114,13 @@ export function AuthenticatedShell({
     "ai_evaluations.manage",
   ].some((permission) => session.user.permissions.includes(permission));
   const canViewTriage = session.user.permissions.includes("triage.review");
+  const canManageForms =
+    session.user.isAdministrator ||
+    session.user.permissions.includes("rbac.read") ||
+    session.user.profiles.some((profile) => profile.name === "Grupo Gestor");
+  const canManageUsers = session.user.permissions.includes("users.read");
+  const canViewSettings =
+    canManageForms || canViewAiEvaluations || canManageUsers;
   const heading = getPageHeading(
     activePage,
     session.user.full_name || session.user.username,
@@ -152,7 +138,7 @@ export function AuthenticatedShell({
                 : "Expandir menu lateral"
             }
             className="inline-flex size-10 shrink-0 items-center justify-center rounded-lg border border-slate-300 bg-slate-50 text-slate-600 outline-none transition hover:border-teal-500 hover:bg-teal-50 hover:text-teal-800 focus-visible:ring-2 focus-visible:ring-teal-500"
-            onClick={toggleSidebar}
+            onClick={() => setIsSidebarExpanded((value) => !value)}
             type="button"
           >
             {isSidebarExpanded ? (
@@ -201,6 +187,9 @@ export function AuthenticatedShell({
         </div>
 
         <div className="flex items-center gap-2">
+          <span className="hidden rounded-full border border-teal-700/20 bg-teal-600/10 px-3 py-1 text-xs font-semibold text-teal-800 sm:block">
+            Ambiente seguro
+          </span>
           <button
             aria-label="Encerrar sessão"
             className="inline-flex size-10 items-center justify-center rounded-full border border-slate-300 bg-slate-50 text-slate-600 outline-none transition hover:border-teal-500 hover:bg-teal-50 hover:text-teal-800 focus-visible:ring-2 focus-visible:ring-teal-500 disabled:cursor-wait disabled:opacity-60"
@@ -220,17 +209,13 @@ export function AuthenticatedShell({
 
       <Sidebar
         activePage={activePage}
-        canManageForms={
-          session.user.isAdministrator ||
-          session.user.permissions.includes("rbac.read") ||
-          session.user.profiles.some((profile) => profile.name === "Grupo Gestor")
-        }
-        canManageUsers={session.user.permissions.includes("users.read")}
-        canViewSubmissions={canAccessSubmissions(session.user)}
-        canViewAiEvaluations={canViewAiEvaluations}
+        canViewSubmissions={session.user.profiles.some(
+          (profile) => profile.name === "Proponente",
+        )}
         canViewProcesses={canViewProcesses}
         canViewTriage={canViewTriage}
         canViewObservability={session.user.isAdministrator}
+        canViewSettings={canViewSettings}
         expanded={isSidebarExpanded}
         user={session.user}
       />
@@ -238,14 +223,18 @@ export function AuthenticatedShell({
       <section className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <div className="min-h-0 flex-1 overflow-y-auto">
           <div
-            className={`flex w-full max-w-none flex-col px-5 py-6 sm:px-8 sm:py-9 lg:px-12 ${
-              activePage === "processes"
-                ? "h-full min-h-0"
-                : "min-h-full"
+            className={`mx-auto flex min-h-full w-full flex-col px-5 py-6 sm:px-8 sm:py-9 lg:px-12 ${
+              activePage === "submissions" ||
+              activePage === "operational-observability" ||
+              activePage === "ai-observability"
+                ? "max-w-none"
+                : activePage === "processes" || activePage === "forms"
+                  ? "max-w-[100rem]"
+                  : "max-w-6xl"
             }`}
           >
-            <div className="flex flex-wrap items-start justify-between gap-5 border-b border-slate-300 pb-6">
-              <div className="min-w-0 flex-1">
+            <div className="flex items-start justify-between gap-5 border-b border-slate-300 pb-6">
+              <div>
                 <p className="text-xs font-bold uppercase tracking-[0.18em] text-teal-700">
                   {heading.eyebrow}
                 </p>
@@ -256,15 +245,12 @@ export function AuthenticatedShell({
                   {heading.description}
                 </p>
               </div>
-              {activePage === "processes" && (
-                <div
-                  className="flex w-full shrink-0 justify-end sm:mt-5 sm:w-auto"
-                  id="authenticated-page-heading-actions"
-                />
-              )}
+              <span className="hidden rounded-full border border-teal-700/20 bg-teal-600/10 px-3 py-1 text-xs font-semibold text-teal-800 sm:block">
+                pi*VMA
+              </span>
             </div>
 
-            <div className="flex min-h-0 w-full flex-1 flex-col">{children}</div>
+            {children}
 
             <footer className="border-t border-slate-300 pt-5 text-xs text-slate-500">
               pi*VMA · Plataforma Integrada de Validação de Métodos Alternativos
@@ -278,13 +264,11 @@ export function AuthenticatedShell({
 
 function Sidebar({
   activePage,
-  canManageForms,
-  canManageUsers,
   canViewSubmissions,
-  canViewAiEvaluations,
   canViewProcesses,
   canViewTriage,
-  // canViewObservability,
+  canViewObservability,
+  canViewSettings,
   expanded,
   user,
 }: SidebarProps) {
@@ -365,47 +349,34 @@ function Sidebar({
           </Link>
         )}
 
-        {canManageForms && (
+        {canViewSettings && (
           <Link
-            aria-current={activePage === "forms" ? "page" : undefined}
-            aria-label="Formulários"
-            className={`mt-2 ${linkClassName(activePage === "forms")}`}
-            href="/formularios"
+            aria-current={
+              activePage === "settings" ||
+              activePage === "forms" ||
+              activePage === "ai-evaluations" ||
+              activePage === "users"
+                ? "page"
+                : undefined
+            }
+            aria-label="Configurações"
+            className={`mt-2 ${linkClassName(
+              activePage === "settings" ||
+                activePage === "forms" ||
+                activePage === "ai-evaluations" ||
+                activePage === "users",
+            )}`}
+            href="/configuracoes"
           >
-            <ListChecks aria-hidden="true" className="size-5 shrink-0" strokeWidth={2.2} />
-            {expanded && <span>Formulários</span>}
-          </Link>
-        )}
-
-        {canViewAiEvaluations && (
-          <Link
-            aria-current={activePage === "ai-evaluations" ? "page" : undefined}
-            aria-label="Avaliações por IA"
-            className={`mt-2 ${linkClassName(activePage === "ai-evaluations")}`}
-            href="/avaliacoes-ia"
-          >
-            <Bot aria-hidden="true" className="size-5 shrink-0" strokeWidth={2.2} />
-            {expanded && <span>Avaliações por IA</span>}
-          </Link>
-        )}
-
-        {canManageUsers && (
-          <Link
-            aria-current={activePage === "users" ? "page" : undefined}
-            aria-label="Usuários"
-            className={`mt-2 ${linkClassName(activePage === "users")}`}
-            href="/usuarios"
-          >
-            <UsersRound
+            <Settings
               aria-hidden="true"
               className="size-5 shrink-0"
               strokeWidth={2.2}
             />
-            {expanded && <span>Usuários</span>}
+            {expanded && <span>Configurações</span>}
           </Link>
         )}
 
-        {/* Ocultos temporariamente; páginas e autorização permanecem implementadas.
         {canViewObservability && (
           <>
             <Link
@@ -427,7 +398,7 @@ function Sidebar({
               {expanded && <span>Observabilidade de IA</span>}
             </Link>
           </>
-        )} */}
+        )}
       </nav>
 
       <div className="mt-auto border-t border-slate-200 pt-4">
@@ -475,21 +446,16 @@ function SessionLoading() {
   );
 }
 
-function canAccessSubmissions(user: CurrentUser) {
-  const hasOfficialProponentProfile = user.profiles.some(
-    (profile) =>
-      profile.active &&
-      profile.name.toLocaleLowerCase("pt-BR") === "proponente",
-  );
-  const hasUnassignedProponentScope =
-    user.profiles.length === 0 &&
-    user.permissions.length === 0 &&
-    user.roles.includes("proponent");
-
-  return hasOfficialProponentProfile || hasUnassignedProponentScope;
-}
-
 function getPageHeading(page: SidebarProps["activePage"], username: string) {
+  if (page === "settings") {
+    return {
+      eyebrow: "Administração",
+      title: "Configurações",
+      description:
+        "Gerencie parâmetros da plataforma, formulários de submissão, critérios de IA e diretório de contas.",
+    };
+  }
+
   if (page === "operational-observability") {
     return {
       eyebrow: "Administração",
@@ -570,35 +536,6 @@ function getPageHeading(page: SidebarProps["activePage"], username: string) {
 
 function getInitials(username: string) {
   return username.trim().slice(0, 2).toUpperCase() || "PV";
-}
-
-function getSidebarPreference() {
-  try {
-    const preference = window.localStorage.getItem(SIDEBAR_PREFERENCE_KEY);
-
-    if (preference === SIDEBAR_EXPANDED) {
-      return true;
-    }
-
-    if (preference === SIDEBAR_COLLAPSED) {
-      return false;
-    }
-  } catch {
-    return null;
-  }
-
-  return null;
-}
-
-function saveSidebarPreference(isExpanded: boolean) {
-  try {
-    window.localStorage.setItem(
-      SIDEBAR_PREFERENCE_KEY,
-      isExpanded ? SIDEBAR_EXPANDED : SIDEBAR_COLLAPSED,
-    );
-  } catch {
-    // O padrão responsivo continua disponível quando o armazenamento é bloqueado.
-  }
 }
 
 function formatRoles(roles: string[]) {

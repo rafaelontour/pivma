@@ -1,5 +1,11 @@
 import type { ReactNode } from "react";
-import type { AiEvaluationAssignment } from "./AvaliacaoIa";
+import type {
+  AiCriterion,
+  AiEvaluationAssignment,
+  AiEvaluationDefinitionSummary,
+  AiEvaluationTestResult,
+  AiEvaluationVersion,
+} from "./AvaliacaoIa";
 
 export type ProcessTemplateSummary = {
   id: string;
@@ -113,6 +119,8 @@ export type FormEditorState =
 export type FormEditorProps = {
   state: Extract<FormEditorState, { kind: "ready" }>;
   canManageAi: boolean;
+  hasPendingChanges?: boolean;
+  onBack?: () => void;
   onNameChange: (name: string) => void;
   onDescriptionChange: (description: string) => void;
   onAddSection: () => void;
@@ -127,6 +135,21 @@ export type FormEditorProps = {
   ) => void;
   onRemoveField: (sectionId: string, fieldIndex: number) => void;
   onMoveField: (sectionId: string, fieldIndex: number, direction: -1 | 1) => void;
+  onSave: () => void;
+  onOpenAiModal?: (field: FormTemplateField) => void;
+  onUnlinkAiRule?: (field: FormTemplateField, assignmentId: string) => void;
+};
+
+export type FormCatalogGridProps = {
+  items: FormTemplateCatalogItem[];
+  onSelect: (item: FormTemplateCatalogItem) => void;
+  onRefresh: () => void;
+};
+
+export type FormWorkspaceHeaderProps = {
+  item: FormTemplateCatalogItem;
+  isSaving: boolean;
+  onBack: () => void;
   onSave: () => void;
 };
 
@@ -143,6 +166,7 @@ export type FormSectionEditorProps = {
   assignments: Record<string, FormEvaluationAssignment[]>;
   canManageAi: boolean;
   disabled: boolean;
+  allFields?: FormTemplateField[];
   onRename: (name: string) => void;
   onRemove: () => void;
   onMove: (direction: -1 | 1) => void;
@@ -150,6 +174,8 @@ export type FormSectionEditorProps = {
   onUpdateField: (fieldIndex: number, field: FormTemplateField) => void;
   onRemoveField: (fieldIndex: number) => void;
   onMoveField: (fieldIndex: number, direction: -1 | 1) => void;
+  onOpenAiModal?: (field: FormTemplateField) => void;
+  onUnlinkAiRule?: (field: FormTemplateField, assignmentId: string) => void;
 };
 
 export type FormFieldEditorProps = {
@@ -160,11 +186,14 @@ export type FormFieldEditorProps = {
   assignment: FormEvaluationAssignment[];
   canManageAi: boolean;
   disabled: boolean;
+  allFields?: FormTemplateField[];
   onChange: (field: FormTemplateField) => void;
   onRemove: () => void;
   onMove: (direction: -1 | 1) => void;
   canMoveUp: boolean;
   canMoveDown: boolean;
+  onOpenAiModal?: () => void;
+  onUnlinkAiRule?: (assignmentId: string) => void;
 };
 
 export type FormPageMessageProps = {
@@ -209,10 +238,149 @@ export type FormModalProps = {
   children: ReactNode;
 };
 
-export type FormDefinitionValidation = {
-  valid: false;
-  message: string;
-} | {
-  valid: true;
-  input: UpdateFormTemplateInput;
+export type FormConfirmDiscardDialogProps = {
+  isOpen: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+};
+
+export type FormDefinitionValidation =
+  | {
+      valid: false;
+      message: string;
+    }
+  | {
+      valid: true;
+      input: UpdateFormTemplateInput;
+    };
+
+export type FieldAiRuleScope = "field" | "cross_field" | "form";
+
+export type FieldAiRuleSeverity =
+  | "info"
+  | "low"
+  | "medium"
+  | "high"
+  | "critical";
+
+export type FieldAiRuleCheckType =
+  | "presence"
+  | "conformity"
+  | "quality"
+  | "comparison"
+  | "cross_field_consistency";
+
+export type FieldAiRuleDraftCriterion = {
+  id: string;
+  statement: string;
+  check_type: FieldAiRuleCheckType;
+  severity: FieldAiRuleSeverity;
+  enabled: boolean;
+};
+
+export type FieldAiRuleQuickDraft = {
+  name: string;
+  objective: string;
+  scope: FieldAiRuleScope;
+  selectedFieldKeys: string[];
+  criteria: FieldAiRuleDraftCriterion[];
+};
+
+export type FieldAiRuleModalTab =
+  | "select_existing"
+  | "preview"
+  | "quick_create"
+  | "advanced_create"
+  | "test_playground";
+
+export type FieldAiRuleOrchestratorStep =
+  | "idle"
+  | "creating_definition"
+  | "saving_criteria"
+  | "publishing"
+  | "binding"
+  | "completed"
+  | "error";
+
+export type FieldAiRuleOrchestratorState = {
+  step: FieldAiRuleOrchestratorStep;
+  errorMessage?: string | null;
+  createdDefinitionId?: string | null;
+  publishedVersionNumber?: number | null;
+};
+
+export type FieldAiRuleTestState = {
+  status: "idle" | "running" | "success" | "error";
+  sampleContent: string;
+  result?: AiEvaluationTestResult | null;
+  errorMessage?: string | null;
+};
+
+export type FieldAiRuleSectionProps = {
+  templateKey: string;
+  field: FormTemplateField;
+  allFields: FormTemplateField[];
+  assignment: FormEvaluationAssignment[];
+  canManageAi: boolean;
+  disabled: boolean;
+  onToggleAi: (enabled: boolean) => void;
+  onOpenRuleConfig: () => void;
+  onUnlinkRule: (assignmentId: string) => void;
+};
+
+export type FieldAiRuleModalProps = {
+  isOpen: boolean;
+  templateKey: string;
+  field: FormTemplateField;
+  allFields: FormTemplateField[];
+  existingAssignments: FormEvaluationAssignment[];
+  onClose: () => void;
+  onRuleLinked: (newAssignments: FormEvaluationAssignment[]) => void;
+};
+
+export type FieldAiRuleSelectExistingProps = {
+  searchQuery: string;
+  onSearchChange: (query: string) => void;
+  definitions: AiEvaluationDefinitionSummary[];
+  isLoading: boolean;
+  onSelectDefinition: (definition: AiEvaluationDefinitionSummary) => void;
+  onPreviewDefinition: (definition: AiEvaluationDefinitionSummary) => void;
+  onCreateNewClick: () => void;
+};
+
+export type FieldAiRulePreviewProps = {
+  definition: AiEvaluationDefinitionSummary;
+  versionDetail: AiEvaluationVersion | null;
+  isLoading: boolean;
+  onBack: () => void;
+  onUseRule: () => void;
+  onDuplicateAndEdit: () => void;
+};
+
+export type FieldAiRuleQuickCreateProps = {
+  draft: FieldAiRuleQuickDraft;
+  allFields: FormTemplateField[];
+  currentFieldKey: string;
+  isGeneratingSuggestions: boolean;
+  onDraftChange: (draft: FieldAiRuleQuickDraft) => void;
+  onGenerateSuggestions: () => void;
+  onProceedToTest: () => void;
+  onCancel: () => void;
+};
+
+export type FieldAiRulePlaygroundProps = {
+  testState: FieldAiRuleTestState;
+  draft: FieldAiRuleQuickDraft;
+  orchestratorState: FieldAiRuleOrchestratorState;
+  onSampleContentChange: (content: string) => void;
+  onRunTest: () => void;
+  onBackToEdit: () => void;
+  onSaveAndLink: () => void;
+};
+
+export type FieldAiRuleConfirmUnlinkDialogProps = {
+  isOpen: boolean;
+  ruleName: string;
+  onCancel: () => void;
+  onConfirm: () => void;
 };
