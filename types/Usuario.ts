@@ -1,4 +1,5 @@
 import type { AssignedPermissionProfile } from "./Rbac";
+import type { AppLocale } from "./I18n";
 
 export type UserPublic = {
   id: string;
@@ -12,6 +13,7 @@ export type CurrentUser = UserPublic & {
   roles: string[];
   profiles: AssignedPermissionProfile[];
   isAdministrator: boolean;
+  preferred_locale?: AppLocale;
 };
 
 export type CreateUserInput = {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Bot, Download, LoaderCircle, Trash2 } from "lucide-react";
 import {
   getDynamicFormAllowedFileExtensions,
@@ -31,6 +32,7 @@ export function DynamicFormFieldControl({
   onAttachmentChange,
   processId,
 }: DynamicFormFieldControlProps) {
+  const { i18n, t } = useTranslation();
   const [fileError, setFileError] = useState<string | null>(null);
   const [attachment, setAttachment] = useState<SubmissionAttachment | null>(
     field.attachment ?? null,
@@ -43,7 +45,7 @@ export function DynamicFormFieldControl({
 
   async function uploadAttachment(file: File) {
     if (!processId) {
-      setFileError("O processo precisa estar criado antes do envio do arquivo.");
+      setFileError(t("dynamicForm.processRequired"));
       return;
     }
     setIsChangingAttachment(true);
@@ -56,7 +58,7 @@ export function DynamicFormFieldControl({
       );
       const payload = await response.json().catch(() => null);
       if (!response.ok || !isAttachmentUpload(payload)) {
-        setFileError(getApiMessage(payload, "Não foi possível enviar o arquivo."));
+        setFileError(getApiMessage(payload, t("dynamicForm.uploadFailed")));
         return;
       }
       setAttachment(payload.attachment);
@@ -64,7 +66,7 @@ export function DynamicFormFieldControl({
       onChange(payload.attachment.artifact_id);
       onAttachmentChange?.(payload.attachment);
     } catch {
-      setFileError("Não foi possível conectar ao serviço de anexos.");
+      setFileError(t("dynamicForm.attachmentConnectionFailed"));
     } finally {
       setIsChangingAttachment(false);
     }
@@ -80,7 +82,7 @@ export function DynamicFormFieldControl({
       );
       const payload = await response.json().catch(() => null);
       if (!response.ok || !isAttachmentRemoved(payload) || !payload.removed) {
-        setFileError(getApiMessage(payload, "Não foi possível remover o arquivo."));
+        setFileError(getApiMessage(payload, t("dynamicForm.removeFailed")));
         return;
       }
       setAttachment(null);
@@ -88,7 +90,7 @@ export function DynamicFormFieldControl({
       onChange("");
       onAttachmentChange?.(null);
     } catch {
-      setFileError("Não foi possível conectar ao serviço de anexos.");
+      setFileError(t("dynamicForm.attachmentConnectionFailed"));
     } finally {
       setIsChangingAttachment(false);
     }
@@ -130,10 +132,15 @@ export function DynamicFormFieldControl({
           type="file"
         />
         <p className="mt-2 text-xs leading-5 text-slate-500" id={constraintsId}>
-          {getFileConstraintMessage(field)} O arquivo é enviado e confirmado separadamente.
+          {getFileConstraintMessage(
+            field,
+            t("dynamicForm.acceptedFormats", { formats: "{{formats}}" }),
+            t("dynamicForm.maximumSize", { size: "{{size}}" }),
+            t("dynamicForm.validFile"),
+          )} {t("dynamicForm.uploadConfirmation")}
         </p>
-        {isChangingAttachment && <p className="mt-2 flex items-center gap-2 text-xs font-semibold text-teal-800"><LoaderCircle aria-hidden="true" className="size-4 animate-spin" />Atualizando anexo…</p>}
-        {attachment && <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-teal-200 bg-teal-50 p-3"><div className="min-w-0 flex-1"><p className="truncate text-xs font-bold text-teal-950">{attachment.filename}</p><p className="mt-1 text-[0.68rem] text-teal-800">{formatFileSize(attachment.size)} · {attachment.extension.toUpperCase()}</p></div>{processId && <a className="inline-flex min-h-9 items-center gap-1 rounded-lg border border-teal-300 bg-white px-2.5 text-xs font-bold text-teal-800 outline-none focus-visible:ring-2 focus-visible:ring-teal-500" href={`/api/submissions/${processId}/attachments/${encodeURIComponent(field.field_key)}`}><Download aria-hidden="true" className="size-3.5" />Baixar</a>}{!disabled && <button aria-label={`Remover ${attachment.filename}`} className="grid size-9 place-items-center rounded-lg text-rose-700 outline-none hover:bg-rose-50 focus-visible:ring-2 focus-visible:ring-rose-500" disabled={isChangingAttachment} onClick={() => void removeAttachment()} type="button"><Trash2 aria-hidden="true" className="size-4" /></button>}</div>}
+        {isChangingAttachment && <p className="mt-2 flex items-center gap-2 text-xs font-semibold text-teal-800"><LoaderCircle aria-hidden="true" className="size-4 animate-spin" />{t("dynamicForm.updatingAttachment")}</p>}
+        {attachment && <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-teal-200 bg-teal-50 p-3"><div className="min-w-0 flex-1"><p className="truncate text-xs font-bold text-teal-950">{attachment.filename}</p><p className="mt-1 text-[0.68rem] text-teal-800">{formatFileSize(attachment.size, i18n.resolvedLanguage)} · {attachment.extension.toUpperCase()}</p></div>{processId && <a className="inline-flex min-h-9 items-center gap-1 rounded-lg border border-teal-300 bg-white px-2.5 text-xs font-bold text-teal-800 outline-none focus-visible:ring-2 focus-visible:ring-teal-500" href={`/api/submissions/${processId}/attachments/${encodeURIComponent(field.field_key)}`}><Download aria-hidden="true" className="size-3.5" />{t("dynamicForm.download")}</a>}{!disabled && <button aria-label={t("dynamicForm.removeFile", { filename: attachment.filename })} className="grid size-9 place-items-center rounded-lg text-rose-700 outline-none hover:bg-rose-50 focus-visible:ring-2 focus-visible:ring-rose-500" disabled={isChangingAttachment} onClick={() => void removeAttachment()} type="button"><Trash2 aria-hidden="true" className="size-4" /></button>}</div>}
         <FieldHelp field={field} helpId={helpId} />
         {fileError && (
           <p
@@ -156,8 +163,7 @@ export function DynamicFormFieldControl({
           {field.is_required && <span className="ml-1 text-rose-700">*</span>}
         </p>
         <p className="mt-1 text-xs leading-5 text-amber-900">
-          O tipo de campo “{field.field_type}” ainda não é suportado pela
-          interface.
+          {t("dynamicForm.unsupportedField", { type: field.field_type })}
         </p>
       </div>
     );
@@ -214,7 +220,7 @@ export function DynamicFormFieldControl({
           required={field.is_required}
           value={typeof value === "string" ? value : ""}
         >
-          <option value="">Selecione uma opção</option>
+          <option value="">{t("dynamicForm.selectOption")}</option>
           {getDynamicFormOptions(field.options).map((option) => (
             <option
               key={serializeDynamicFormOption(option.value)}
@@ -250,24 +256,34 @@ export function DynamicFormFieldValue({
   field,
   value,
 }: DynamicFormFieldValueProps) {
+  const { t } = useTranslation();
+
   return (
     <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
       <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
         {field.label}
       </p>
       <div className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-slate-800">
-        {formatDynamicFormValue(field, value)}
+        {formatDynamicFormValue(
+          field,
+          value,
+          t("dynamicForm.notProvided"),
+          t("common.yes"),
+          t("common.no"),
+        )}
       </div>
     </div>
   );
 }
 
 function FieldLabel({ field, fieldId }: DynamicFormFieldLabelProps) {
+  const { t } = useTranslation();
+
   return (
     <label className="text-sm font-semibold text-slate-800" htmlFor={fieldId}>
       {field.label}
       {field.is_required && <span className="ml-1 text-rose-700">*</span>}
-      {field.ai_evaluation_enabled && <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-violet-100 px-2 py-0.5 text-[0.65rem] font-bold text-violet-800"><Bot aria-hidden="true" className="size-3" />Pré-avaliação por IA</span>}
+      {field.ai_evaluation_enabled && <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-violet-100 px-2 py-0.5 text-[0.65rem] font-bold text-violet-800"><Bot aria-hidden="true" className="size-3" />{t("dynamicForm.aiPreEvaluation")}</span>}
     </label>
   );
 }
@@ -290,23 +306,29 @@ function getFileAccept(field: DynamicFormField) {
     : undefined;
 }
 
-function getFileConstraintMessage(field: DynamicFormField) {
+function getFileConstraintMessage(
+  field: DynamicFormField,
+  acceptedFormatsTemplate: string,
+  maximumSizeTemplate: string,
+  fallback: string,
+) {
   const extensions = getDynamicFormAllowedFileExtensions(field);
   const maximumSizeMb = getDynamicFormMaximumFileSizeMb(field);
   const parts = [];
 
   if (extensions.length > 0) {
     parts.push(
-      `Formatos aceitos: ${extensions
-        .map((value) => value.toUpperCase())
-        .join(", ")}.`,
+      acceptedFormatsTemplate.replace(
+        "{{formats}}",
+        extensions.map((value) => value.toUpperCase()).join(", "),
+      ),
     );
   }
   if (maximumSizeMb) {
-    parts.push(`Tamanho máximo: ${maximumSizeMb} MB.`);
+    parts.push(maximumSizeTemplate.replace("{{size}}", String(maximumSizeMb)));
   }
 
-  return parts.length > 0 ? parts.join(" ") : "Selecione um arquivo válido.";
+  return parts.length > 0 ? parts.join(" ") : fallback;
 }
 
 function getInputType(fieldType: string) {
@@ -315,12 +337,18 @@ function getInputType(fieldType: string) {
   return "text";
 }
 
-function formatDynamicFormValue(field: DynamicFormField, value: unknown) {
+function formatDynamicFormValue(
+  field: DynamicFormField,
+  value: unknown,
+  emptyLabel: string,
+  yesLabel: string,
+  noLabel: string,
+) {
   if (value === undefined || value === null || value === "") {
-    return "Não informado";
+    return emptyLabel;
   }
   if (field.field_type === "boolean" && typeof value === "boolean") {
-    return value ? "Sim" : "Não";
+    return value ? yesLabel : noLabel;
   }
   if (field.field_type === "select") {
     const option = getDynamicFormOptions(field.options).find(
@@ -348,4 +376,4 @@ function isAttachment(value: unknown): value is SubmissionAttachment {
 
 function isRecord(value: unknown): value is ApiRecord { return Boolean(value) && typeof value === "object" && !Array.isArray(value); }
 function getApiMessage(value: unknown, fallback: string) { return isRecord(value) && typeof value.message === "string" ? value.message : fallback; }
-function formatFileSize(bytes: number) { return bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / (1024 * 1024)).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} MB`; }
+function formatFileSize(bytes: number, locale: string | undefined) { return bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / (1024 * 1024)).toLocaleString(locale, { maximumFractionDigits: 1 })} MB`; }

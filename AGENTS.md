@@ -9,6 +9,14 @@ O pi*VMA (Plataforma Integrada de Validação de Métodos Alternativos) é uma p
 - Hoje existem as telas de login/cadastro em `/login` e a área autenticada inicial em `/inicio`, com header, barra lateral recolhível, perfil e logout.
 - O planejamento de funcionalidades é mantido em `openspec/`; changes concluídas ficam em `openspec/changes/archive/` e specs consolidadas em `openspec/specs/`.
 
+## Internacionalização obrigatória
+
+- Todo novo conteúdo controlado pela aplicação deve ser criado simultaneamente em português do Brasil e inglês. Isso inclui títulos, menus, rótulos, botões, placeholders, textos de ajuda, validações, toasts, estados vazios, mensagens de erro seguras e nomes acessíveis.
+- No frontend, não adicione texto de interface diretamente em componentes ou páginas. Use chaves semânticas do `i18next` e inclua a mesma chave em `i18n/locales/pt-BR.json` e `i18n/locales/en.json`, preservando estrutura, tipos e variáveis de interpolação.
+- Alterações que envolvam datas, horas, números, moedas, custos, durações, ordenação textual ou rótulos de enums devem respeitar o locale ativo sem alterar identificadores técnicos enviados à API.
+- Conteúdo científico, texto escrito por pessoas, nomes próprios, identificadores e valores configuráveis recebidos do backend não devem ser traduzidos automaticamente. Quando o backend controlar conteúdo institucional traduzível, modele versões localizadas ou devolva códigos estáveis que o frontend possa resolver nos dicionários.
+- Toda implementação ou revisão que crie ou altere conteúdo deve verificar os dois idiomas e executar `pnpm i18n:check`. Uma funcionalidade com texto novo em apenas um idioma é considerada incompleta.
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 # This is NOT the Next.js you know

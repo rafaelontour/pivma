@@ -18,6 +18,10 @@ import {
   Settings,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
+import { LanguageToggle } from "./language-toggle";
+import { normalizeLocale } from "@/i18n/config";
+import { useSessionLocale } from "@/i18n/provider";
 import type {
   AuthenticatedShellProps,
   SessionState,
@@ -32,9 +36,11 @@ export function AuthenticatedShell({
   children,
 }: AuthenticatedShellProps) {
   const router = useRouter();
+  const { t } = useTranslation();
   const [session, setSession] = useState<SessionState>({ kind: "loading" });
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  useSessionLocale(session.kind === "ready" ? session.user.preferred_locale : undefined);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -52,7 +58,13 @@ export function AuthenticatedShell({
 
         if (!response.ok || !isCurrentUser(payload)) {
           if (!controller.signal.aborted) {
-            toast.error(getSessionMessage(response.status, payload));
+            toast.error(
+              response.status === 401
+                ? t("shell.sessionExpired")
+                : payload && "message" in payload && typeof payload.message === "string"
+                  ? payload.message
+                  : t("shell.sessionFailed"),
+            );
             router.replace("/login");
           }
           return;
@@ -63,7 +75,7 @@ export function AuthenticatedShell({
         }
       } catch {
         if (!controller.signal.aborted) {
-          toast.error("Não foi possível validar sua sessão. Entre novamente.");
+          toast.error(t("shell.sessionFailed"));
           router.replace("/login");
         }
       }
@@ -72,7 +84,7 @@ export function AuthenticatedShell({
     void loadSession();
 
     return () => controller.abort();
-  }, [router]);
+  }, [router, t]);
 
   useEffect(() => {
     const desktopViewport = window.matchMedia("(min-width: 768px)");
@@ -89,14 +101,14 @@ export function AuthenticatedShell({
       const response = await fetch("/api/auth/logout", { method: "POST" });
 
       if (!response.ok) {
-        toast.error("Não foi possível encerrar sua sessão. Tente novamente.");
+        toast.error(t("shell.logoutFailed"));
         return;
       }
 
-      toast.success("Sessão encerrada com segurança.");
+      toast.success(t("shell.logoutSuccess"));
       router.replace("/login");
     } catch {
-      toast.error("Não foi possível conectar ao serviço de autenticação.");
+      toast.error(t("auth.login.connectionFailed"));
     } finally {
       setIsLoggingOut(false);
     }
@@ -121,10 +133,20 @@ export function AuthenticatedShell({
   const canManageUsers = session.user.permissions.includes("users.read");
   const canViewSettings =
     canManageForms || canViewAiEvaluations || canManageUsers;
-  const heading = getPageHeading(
-    activePage,
-    session.user.full_name || session.user.username,
-  );
+  const headingKey = activePage === "ai-evaluations"
+    ? "aiEvaluations"
+    : activePage === "operational-observability"
+      ? "operationalObservability"
+      : activePage === "ai-observability"
+        ? "aiObservability"
+        : activePage;
+  const heading = {
+    eyebrow: t(`shell.headings.${headingKey}.eyebrow`),
+    title: t(`shell.headings.${headingKey}.title`),
+    description: t(`shell.headings.${headingKey}.description`, {
+      username: session.user.full_name || session.user.username,
+    }),
+  };
 
   return (
     <main className="grid h-dvh min-w-0 grid-cols-[auto_minmax(0,1fr)] grid-rows-[4.5rem_minmax(0,1fr)] overflow-hidden bg-[#efeef1] text-slate-800">
@@ -134,8 +156,8 @@ export function AuthenticatedShell({
             aria-expanded={isSidebarExpanded}
             aria-label={
               isSidebarExpanded
-                ? "Recolher menu lateral"
-                : "Expandir menu lateral"
+                ? t("shell.collapseSidebar")
+                : t("shell.expandSidebar")
             }
             className="inline-flex size-10 shrink-0 items-center justify-center rounded-lg border border-slate-300 bg-slate-50 text-slate-600 outline-none transition hover:border-teal-500 hover:bg-teal-50 hover:text-teal-800 focus-visible:ring-2 focus-visible:ring-teal-500"
             onClick={() => setIsSidebarExpanded((value) => !value)}
@@ -149,7 +171,7 @@ export function AuthenticatedShell({
           </button>
 
           <Link
-            aria-label="pi*VMA — Início"
+            aria-label={t("shell.homeLink")}
             className="flex shrink-0 items-center rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-teal-300"
             href="/inicio"
           >
@@ -188,14 +210,15 @@ export function AuthenticatedShell({
 
         <div className="flex items-center gap-2">
           <span className="hidden rounded-full border border-teal-700/20 bg-teal-600/10 px-3 py-1 text-xs font-semibold text-teal-800 sm:block">
-            Ambiente seguro
+            {t("common.secureEnvironment")}
           </span>
+          <LanguageToggle />
           <button
-            aria-label="Encerrar sessão"
+            aria-label={t("shell.logout")}
             className="inline-flex size-10 items-center justify-center rounded-full border border-slate-300 bg-slate-50 text-slate-600 outline-none transition hover:border-teal-500 hover:bg-teal-50 hover:text-teal-800 focus-visible:ring-2 focus-visible:ring-teal-500 disabled:cursor-wait disabled:opacity-60"
             disabled={isLoggingOut}
             onClick={() => void handleLogout()}
-            title="Encerrar sessão"
+            title={t("shell.logout")}
             type="button"
           >
             {isLoggingOut ? (
@@ -221,20 +244,26 @@ export function AuthenticatedShell({
       />
 
       <section className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div
+          className={`min-h-0 flex-1 ${
+            activePage === "processes" ? "overflow-hidden" : "overflow-y-auto"
+          }`}
+        >
           <div
-            className={`mx-auto flex min-h-full w-full flex-col px-5 py-6 sm:px-8 sm:py-9 lg:px-12 ${
-              activePage === "submissions" ||
+            className={`mx-auto flex w-full flex-col px-5 py-6 sm:px-8 sm:py-9 lg:px-12 ${
+              activePage === "processes"
+                ? "h-full min-h-0 max-w-[100rem]"
+                : activePage === "submissions" ||
               activePage === "operational-observability" ||
               activePage === "ai-observability"
-                ? "max-w-none"
-                : activePage === "processes" || activePage === "forms"
-                  ? "max-w-[100rem]"
-                  : "max-w-6xl"
+                  ? "min-h-full max-w-none"
+                  : activePage === "forms"
+                    ? "min-h-full max-w-[100rem]"
+                    : "min-h-full max-w-6xl"
             }`}
           >
-            <div className="flex items-start justify-between gap-5 border-b border-slate-300 pb-6">
-              <div>
+            <div className="flex shrink-0 items-start justify-between gap-5 border-b border-slate-300 pb-6">
+              <div className="min-w-0">
                 <p className="text-xs font-bold uppercase tracking-[0.18em] text-teal-700">
                   {heading.eyebrow}
                 </p>
@@ -245,15 +274,18 @@ export function AuthenticatedShell({
                   {heading.description}
                 </p>
               </div>
-              <span className="hidden rounded-full border border-teal-700/20 bg-teal-600/10 px-3 py-1 text-xs font-semibold text-teal-800 sm:block">
-                pi*VMA
-              </span>
+              {activePage === "processes" && (
+                <div
+                  className="shrink-0 pt-1 text-right"
+                  id="process-page-header-actions"
+                />
+              )}
             </div>
 
             {children}
 
-            <footer className="border-t border-slate-300 pt-5 text-xs text-slate-500">
-              pi*VMA · Plataforma Integrada de Validação de Métodos Alternativos
+            <footer className="shrink-0 border-t border-slate-300 pt-5 text-xs text-slate-500">
+              {t("shell.footer")}
             </footer>
           </div>
         </div>
@@ -272,8 +304,13 @@ function Sidebar({
   expanded,
   user,
 }: SidebarProps) {
+  const { i18n, t } = useTranslation();
   const displayName = user.full_name || user.username;
   const initials = getInitials(displayName);
+  const locale = normalizeLocale(i18n.resolvedLanguage) ?? "pt-BR";
+  const profiles = user.profiles.length === 0
+    ? formatRoles(user.roles, locale, t("common.notAssigned"))
+    : user.profiles.map((profile) => profile.name).join(" · ");
   const linkClassName = (active: boolean) =>
     `flex items-center rounded-xl py-3 text-sm font-semibold outline-none transition focus-visible:ring-2 focus-visible:ring-teal-500 ${
       expanded ? "gap-3 px-3" : "justify-center px-2"
@@ -285,26 +322,26 @@ function Sidebar({
 
   return (
     <aside
-      aria-label="Navegação principal"
+      aria-label={t("shell.mainNavigation")}
       className={`relative z-10 flex min-h-0 shrink-0 flex-col overflow-hidden border-r border-slate-200 bg-white/95 px-3 py-3 shadow-[12px_0_28px_-24px_rgba(15,23,42,0.14)] transition-[width] duration-200 ease-out ${
         expanded ? "w-72" : "w-20"
       }`}
     >
-      <nav aria-label="Seções da plataforma">
+      <nav aria-label={t("shell.platformSections")}>
         <Link
           aria-current={activePage === "home" ? "page" : undefined}
-          aria-label="Início"
+          aria-label={t("shell.navigation.home")}
           className={linkClassName(activePage === "home")}
           href="/inicio"
         >
           <House aria-hidden="true" className="size-5 shrink-0" strokeWidth={2.2} />
-          {expanded && <span>Início</span>}
+          {expanded && <span>{t("shell.navigation.home")}</span>}
         </Link>
 
         {canViewSubmissions && (
           <Link
             aria-current={activePage === "submissions" ? "page" : undefined}
-            aria-label="Submissões"
+            aria-label={t("shell.navigation.submissions")}
             className={`mt-2 ${linkClassName(activePage === "submissions")}`}
             href="/submissoes"
           >
@@ -313,14 +350,14 @@ function Sidebar({
               className="size-5 shrink-0"
               strokeWidth={2.2}
             />
-            {expanded && <span>Submissões</span>}
+            {expanded && <span>{t("shell.navigation.submissions")}</span>}
           </Link>
         )}
 
         {canViewProcesses && (
           <Link
             aria-current={activePage === "processes" ? "page" : undefined}
-            aria-label="Processos"
+            aria-label={t("shell.navigation.processes")}
             className={`mt-2 ${linkClassName(activePage === "processes")}`}
             href="/processos"
           >
@@ -329,14 +366,14 @@ function Sidebar({
               className="size-5 shrink-0"
               strokeWidth={2.2}
             />
-            {expanded && <span>Processos</span>}
+            {expanded && <span>{t("shell.navigation.processes")}</span>}
           </Link>
         )}
 
         {canViewTriage && (
           <Link
             aria-current={activePage === "triage" ? "page" : undefined}
-            aria-label="Triagem"
+            aria-label={t("shell.navigation.triage")}
             className={`mt-2 ${linkClassName(activePage === "triage")}`}
             href="/triagem"
           >
@@ -345,7 +382,7 @@ function Sidebar({
               className="size-5 shrink-0"
               strokeWidth={2.2}
             />
-            {expanded && <span>Triagem</span>}
+            {expanded && <span>{t("shell.navigation.triage")}</span>}
           </Link>
         )}
 
@@ -359,7 +396,7 @@ function Sidebar({
                 ? "page"
                 : undefined
             }
-            aria-label="Configurações"
+            aria-label={t("shell.navigation.settings")}
             className={`mt-2 ${linkClassName(
               activePage === "settings" ||
                 activePage === "forms" ||
@@ -373,7 +410,7 @@ function Sidebar({
               className="size-5 shrink-0"
               strokeWidth={2.2}
             />
-            {expanded && <span>Configurações</span>}
+            {expanded && <span>{t("shell.navigation.settings")}</span>}
           </Link>
         )}
 
@@ -381,21 +418,21 @@ function Sidebar({
           <>
             <Link
               aria-current={activePage === "operational-observability" ? "page" : undefined}
-              aria-label="Observabilidade operacional"
+              aria-label={t("shell.navigation.operationalObservability")}
               className={`mt-2 ${linkClassName(activePage === "operational-observability")}`}
               href="/observabilidade/operacional"
             >
               <Activity aria-hidden="true" className="size-5 shrink-0" strokeWidth={2.2} />
-              {expanded && <span>Observabilidade operacional</span>}
+              {expanded && <span>{t("shell.navigation.operationalObservability")}</span>}
             </Link>
             <Link
               aria-current={activePage === "ai-observability" ? "page" : undefined}
-              aria-label="Observabilidade de IA"
+              aria-label={t("shell.navigation.aiObservability")}
               className={`mt-2 ${linkClassName(activePage === "ai-observability")}`}
               href="/observabilidade/ia"
             >
               <BrainCircuit aria-hidden="true" className="size-5 shrink-0" strokeWidth={2.2} />
-              {expanded && <span>Observabilidade de IA</span>}
+              {expanded && <span>{t("shell.navigation.aiObservability")}</span>}
             </Link>
           </>
         )}
@@ -411,7 +448,7 @@ function Sidebar({
           <div className="grid size-9 shrink-0 place-items-center rounded-full bg-teal-600/10 text-xs font-bold text-teal-800 ring-1 ring-teal-700/20">
             {initials}
           </div>
-          {!expanded && <span className="sr-only">Perfil: {displayName}</span>}
+          {!expanded && <span className="sr-only">{t("shell.profile", { name: displayName })}</span>}
           {expanded && (
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold text-slate-800">
@@ -421,7 +458,7 @@ function Sidebar({
                 {user.username} · {user.email}
               </p>
               <p className="mt-1 truncate text-xs font-medium text-teal-700">
-                Perfis: {formatProfiles(user)}
+                {t("shell.profiles", { profiles })}
               </p>
             </div>
           )}
@@ -432,6 +469,8 @@ function Sidebar({
 }
 
 function SessionLoading() {
+  const { t } = useTranslation();
+
   return (
     <main
       aria-busy="true"
@@ -440,124 +479,28 @@ function SessionLoading() {
     >
       <div className="flex items-center gap-3 text-sm">
         <span className="size-3 animate-pulse rounded-full bg-teal-600" />
-        Validando sua sessão…
+        {t("shell.sessionLoading")}
       </div>
     </main>
   );
-}
-
-function getPageHeading(page: SidebarProps["activePage"], username: string) {
-  if (page === "settings") {
-    return {
-      eyebrow: "Administração",
-      title: "Configurações",
-      description:
-        "Gerencie parâmetros da plataforma, formulários de submissão, critérios de IA e diretório de contas.",
-    };
-  }
-
-  if (page === "operational-observability") {
-    return {
-      eyebrow: "Administração",
-      title: "Observabilidade operacional",
-      description:
-        "Acompanhe eventos da plataforma, falhas, duração e correlações em tempo real.",
-    };
-  }
-
-  if (page === "ai-observability") {
-    return {
-      eyebrow: "Administração",
-      title: "Observabilidade de IA",
-      description:
-        "Inspecione execuções e etapas dos pipelines de IA sem expor dados fora da sessão administrativa.",
-    };
-  }
-
-  if (page === "triage") {
-    return {
-      eyebrow: "Análise BraCVAM",
-      title: "Triagem",
-      description:
-        "Revise a proposta, confronte as evidências da pré-avaliação e registre a decisão técnica.",
-    };
-  }
-
-  if (page === "ai-evaluations") {
-    return {
-      eyebrow: "Configuração de IA",
-      title: "Avaliações por IA",
-      description:
-        "Consulte objetivos, versões e critérios usados nas avaliações configuráveis da plataforma.",
-    };
-  }
-
-  if (page === "forms") {
-    return {
-      eyebrow: "Configuração BraCVAM",
-      title: "Formulários",
-      description:
-        "Edite os formulários vinculados aos processos, suas seções, campos e regras de preenchimento.",
-    };
-  }
-
-  if (page === "submissions") {
-    return {
-      eyebrow: "Área do proponente",
-      title: "Submissões",
-      description:
-        "Escolha um tipo de submissão para criar um rascunho e começar o preenchimento do formulário.",
-    };
-  }
-
-  if (page === "processes") {
-    return {
-      eyebrow: "Acompanhamento",
-      title: "Processos",
-      description:
-        "Acompanhe as submissões organizadas pelo estado atual do fluxo. As movimentações são feitas automaticamente pelo sistema.",
-    };
-  }
-
-  if (page === "users") {
-    return {
-      eyebrow: "Administração",
-      title: "Usuários",
-      description: "Consulte as contas ativas e inativas cadastradas na plataforma.",
-    };
-  }
-
-  return {
-    eyebrow: "Área autenticada",
-    title: "Início",
-    description: `Boas-vindas, ${username}. Acompanhe os fluxos de validação e as próximas atividades da plataforma a partir daqui.`,
-  };
 }
 
 function getInitials(username: string) {
   return username.trim().slice(0, 2).toUpperCase() || "PV";
 }
 
-function formatRoles(roles: string[]) {
+function formatRoles(roles: string[], locale: string, emptyLabel: string) {
   if (roles.length === 0) {
-    return "Não atribuído";
+    return emptyLabel;
   }
 
   return roles
     .map((role) =>
       role
         .replaceAll(/[-_]/g, " ")
-        .replaceAll(/\b\p{L}/gu, (letter) => letter.toLocaleUpperCase("pt-BR")),
+        .replaceAll(/\b\p{L}/gu, (letter) => letter.toLocaleUpperCase(locale)),
     )
     .join(" · ");
-}
-
-function formatProfiles(user: CurrentUser) {
-  if (user.profiles.length === 0) {
-    return formatRoles(user.roles);
-  }
-
-  return user.profiles.map((profile) => profile.name).join(" · ");
 }
 
 function isCurrentUser(value: unknown): value is CurrentUser {
@@ -586,22 +529,10 @@ function isCurrentUser(value: unknown): value is CurrentUser {
         typeof profile.active === "boolean",
     ) &&
     typeof user.isAdministrator === "boolean" &&
+    (user.preferred_locale === undefined ||
+      user.preferred_locale === "pt-BR" ||
+      user.preferred_locale === "en") &&
     Array.isArray(user.roles) &&
     user.roles.every((role) => typeof role === "string")
   );
-}
-
-function getSessionMessage(
-  status: number,
-  payload: CurrentUser | ApiMessage | null,
-) {
-  if (status === 401) {
-    return "Sua sessão expirou. Entre novamente para continuar.";
-  }
-
-  if (payload && "message" in payload && typeof payload.message === "string") {
-    return payload.message;
-  }
-
-  return "Não foi possível validar sua sessão. Entre novamente.";
 }

@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { internalApiErrorResponse } from "@/app/(paginas)/api/_shared/responses";
 import { getCurrentUser } from "@/services/Autenticacao";
+import { normalizeLocale } from "@/i18n/config";
 
 export const runtime = "nodejs";
 
@@ -10,7 +11,10 @@ export async function GET() {
   const accessToken = cookieStore.get("access_token")?.value;
 
   if (!accessToken) {
-    return NextResponse.json({ message: "Sessão não encontrada." }, { status: 401 });
+    return NextResponse.json(
+      { code: "AUTH_REQUIRED", message: "Sessão não encontrada." },
+      { status: 401 },
+    );
   }
 
   const result = await getCurrentUser(accessToken);
@@ -29,6 +33,9 @@ export async function GET() {
     username: user.username ?? result.data.username ?? "",
     email: user.email ?? result.data.email ?? "",
     full_name: user.full_name ?? result.data.full_name ?? null,
+    preferred_locale:
+      normalizeLocale(user.preferred_locale ?? result.data.preferred_locale) ??
+      undefined,
     permissions: result.data.access.global_permissions,
     profiles: result.data.access.profiles,
     isAdministrator:

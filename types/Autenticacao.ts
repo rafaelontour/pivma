@@ -22,11 +22,13 @@ export type CurrentSessionUser = {
   username?: string;
   email?: string;
   full_name?: string | null;
+  preferred_locale?: string | null;
   user?: {
     id: string;
     username: string;
     email: string;
     full_name: string | null;
+    preferred_locale?: string | null;
   };
   access: {
     profiles: AssignedPermissionProfile[];

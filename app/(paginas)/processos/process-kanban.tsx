@@ -1,6 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import {
   AlertTriangle,
   Eye,
@@ -29,47 +32,56 @@ const REVALIDATION_INTERVAL_MS = 30_000;
 const STATUS_PRESENTATIONS: readonly ProcessStatusPresentation[] = [
   {
     key: "submission",
-    label: "Elaboração e correção",
-    description: "Propostas em preenchimento ou devolvidas para ajustes.",
+    label: "",
+    description: "",
     statusValues: ["SUBMISSION"],
     tone: "teal",
   },
   {
     key: "ai-pre-evaluation",
-    label: "Pré-avaliação por IA",
-    description: "Propostas em processamento automático assíncrono.",
+    label: "",
+    description: "",
     statusValues: ["AI_PRE_EVALUATION"],
     tone: "blue",
   },
   {
     key: "triage",
-    label: "Triagem humana",
-    description: "Propostas em análise pela equipe BraCVAM.",
+    label: "",
+    description: "",
     statusValues: ["TRIAGE"],
     tone: "amber",
   },
   {
     key: "planning",
-    label: "Planejamento",
-    description: "Métodos aprovados que avançaram para planejamento.",
+    label: "",
+    description: "",
     statusValues: ["PLANNING"],
     tone: "violet",
   },
   {
     key: "closed",
-    label: "Encerrados",
-    description: "Processos encerrados pelo fluxo da plataforma.",
+    label: "",
+    description: "",
     statusValues: ["CLOSED"],
     tone: "slate",
   },
 ];
 
 export function ProcessKanban() {
+  const { i18n, t } = useTranslation();
   const [state, setState] = useState<ProcessKanbanState>({ kind: "loading" });
   const [details, setDetails] = useState<ProcessDetailsState>({ kind: "closed" });
+  const [headerActionsTarget, setHeaderActionsTarget] =
+    useState<HTMLElement | null>(null);
   const isRefreshingRef = useRef(false);
   const boardControllerRef = useRef<AbortController | null>(null);
   const detailsControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    setHeaderActionsTarget(
+      document.getElementById("process-page-header-actions"),
+    );
+  }, []);
 
   const refreshSnapshot = useCallback(async (preserveSnapshot: boolean) => {
     if (isRefreshingRef.current) {
@@ -92,7 +104,11 @@ export function ProcessKanban() {
     );
 
     try {
-      const processes = await loadAllProcesses(controller.signal);
+      const processes = await loadAllProcesses(
+        controller.signal,
+        t("processes.deniedTitle"),
+        t("processes.allFailed"),
+      );
 
       if (!controller.signal.aborted) {
         setState({
@@ -122,7 +138,7 @@ export function ProcessKanban() {
           message:
             error instanceof Error
               ? error.message
-              : "Não foi possível carregar os processos.",
+              : t("processes.loadFailed"),
         };
       });
     } finally {
@@ -131,7 +147,7 @@ export function ProcessKanban() {
         isRefreshingRef.current = false;
       }
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void refreshSnapshot(false);
@@ -197,7 +213,7 @@ export function ProcessKanban() {
           process,
           message: getApiMessage(
             payload,
-            "Não foi possível consultar os detalhes do processo.",
+            t("processes.detailsFailed"),
           ),
         });
         return;
@@ -209,7 +225,7 @@ export function ProcessKanban() {
         setDetails({
           kind: "error",
           process,
-          message: "Não foi possível consultar os detalhes do processo.",
+          message: t("processes.detailsFailed"),
         });
       }
     }
@@ -224,8 +240,8 @@ export function ProcessKanban() {
   if (state.kind === "loading") {
     return (
       <KanbanMessage
-        description="Estamos reunindo todas as páginas antes de exibir o quadro completo."
-        title="Carregando processos…"
+        description={t("processes.loadingDescription")}
+        title={t("processes.loadingTitle")}
       />
     );
   }
@@ -233,8 +249,8 @@ export function ProcessKanban() {
   if (state.kind === "denied") {
     return (
       <KanbanMessage
-        description="Sua conta não possui a permissão necessária para consultar os processos da BraCVAM."
-        title="Acesso não permitido"
+        description={t("processes.deniedDescription")}
+        title={t("processes.deniedTitle")}
       />
     );
   }
@@ -242,60 +258,66 @@ export function ProcessKanban() {
   if (state.kind === "error") {
     return (
       <KanbanMessage
-        actionLabel="Tentar novamente"
+        actionLabel={t("common.retry")}
         description={state.message}
         onAction={() => void refreshSnapshot(false)}
-        title="Não foi possível montar o quadro"
+        title={t("processes.boardFailed")}
       />
     );
   }
 
-  const columns = buildColumns(state.processes);
+  const locale = i18n.resolvedLanguage;
+  const columns = buildColumns(state.processes, t, locale);
 
   return (
-    <div className="flex flex-1 flex-col py-6">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div aria-live="polite" className="text-xs text-slate-500">
-          {state.isStale ? (
-            <span className="inline-flex items-center gap-2 font-semibold text-amber-800">
-              <AlertTriangle aria-hidden="true" className="size-4" />
-              Os dados podem estar desatualizados.
-            </span>
-          ) : (
-            <span>
-              Última atualização: {formatDateTime(state.updatedAt)}
-            </span>
-          )}
-        </div>
-        <button
-          className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 outline-none transition hover:border-teal-500 hover:bg-teal-50 hover:text-teal-800 focus-visible:ring-2 focus-visible:ring-teal-500 disabled:cursor-wait disabled:opacity-60"
-          disabled={state.isRefreshing}
-          onClick={() => void refreshSnapshot(true)}
-          type="button"
-        >
-          <RefreshCw
-            aria-hidden="true"
-            className={`size-4 ${state.isRefreshing ? "animate-spin" : ""}`}
-          />
-          {state.isRefreshing ? "Atualizando…" : "Atualizar quadro"}
-        </button>
-      </div>
+    <div className="flex min-h-0 flex-1 flex-col py-6">
+      {headerActionsTarget &&
+        createPortal(
+          <div className="flex flex-col items-end gap-2">
+            <div aria-live="polite" className="text-xs text-slate-500">
+              {state.isStale ? (
+                <span className="inline-flex items-center gap-2 font-semibold text-amber-800">
+                  <AlertTriangle aria-hidden="true" className="size-4" />
+                  {t("processes.stale")}
+                </span>
+              ) : (
+                <span>
+                  {t("processes.lastUpdate", { date: formatDateTime(state.updatedAt, locale) })}
+                </span>
+              )}
+            </div>
+            <button
+              aria-label={t("processes.refreshBoard")}
+              className="inline-flex min-h-8 items-center gap-1.5 rounded-full border border-teal-700/20 bg-teal-600/10 px-3 py-1.5 text-[11px] font-bold text-teal-800 shadow-sm outline-none transition hover:border-teal-700 hover:bg-teal-700 hover:text-white focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2 disabled:cursor-wait disabled:border-slate-300 disabled:bg-slate-100 disabled:text-slate-500 disabled:shadow-none"
+              disabled={state.isRefreshing}
+              onClick={() => void refreshSnapshot(true)}
+              type="button"
+            >
+              <RefreshCw
+                aria-hidden="true"
+                className={`size-3.5 ${state.isRefreshing ? "animate-spin" : ""}`}
+              />
+              {state.isRefreshing ? t("processes.refreshing") : t("processes.refresh")}
+            </button>
+          </div>,
+          headerActionsTarget,
+        )}
 
       {state.processes.length === 0 && (
         <div
           className="mb-4 rounded-xl border border-dashed border-slate-300 bg-white/70 px-5 py-4 text-sm text-slate-600"
           role="status"
         >
-          Ainda não existem processos acessíveis para exibir neste quadro.
+          {t("processes.emptyBoard")}
         </div>
       )}
 
       <section
-        aria-label="Quadro de processos por estado"
-        className="min-w-0 overflow-x-auto pb-4"
+        aria-label={t("processes.boardLabel")}
+        className="min-h-0 min-w-0 flex-1 overflow-x-auto overflow-y-hidden pb-4"
       >
         <div
-          className="grid w-max min-w-full grid-flow-col auto-cols-[minmax(15rem,1fr)] items-start gap-3"
+          className="grid h-full w-max min-w-full grid-flow-col auto-cols-[minmax(15rem,1fr)] items-stretch gap-3"
           style={{
             gridTemplateColumns: `repeat(${columns.length}, minmax(15rem, 1fr))`,
           }}
@@ -303,7 +325,7 @@ export function ProcessKanban() {
           {columns.map((column) => (
             <section
               aria-labelledby={`column-${column.key}`}
-              className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-slate-100/80 shadow-sm"
+              className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-slate-100/80 shadow-sm"
               key={column.key}
             >
               <header className={`border-t-4 bg-white px-4 py-4 ${getBorderTone(column.tone)}`}>
@@ -320,7 +342,7 @@ export function ProcessKanban() {
                     </p>
                   </div>
                   <span
-                    aria-label={`${column.processes.length} processos`}
+                    aria-label={t("processes.count", { count: column.processes.length })}
                     className={`grid min-w-7 place-items-center rounded-full px-2 py-1 text-xs font-bold ${getBadgeTone(column.tone)}`}
                   >
                     {column.processes.length}
@@ -328,10 +350,10 @@ export function ProcessKanban() {
                 </div>
               </header>
 
-              <div className="max-h-[calc(100dvh-23rem)] min-h-32 space-y-3 overflow-y-auto p-3">
+              <div className="min-h-32 flex-1 space-y-3 overflow-y-auto p-3">
                 {column.processes.length === 0 ? (
                   <p className="rounded-xl border border-dashed border-slate-300 bg-white/50 px-4 py-6 text-center text-xs text-slate-500">
-                    Nenhum processo neste estado.
+                    {t("processes.emptyColumn")}
                   </p>
                 ) : (
                   column.processes.map((process) => (
@@ -362,6 +384,8 @@ export function ProcessKanban() {
 }
 
 function ProcessCard({ process, onViewDetails }: ProcessCardProps) {
+  const { t } = useTranslation();
+
   return (
     <article className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white p-3 shadow-sm shadow-slate-300/30 xl:p-4">
       <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
@@ -376,13 +400,13 @@ function ProcessCard({ process, onViewDetails }: ProcessCardProps) {
         {process.title}
       </h3>
       <button
-        aria-label={`Ver detalhes do processo ${process.code}: ${process.title}`}
+        aria-label={t("processes.viewDetailsLabel", { code: process.code, title: process.title })}
         className="mt-4 inline-flex items-center gap-2 rounded-lg text-xs font-semibold text-teal-700 outline-none transition hover:text-teal-900 focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2"
         onClick={() => onViewDetails(process)}
         type="button"
       >
         <Eye aria-hidden="true" className="size-4" />
-        Ver detalhes
+        {t("processes.viewDetails")}
       </button>
     </article>
   );
@@ -393,6 +417,9 @@ function ProcessDetailsDialog({
   onClose,
   onRetry,
 }: ProcessDetailsDialogProps) {
+  const { i18n, t } = useTranslation();
+  const locale = i18n.resolvedLanguage;
+
   return (
     <div
       aria-labelledby="process-details-title"
@@ -411,7 +438,7 @@ function ProcessDetailsDialog({
             </h2>
           </div>
           <button
-            aria-label="Fechar detalhes do processo"
+            aria-label={t("processes.closeDetails")}
             autoFocus
             className="grid size-9 shrink-0 place-items-center rounded-lg text-slate-500 outline-none transition hover:bg-slate-100 hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-teal-500"
             onClick={onClose}
@@ -425,7 +452,7 @@ function ProcessDetailsDialog({
           {state.kind === "loading" && (
             <div aria-live="polite" className="flex items-center gap-3 py-8 text-sm text-slate-600">
               <LoaderCircle aria-hidden="true" className="size-5 animate-spin text-teal-700" />
-              Consultando os detalhes…
+              {t("processes.loadingDetails")}
             </div>
           )}
 
@@ -437,33 +464,33 @@ function ProcessDetailsDialog({
                 onClick={onRetry}
                 type="button"
               >
-                Tentar novamente
+                {t("common.retry")}
               </button>
             </div>
           )}
 
           {state.kind === "ready" && (
             <dl className="grid gap-4 sm:grid-cols-2">
-              <DetailItem label="Estado" value={state.process.status} />
-              <DetailItem label="Template" value={state.process.template_key} />
+              <DetailItem label={t("processes.status")} value={state.process.status} />
+              <DetailItem label={t("processes.template")} value={state.process.template_key} />
               <DetailItem
-                label="Versão do fluxo"
+                label={t("processes.flowVersion")}
                 value={String(state.process.version_number)}
               />
               <DetailItem
-                label="Início"
-                value={formatOptionalDateTime(state.process.started_at)}
+                label={t("processes.start")}
+                value={formatOptionalDateTime(state.process.started_at, locale, t("dynamicForm.notProvided"))}
               />
               <DetailItem
-                label="Encerramento"
-                value={formatOptionalDateTime(state.process.closed_at)}
+                label={t("processes.end")}
+                value={formatOptionalDateTime(state.process.closed_at, locale, t("dynamicForm.notProvided"))}
               />
               <div className="sm:col-span-2">
                 <dt className="text-xs font-bold uppercase tracking-wide text-slate-500">
-                  Motivo do encerramento
+                  {t("processes.closureReason")}
                 </dt>
                 <dd className="mt-1 text-sm leading-6 text-slate-800">
-                  {state.process.closure_reason || "Não informado"}
+                  {state.process.closure_reason || t("dynamicForm.notProvided")}
                 </dd>
               </div>
             </dl>
@@ -514,11 +541,15 @@ function KanbanMessage({
   );
 }
 
-function buildColumns(processes: ProcessInstance[]): ProcessKanbanColumn[] {
+function buildColumns(
+  processes: ProcessInstance[],
+  t: TFunction,
+  locale: string | undefined,
+): ProcessKanbanColumn[] {
   const configuredColumns = STATUS_PRESENTATIONS.map((presentation) => ({
     key: presentation.key,
-    label: presentation.label,
-    description: presentation.description,
+    label: t(`processes.columns.${presentation.key}.label`),
+    description: t(`processes.columns.${presentation.key}.description`),
     processes: [] as ProcessInstance[],
     tone: presentation.tone,
     unknown: false,
@@ -539,15 +570,15 @@ function buildColumns(processes: ProcessInstance[]): ProcessKanbanColumn[] {
   }
 
   for (const column of configuredColumns) {
-    column.processes.sort(compareProcesses);
+    column.processes.sort((first, second) => compareProcesses(first, second, locale));
   }
 
   if (unknownProcesses.length > 0) {
     configuredColumns.push({
       key: "unknown",
-      label: "Estado não mapeado",
-      description: "Valores preservados exatamente como recebidos da API.",
-      processes: unknownProcesses.sort(compareProcesses),
+      label: t("processes.columns.unknown.label"),
+      description: t("processes.columns.unknown.description"),
+      processes: unknownProcesses.sort((first, second) => compareProcesses(first, second, locale)),
       tone: "slate",
       unknown: true,
     });
@@ -556,8 +587,12 @@ function buildColumns(processes: ProcessInstance[]): ProcessKanbanColumn[] {
   return configuredColumns;
 }
 
-async function loadAllProcesses(signal: AbortSignal) {
-  const firstPage = await loadProcessPage(1, signal);
+async function loadAllProcesses(
+  signal: AbortSignal,
+  deniedMessage: string,
+  fallbackMessage: string,
+) {
+  const firstPage = await loadProcessPage(1, signal, deniedMessage, fallbackMessage);
   const pageCount = Math.ceil(firstPage.total / firstPage.size);
 
   if (pageCount <= 1) {
@@ -573,7 +608,7 @@ async function loadAllProcesses(signal: AbortSignal) {
   for (let index = 0; index < remainingPages.length; index += PAGE_BATCH_SIZE) {
     const batch = remainingPages.slice(index, index + PAGE_BATCH_SIZE);
     const pages = await Promise.all(
-      batch.map((page) => loadProcessPage(page, signal)),
+      batch.map((page) => loadProcessPage(page, signal, deniedMessage, fallbackMessage)),
     );
 
     for (const page of pages) {
@@ -584,7 +619,12 @@ async function loadAllProcesses(signal: AbortSignal) {
   return Array.from(new Map(items.map((process) => [process.id, process])).values());
 }
 
-async function loadProcessPage(page: number, signal: AbortSignal) {
+async function loadProcessPage(
+  page: number,
+  signal: AbortSignal,
+  deniedMessage: string,
+  fallbackMessage: string,
+) {
   const response = await fetch(
     `/api/processes?page=${page}&size=${PROCESS_PAGE_SIZE}`,
     { cache: "no-store", signal },
@@ -592,14 +632,14 @@ async function loadProcessPage(page: number, signal: AbortSignal) {
   const payload = (await response.json().catch(() => null)) as unknown;
 
   if (response.status === 403) {
-    const error = new Error("Acesso não permitido.");
+    const error = new Error(deniedMessage);
     error.name = "ProcessAccessDenied";
     throw error;
   }
 
   if (!response.ok || !isProcessList(payload)) {
     throw new Error(
-      getApiMessage(payload, "Não foi possível consultar todos os processos."),
+      getApiMessage(payload, fallbackMessage),
     );
   }
 
@@ -646,22 +686,26 @@ function getApiMessage(value: unknown, fallback: string) {
     : fallback;
 }
 
-function compareProcesses(first: ProcessInstance, second: ProcessInstance) {
-  return first.code.localeCompare(second.code, "pt-BR", {
+function compareProcesses(first: ProcessInstance, second: ProcessInstance, locale: string | undefined) {
+  return first.code.localeCompare(second.code, locale, {
     numeric: true,
     sensitivity: "base",
   });
 }
 
-function formatDateTime(value: string) {
-  return new Intl.DateTimeFormat("pt-BR", {
+function formatDateTime(value: string, locale: string | undefined) {
+  return new Intl.DateTimeFormat(locale, {
     dateStyle: "short",
     timeStyle: "short",
   }).format(new Date(value));
 }
 
-function formatOptionalDateTime(value?: string | null) {
-  return value ? formatDateTime(value) : "Não informado";
+function formatOptionalDateTime(
+  value: string | null | undefined,
+  locale: string | undefined,
+  emptyLabel: string,
+) {
+  return value ? formatDateTime(value, locale) : emptyLabel;
 }
 
 function getBorderTone(tone: ProcessKanbanColumn["tone"]) {

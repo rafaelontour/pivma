@@ -1,11 +1,16 @@
+"use client";
+
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { SettingsBackLinkProps } from "@/types/Configuracoes";
 
 export function SettingsBackLink({ currentModuleName }: SettingsBackLinkProps) {
+  const { t } = useTranslation();
+
   return (
     <nav
-      aria-label={`Navegação de retorno a partir de ${currentModuleName}`}
+      aria-label={t("settings.backLabel", { module: currentModuleName })}
       className="mb-6 flex items-center gap-2 text-xs font-semibold text-slate-500"
     >
       <Link
@@ -13,7 +18,7 @@ export function SettingsBackLink({ currentModuleName }: SettingsBackLinkProps) {
         href="/configuracoes"
       >
         <ChevronLeft aria-hidden="true" className="size-4" />
-        Configurações
+        {t("settings.back")}
       </Link>
       <span aria-hidden="true" className="text-slate-300">
         /

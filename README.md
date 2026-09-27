@@ -30,12 +30,16 @@ Build and start the production application at
 docker compose up
 ```
 
-The server uses `https://api.pivma.acerola.dev.br` by default. To point it to
-another API, set `PIVMA_API_URL` before starting Compose:
+Configure the backend documentation URL in the root `.env` file before
+starting the application:
 
 ```bash
-PIVMA_API_URL=https://api.example.com docker compose up
+API_PIVMA=https://api.example.com/docs
+docker compose up
 ```
+
+The server derives the API base URL from this value. The variable is not
+prefixed with `NEXT_PUBLIC_`, so it remains available only on the server.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   ArrowRight,
   Bot,
@@ -24,6 +25,7 @@ import type {
 } from "@/types/Configuracoes";
 
 export function SettingsHub({ initialCapabilities }: SettingsHubProps) {
+  const { t } = useTranslation();
   const [capabilities, setCapabilities] = useState<SettingsSessionCapabilities | null>(
     initialCapabilities ?? null,
   );
@@ -67,7 +69,7 @@ export function SettingsHub({ initialCapabilities }: SettingsHubProps) {
         className="flex flex-1 items-center justify-center py-16 text-sm text-slate-600"
       >
         <span className="mr-3 size-3 animate-pulse rounded-full bg-teal-600" />
-        Carregando módulos de configuração…
+        {t("settings.loading")}
       </section>
     );
   }
@@ -79,17 +81,22 @@ export function SettingsHub({ initialCapabilities }: SettingsHubProps) {
   };
 
   const hasAccess = hasAnySettingsAccess(effectiveCapabilities);
-  const modules = getSettingsModules(effectiveCapabilities);
+  const modules = getSettingsModules(effectiveCapabilities).map((module) => ({
+    ...module,
+    title: t(`settings.modules.${module.id}.title`),
+    description: t(`settings.modules.${module.id}.description`),
+    badge: t(`settings.modules.${module.id}.badge`),
+    deniedReason: t(`settings.modules.${module.id}.denied`),
+  }));
 
   return (
-    <section aria-label="Módulos de Configuração" className="flex-1 py-6 sm:py-8">
+    <section aria-label={t("settings.ariaLabel")} className="flex-1 py-6 sm:py-8">
       <div className="mb-8">
         <h2 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
-          Recursos de parametrização e gestão
+          {t("settings.title")}
         </h2>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600 sm:text-base">
-          Gerencie formulários de submissão, bibliotecas de critérios de inteligência
-          artificial e diretório de usuários da plataforma com base nos seus perfis de acesso.
+          {t("settings.description")}
         </p>
       </div>
 
@@ -101,13 +108,11 @@ export function SettingsHub({ initialCapabilities }: SettingsHubProps) {
           <div className="flex items-center gap-3 text-amber-900">
             <ShieldAlert aria-hidden="true" className="size-6 shrink-0 text-amber-700" />
             <h3 className="text-base font-semibold">
-              Nenhum módulo de configuração disponível
+              {t("settings.noModules")}
             </h3>
           </div>
           <p className="text-sm text-amber-800">
-            Sua conta atual não possui permissões administrativas ou de configuração
-            concedidas para acessar formulários, avaliações por IA ou gestão de usuários.
-            Caso precise de acesso, solicite autorização a uma pessoa administradora.
+            {t("settings.noModulesDescription")}
           </p>
         </div>
       ) : (
@@ -122,10 +127,12 @@ export function SettingsHub({ initialCapabilities }: SettingsHubProps) {
 }
 
 function SettingsModuleCard({ module }: SettingsModuleCardProps) {
+  const { t } = useTranslation();
+
   if (!module.isAllowed) {
     return (
       <article
-        aria-label={`${module.title} (Acesso restrito)`}
+        aria-label={t("settings.restrictedLabel", { title: module.title })}
         className="flex flex-col justify-between rounded-2xl border border-slate-200 bg-slate-50/70 p-6 opacity-75 shadow-xs transition"
       >
         <div>
@@ -135,7 +142,7 @@ function SettingsModuleCard({ module }: SettingsModuleCardProps) {
             </span>
             <span className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-white px-2.5 py-0.5 text-xs font-semibold text-slate-600">
               <Lock aria-hidden="true" className="size-3" />
-              Restrito
+              {t("settings.restricted")}
             </span>
           </div>
 
@@ -149,7 +156,7 @@ function SettingsModuleCard({ module }: SettingsModuleCardProps) {
 
         <div className="mt-6 border-t border-slate-200 pt-4">
           <p className="text-xs font-medium text-slate-500">
-            {module.deniedReason ?? "Acesso não concedido para o perfil atual."}
+            {module.deniedReason ?? t("settings.defaultDenied")}
           </p>
         </div>
       </article>
@@ -178,11 +185,11 @@ function SettingsModuleCard({ module }: SettingsModuleCardProps) {
 
       <div className="mt-6 border-t border-slate-100 pt-4">
         <Link
-          aria-label={`Acessar módulo de ${module.title}`}
+          aria-label={t("settings.openLabel", { title: module.title })}
           className="inline-flex items-center gap-2 text-sm font-semibold text-teal-700 outline-none transition group-hover:text-teal-900 group-hover:translate-x-0.5 focus-visible:ring-2 focus-visible:ring-teal-500"
           href={module.href}
         >
-          Acessar módulo
+          {t("settings.open")}
           <ArrowRight aria-hidden="true" className="size-4" />
         </Link>
       </div>

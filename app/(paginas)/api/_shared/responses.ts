@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type {
   ForwardedApiErrorStatus,
   InternalApiErrorOptions,
+  InternalApiErrorCode,
   InternalApiErrorStatus,
 } from "@/types/Api";
 
@@ -22,6 +23,16 @@ const DEFAULT_MESSAGES: Record<InternalApiErrorStatus, string> = {
   422: "Revise os dados informados.",
   429: "Muitas solicitações foram realizadas. Aguarde e tente novamente.",
   502: "Não foi possível concluir a operação no momento.",
+};
+
+const DEFAULT_CODES: Record<InternalApiErrorStatus, InternalApiErrorCode> = {
+  401: "AUTH_REQUIRED",
+  403: "FORBIDDEN",
+  404: "NOT_FOUND",
+  409: "CONFLICT",
+  422: "VALIDATION_ERROR",
+  429: "RATE_LIMITED",
+  502: "UPSTREAM_UNAVAILABLE",
 };
 
 export function normalizeExternalApiStatus(
@@ -49,5 +60,8 @@ export function internalApiErrorResponse(
       ? options.fallbackMessage
       : DEFAULT_MESSAGES[responseStatus]);
 
-  return NextResponse.json({ message }, { status: responseStatus });
+  return NextResponse.json(
+    { code: options.code ?? DEFAULT_CODES[responseStatus], message },
+    { status: responseStatus },
+  );
 }

@@ -12,6 +12,7 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import type {
   AccessPanelProps,
   AccessPanelState,
@@ -46,6 +47,7 @@ const EMPTY_PROFILE: CreateProfileState = {
 };
 
 export function UserDirectory() {
+  const { t } = useTranslation();
   const [users, setUsers] = useState<UserListItem[]>([]);
   const [searchInput, setSearchInput] = useState("");
   const [filters, setFilters] = useState<UserDirectoryFilters>({
@@ -145,7 +147,7 @@ export function UserDirectory() {
       const payload = await response.json().catch(() => null);
 
       if (!response.ok || !isUserList(payload)) {
-        toast.error(getApiMessage(payload, "Não foi possível carregar mais usuários."));
+        toast.error(getApiMessage(payload, t("users.loadMoreFailed")));
         return;
       }
 
@@ -153,7 +155,7 @@ export function UserDirectory() {
       setNextOffset(payload.offset + payload.items.length);
       setHasMore(payload.items.length === payload.limit);
     } catch {
-      toast.error("Não foi possível conectar ao serviço de usuários.");
+      toast.error(t("users.userConnectionFailed"));
     } finally {
       setIsLoadingMore(false);
     }
@@ -173,12 +175,12 @@ export function UserDirectory() {
       ]);
 
       if (!profilesResponse.ok || !isPermissionProfileList(profilesPayload)) {
-        throw new Error(getApiMessage(profilesPayload, "Não foi possível carregar os perfis."));
+        throw new Error(getApiMessage(profilesPayload, t("users.profilesFailed")));
       }
 
       if (!permissionsResponse.ok || !isPermissionDefinitionList(permissionsPayload)) {
         throw new Error(
-          getApiMessage(permissionsPayload, "Não foi possível carregar as permissões."),
+          getApiMessage(permissionsPayload, t("users.permissionsFailed")),
         );
       }
 
@@ -203,7 +205,7 @@ export function UserDirectory() {
         setAccessPanel({
           kind: "error",
           user,
-          message: getApiMessage(accessPayload, "Não foi possível carregar este acesso."),
+          message: getApiMessage(accessPayload, t("users.accessFailed")),
         });
         return;
       }
@@ -227,7 +229,7 @@ export function UserDirectory() {
       setAccessPanel({
         kind: "error",
         user,
-        message: error instanceof Error ? error.message : "Não foi possível carregar os acessos.",
+        message: error instanceof Error ? error.message : t("users.accessesFailed"),
       });
     }
   }
@@ -239,7 +241,7 @@ export function UserDirectory() {
 
     const fullName = editState.fullName.trim();
     if (fullName.length < 1 || fullName.length > 255) {
-      toast.error("Informe um nome completo com até 255 caracteres.");
+      toast.error(t("users.invalidFullName"));
       return;
     }
 
@@ -255,7 +257,7 @@ export function UserDirectory() {
 
       if (!response.ok || !isUserPublic(payload)) {
         setEditState({ ...editState, isSaving: false });
-        toast.error(getApiMessage(payload, "Não foi possível atualizar o nome."));
+        toast.error(getApiMessage(payload, t("users.nameUpdateFailed")));
         return;
       }
 
@@ -265,10 +267,10 @@ export function UserDirectory() {
         ),
       );
       setEditState(null);
-      toast.success("Nome completo atualizado.");
+      toast.success(t("users.nameUpdated"));
     } catch {
       setEditState({ ...editState, isSaving: false });
-      toast.error("Não foi possível conectar ao serviço de usuários.");
+      toast.error(t("users.userConnectionFailed"));
     }
   }
 
@@ -280,7 +282,7 @@ export function UserDirectory() {
     const name = profileState.name.trim();
     const description = profileState.description.trim();
     if (name.length < 3 || name.length > 64 || description.length < 1 || description.length > 500) {
-      toast.error("Informe nome e descrição válidos para o perfil.");
+      toast.error(t("users.invalidProfile"));
       return;
     }
 
@@ -300,17 +302,17 @@ export function UserDirectory() {
 
       if (!response.ok || !isPermissionProfile(payload)) {
         setProfileState({ ...profileState, isSaving: false });
-        toast.error(getApiMessage(payload, "Não foi possível criar o perfil."));
+        toast.error(getApiMessage(payload, t("users.profileCreateFailed")));
         return;
       }
 
       setProfileState(null);
-      toast.success("Perfil customizado criado.", {
-        description: "O perfil está disponível, mas ainda não foi atribuído a nenhuma pessoa.",
+      toast.success(t("users.profileCreated"), {
+        description: t("users.profileCreatedDescription"),
       });
     } catch {
       setProfileState({ ...profileState, isSaving: false });
-      toast.error("Não foi possível conectar ao serviço de perfis.");
+      toast.error(t("users.profileConnectionFailed"));
     }
   }
 
@@ -331,16 +333,16 @@ export function UserDirectory() {
 
       if (!response.ok) {
         setAccessPanel({ ...panel, isSaving: false });
-        toast.error(getApiMessage(payload, "Não foi possível atribuir o perfil."));
+        toast.error(getApiMessage(payload, t("users.profileGrantFailed")));
         return;
       }
 
-      toast.success("Perfil atribuído.");
+      toast.success(t("users.profileGranted"));
       setReloadKey((current) => current + 1);
       await openAccessPanel(panel.user);
     } catch {
       setAccessPanel({ ...panel, isSaving: false });
-      toast.error("Não foi possível conectar ao serviço de perfis.");
+      toast.error(t("users.profileConnectionFailed"));
     }
   }
 
@@ -350,7 +352,7 @@ export function UserDirectory() {
     }
 
     if (accessPanel.access.profiles.length <= 1) {
-      toast.error("Todo usuário precisa manter pelo menos um perfil atribuído.");
+      toast.error(t("users.minimumProfile"));
       return;
     }
 
@@ -366,16 +368,16 @@ export function UserDirectory() {
 
       if (!response.ok) {
         setAccessPanel({ ...panel, isRemovingProfileId: null });
-        toast.error(getApiMessage(payload, "Não foi possível remover o perfil."));
+        toast.error(getApiMessage(payload, t("users.profileRemoveFailed")));
         return;
       }
 
-      toast.success("Perfil removido.");
+      toast.success(t("users.profileRemoved"));
       setReloadKey((current) => current + 1);
       await openAccessPanel(panel.user);
     } catch {
       setAccessPanel({ ...panel, isRemovingProfileId: null });
-      toast.error("Não foi possível conectar ao serviço de perfis.");
+      toast.error(t("users.profileConnectionFailed"));
     }
   }
 
@@ -388,20 +390,20 @@ export function UserDirectory() {
     try {
       await loadRbacCatalog();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Não foi possível carregar as permissões.");
+      toast.error(error instanceof Error ? error.message : t("users.permissionsFailed"));
     }
   }
 
   if (status === "loading") {
-    return <DirectoryMessage message="Carregando usuários…" />;
+    return <DirectoryMessage message={t("users.loading")} />;
   }
 
   if (status === "denied") {
-    return <DirectoryMessage message="Você não possui permissão para consultar usuários." />;
+    return <DirectoryMessage message={t("users.denied")} />;
   }
 
   if (status === "error") {
-    return <DirectoryMessage message="Não foi possível carregar os usuários. Tente novamente." />;
+    return <DirectoryMessage message={t("users.loadFailed")} />;
   }
 
   return (
@@ -409,17 +411,17 @@ export function UserDirectory() {
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <form className="grid flex-1 gap-3 sm:grid-cols-[minmax(16rem,1fr)_12rem_auto]" onSubmit={submitFilters}>
           <label className="text-xs font-semibold text-slate-700">
-            Buscar por nome ou e-mail
+            {t("users.searchLabel")}
             <input
               className={inputClassName}
               onChange={(event) => setSearchInput(event.target.value)}
-              placeholder="Digite um nome ou e-mail"
+              placeholder={t("users.searchPlaceholder")}
               type="search"
               value={searchInput}
             />
           </label>
           <label className="text-xs font-semibold text-slate-700">
-            Situação
+            {t("users.status")}
             <select
               className={inputClassName}
               onChange={(event) =>
@@ -427,23 +429,26 @@ export function UserDirectory() {
               }
               value={filters.active}
             >
-              <option value="true">Contas ativas</option>
-              <option value="false">Contas inativas</option>
+              <option value="true">{t("users.activeAccounts")}</option>
+              <option value="false">{t("users.inactiveAccounts")}</option>
             </select>
           </label>
           <button className={secondaryButtonClassName} type="submit">
-            <Search aria-hidden="true" className="size-4" /> Buscar
+            <Search aria-hidden="true" className="size-4" /> {t("common.search")}
           </button>
         </form>
         {canManageProfiles && (
           <button className={primaryButtonClassName} onClick={() => void openProfileDialog()} type="button">
-            <Plus aria-hidden="true" className="size-4" /> Criar perfil
+            <Plus aria-hidden="true" className="size-4" /> {t("users.createProfile")}
           </button>
         )}
       </div>
 
       <p className="mt-5 text-sm font-semibold text-slate-700" id="user-directory-title">
-        {users.length} {users.length === 1 ? "usuário listado" : "usuários listados"} · {filters.active === "true" ? "ativos" : "inativos"}
+        {t(users.length === 1 ? "users.listed" : "users.listed_other", {
+          count: users.length,
+          status: t(filters.active === "true" ? "users.active" : "users.inactive"),
+        })}
       </p>
 
       <div className="mt-3 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-400/15">
@@ -451,42 +456,42 @@ export function UserDirectory() {
           <table className="w-full min-w-200 text-left text-sm">
             <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
               <tr>
-                <th className="px-5 py-3 font-semibold">Nome completo</th>
-                <th className="px-5 py-3 font-semibold">Usuário</th>
-                <th className="px-5 py-3 font-semibold">E-mail</th>
-                <th className="px-5 py-3 font-semibold">Perfis</th>
-                <th className="px-5 py-3 font-semibold">Situação</th>
-                <th className="px-5 py-3 text-right font-semibold">Ações</th>
+                <th className="px-5 py-3 font-semibold">{t("users.fullName")}</th>
+                <th className="px-5 py-3 font-semibold">{t("users.username")}</th>
+                <th className="px-5 py-3 font-semibold">{t("users.email")}</th>
+                <th className="px-5 py-3 font-semibold">{t("users.profiles")}</th>
+                <th className="px-5 py-3 font-semibold">{t("users.status")}</th>
+                <th className="px-5 py-3 text-right font-semibold">{t("users.actions")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
               {users.map((user) => (
                 <tr className="text-slate-700" key={user.id}>
-                  <td className="px-5 py-4 font-semibold text-slate-900">{user.full_name || "Não informado"}</td>
+                  <td className="px-5 py-4 font-semibold text-slate-900">{user.full_name || t("users.notProvided")}</td>
                   <td className="px-5 py-4 font-mono text-xs">{user.username}</td>
                   <td className="px-5 py-4">{user.email}</td>
                   <td className="px-5 py-4">
                     <div className="flex flex-wrap gap-1.5">
                       {user.profiles.length > 0 ? user.profiles.map((profile) => (
                         <span className="rounded-full bg-teal-600/10 px-2 py-1 text-xs font-semibold text-teal-800" key={profile.id}>{profile.name}</span>
-                      )) : <span className="text-xs text-slate-500">Nenhum perfil</span>}
+                      )) : <span className="text-xs text-slate-500">{t("users.noProfiles")}</span>}
                     </div>
                   </td>
                   <td className="px-5 py-4">
                     <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${user.active ? "bg-emerald-600/10 text-emerald-800" : "bg-slate-200 text-slate-600"}`}>
-                      {user.active ? "Ativa" : "Inativa"}
+                      {user.active ? t("users.activeFeminine") : t("users.inactiveFeminine")}
                     </span>
                   </td>
                   <td className="px-5 py-4">
                     <div className="flex justify-end gap-2">
                       {canManageUsers && (
-                        <button aria-label={`Editar nome de ${user.username}`} className={iconButtonClassName} onClick={() => setEditState({ user, fullName: user.full_name ?? "", isSaving: false })} type="button">
+                        <button aria-label={t("users.editNameLabel", { username: user.username })} className={iconButtonClassName} onClick={() => setEditState({ user, fullName: user.full_name ?? "", isSaving: false })} type="button">
                           <Pencil aria-hidden="true" className="size-4" />
                         </button>
                       )}
                       {canReadRbac && (
                         <button className={secondaryButtonClassName} onClick={() => void openAccessPanel(user)} type="button">
-                          <ShieldCheck aria-hidden="true" className="size-4" /> Perfis
+                          <ShieldCheck aria-hidden="true" className="size-4" /> {t("users.profiles")}
                         </button>
                       )}
                     </div>
@@ -498,7 +503,7 @@ export function UserDirectory() {
         </div>
         {users.length === 0 && (
           <p className="px-5 py-12 text-center text-sm text-slate-600">
-            Nenhum usuário corresponde à pesquisa e ao filtro selecionado.
+            {t("users.empty")}
           </p>
         )}
       </div>
@@ -506,7 +511,7 @@ export function UserDirectory() {
       {hasMore && (
         <button className={`mx-auto mt-5 ${secondaryButtonClassName}`} disabled={isLoadingMore} onClick={() => void loadMoreUsers()} type="button">
           {isLoadingMore && <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />}
-          {isLoadingMore ? "Carregando…" : "Carregar mais"}
+          {isLoadingMore ? t("common.loading") : t("users.loadMore")}
         </button>
       )}
 
@@ -553,17 +558,18 @@ export function UserDirectory() {
 }
 
 function UserEditDialog({ state, onChange, onClose, onSave }: UserEditDialogProps) {
+  const { t } = useTranslation();
   return (
-    <ModalShell label="Editar nome completo" onClose={onClose} titleId="edit-user-title">
-      <h2 className="text-xl font-bold text-slate-900" id="edit-user-title">Editar {state.user.username}</h2>
+    <ModalShell label={t("users.editFullName")} onClose={onClose} titleId="edit-user-title">
+      <h2 className="text-xl font-bold text-slate-900" id="edit-user-title">{t("users.editUser", { username: state.user.username })}</h2>
       <label className="mt-5 block text-sm font-semibold text-slate-700" htmlFor="edit-full-name">
-        Nome completo
+        {t("users.fullName")}
       </label>
       <input autoFocus className={inputClassName} disabled={state.isSaving} id="edit-full-name" maxLength={255} onChange={(event) => onChange(event.target.value)} value={state.fullName} />
       <div className="mt-6 flex justify-end gap-2">
-        <button className={secondaryButtonClassName} disabled={state.isSaving} onClick={onClose} type="button">Cancelar</button>
+        <button className={secondaryButtonClassName} disabled={state.isSaving} onClick={onClose} type="button">{t("common.cancel")}</button>
         <button className={primaryButtonClassName} disabled={state.isSaving || !state.fullName.trim()} onClick={onSave} type="button">
-          {state.isSaving && <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />} Salvar nome
+          {state.isSaving && <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />} {t("users.saveName")}
         </button>
       </div>
     </ModalShell>
@@ -571,20 +577,21 @@ function UserEditDialog({ state, onChange, onClose, onSave }: UserEditDialogProp
 }
 
 function CreateProfileDialog({ state, permissions, isCatalogLoading, onNameChange, onDescriptionChange, onPermissionToggle, onClose, onSave }: CreateProfileDialogProps) {
+  const { t } = useTranslation();
   return (
-    <ModalShell label="Criar perfil customizado" onClose={onClose} titleId="create-profile-title">
-      <h2 className="text-xl font-bold text-slate-900" id="create-profile-title">Criar perfil customizado</h2>
-      <p className="mt-2 text-sm text-amber-800">A criação não atribui o perfil automaticamente a nenhuma pessoa.</p>
+    <ModalShell label={t("users.createCustomProfile")} onClose={onClose} titleId="create-profile-title">
+      <h2 className="text-xl font-bold text-slate-900" id="create-profile-title">{t("users.createCustomProfile")}</h2>
+      <p className="mt-2 text-sm text-amber-800">{t("users.createNotice")}</p>
       <div className="mt-5 grid gap-4">
-        <label className="text-sm font-semibold text-slate-700">Nome
+        <label className="text-sm font-semibold text-slate-700">{t("users.name")}
           <input autoFocus className={inputClassName} disabled={state.isSaving} maxLength={64} minLength={3} onChange={(event) => onNameChange(event.target.value)} value={state.name} />
         </label>
-        <label className="text-sm font-semibold text-slate-700">Descrição
+        <label className="text-sm font-semibold text-slate-700">{t("users.description")}
           <textarea className={`${inputClassName} min-h-24 resize-y`} disabled={state.isSaving} maxLength={500} onChange={(event) => onDescriptionChange(event.target.value)} value={state.description} />
         </label>
         <fieldset disabled={state.isSaving || isCatalogLoading}>
-          <legend className="text-sm font-semibold text-slate-700">Permissões</legend>
-          {isCatalogLoading ? <p className="mt-2 text-sm text-slate-600">Carregando catálogo…</p> : (
+          <legend className="text-sm font-semibold text-slate-700">{t("users.permissions")}</legend>
+          {isCatalogLoading ? <p className="mt-2 text-sm text-slate-600">{t("users.loadingCatalog")}</p> : (
             <ul className="mt-2 max-h-56 space-y-2 overflow-y-auto rounded-xl border border-slate-200 p-3">
               {permissions.map((permission) => (
                 <li key={permission.code}>
@@ -599,9 +606,9 @@ function CreateProfileDialog({ state, permissions, isCatalogLoading, onNameChang
         </fieldset>
       </div>
       <div className="mt-6 flex justify-end gap-2">
-        <button className={secondaryButtonClassName} disabled={state.isSaving} onClick={onClose} type="button">Cancelar</button>
+        <button className={secondaryButtonClassName} disabled={state.isSaving} onClick={onClose} type="button">{t("common.cancel")}</button>
         <button className={primaryButtonClassName} disabled={state.isSaving || isCatalogLoading || state.name.trim().length < 3 || !state.description.trim()} onClick={onSave} type="button">
-          {state.isSaving && <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />} Criar perfil
+          {state.isSaving && <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />} {t("users.createProfile")}
         </button>
       </div>
     </ModalShell>
@@ -609,22 +616,23 @@ function CreateProfileDialog({ state, permissions, isCatalogLoading, onNameChang
 }
 
 function AccessPanel({ panel, canManageAssignments, onClose, onRetry, onProfileChange, onGrant, onRemoveProfile }: AccessPanelProps) {
+  const { t } = useTranslation();
   return (
-    <ModalShell label="Gerenciar perfis do usuário" onClose={onClose} titleId="access-panel-title">
-      <h2 className="text-xl font-bold text-slate-900" id="access-panel-title">Perfis de {panel.user.full_name || panel.user.username}</h2>
+    <ModalShell label={t("users.manageProfiles")} onClose={onClose} titleId="access-panel-title">
+      <h2 className="text-xl font-bold text-slate-900" id="access-panel-title">{t("users.userProfiles", { name: panel.user.full_name || panel.user.username })}</h2>
       <p className="mt-1 text-sm text-slate-600">{panel.user.email}</p>
-      {panel.kind === "loading" && <p className="mt-8 flex items-center gap-2 text-sm text-slate-600"><LoaderCircle aria-hidden="true" className="size-4 animate-spin" /> Carregando acesso detalhado…</p>}
-      {panel.kind === "error" && <div className="mt-6"><p className="rounded-xl bg-rose-600/10 p-3 text-sm text-rose-800">{panel.message}</p><button className={`mt-3 ${secondaryButtonClassName}`} onClick={onRetry} type="button">Tentar novamente</button></div>}
+      {panel.kind === "loading" && <p className="mt-8 flex items-center gap-2 text-sm text-slate-600"><LoaderCircle aria-hidden="true" className="size-4 animate-spin" /> {t("users.loadingAccess")}</p>}
+      {panel.kind === "error" && <div className="mt-6"><p className="rounded-xl bg-rose-600/10 p-3 text-sm text-rose-800">{panel.message}</p><button className={`mt-3 ${secondaryButtonClassName}`} onClick={onRetry} type="button">{t("common.retry")}</button></div>}
       {panel.kind === "ready" && (
         <div className="mt-6 space-y-5">
           <div>
-            <h3 className="text-sm font-semibold text-slate-800">Perfis atribuídos</h3>
+            <h3 className="text-sm font-semibold text-slate-800">{t("users.assignedProfiles")}</h3>
             <ul className="mt-2 space-y-2">
               {panel.access.profiles.map((profile) => (
                 <li className="flex items-center justify-between gap-3 rounded-xl bg-teal-600/10 px-3 py-2" key={profile.id}>
                   <span className="text-sm font-semibold text-teal-900">{profile.name}</span>
                   {canManageAssignments && (
-                    <button aria-label={`Remover perfil ${profile.name}`} className={iconButtonClassName} disabled={panel.access.profiles.length <= 1 || panel.isRemovingProfileId !== null} onClick={() => onRemoveProfile(profile.id)} title={panel.access.profiles.length <= 1 ? "O usuário precisa manter ao menos um perfil." : undefined} type="button">
+                    <button aria-label={t("users.removeProfile", { name: profile.name })} className={iconButtonClassName} disabled={panel.access.profiles.length <= 1 || panel.isRemovingProfileId !== null} onClick={() => onRemoveProfile(profile.id)} title={panel.access.profiles.length <= 1 ? t("users.keepProfile") : undefined} type="button">
                       {panel.isRemovingProfileId === profile.id ? <LoaderCircle aria-hidden="true" className="size-4 animate-spin" /> : <Trash2 aria-hidden="true" className="size-4" />}
                     </button>
                   )}
@@ -634,18 +642,18 @@ function AccessPanel({ panel, canManageAssignments, onClose, onRetry, onProfileC
           </div>
           {canManageAssignments && (
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <label className="text-sm font-semibold text-slate-800" htmlFor="assign-profile">Atribuir perfil</label>
+              <label className="text-sm font-semibold text-slate-800" htmlFor="assign-profile">{t("users.assignProfile")}</label>
               <select className={inputClassName} id="assign-profile" onChange={(event) => onProfileChange(event.target.value)} value={panel.selectedProfileId}>
-                <option value="">Selecione</option>
+                <option value="">{t("users.select")}</option>
                 {panel.profiles.filter((profile) => profile.active && !panel.access.profiles.some((assigned) => assigned.id === profile.id)).map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}
               </select>
               <button className={`mt-3 ${primaryButtonClassName}`} disabled={!panel.selectedProfileId || panel.isSaving} onClick={onGrant} type="button">
-                {panel.isSaving && <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />} Atribuir
+                {panel.isSaving && <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />} {t("users.assign")}
               </button>
             </div>
           )}
           <details className="rounded-xl border border-slate-200 p-4">
-            <summary className="cursor-pointer text-sm font-semibold text-slate-700">Permissões efetivas ({panel.access.effective_permissions.length})</summary>
+            <summary className="cursor-pointer text-sm font-semibold text-slate-700">{t("users.effectivePermissions", { count: panel.access.effective_permissions.length })}</summary>
             <ul className="mt-3 flex flex-wrap gap-2">{panel.access.effective_permissions.map((permission) => <li className="rounded-md bg-slate-100 px-2 py-1 font-mono text-[11px]" key={permission}>{permission}</li>)}</ul>
           </details>
         </div>
@@ -655,10 +663,11 @@ function AccessPanel({ panel, canManageAssignments, onClose, onRetry, onProfileC
 }
 
 function ModalShell({ label, titleId, onClose, children }: ModalShellProps) {
+  const { t } = useTranslation();
   return (
     <div aria-label={label} aria-labelledby={titleId} aria-modal="true" className="fixed inset-0 z-50 flex items-end bg-slate-900/35 backdrop-blur-sm sm:items-center sm:justify-center sm:p-6" role="dialog">
       <div className="relative max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl bg-white p-5 shadow-2xl sm:max-w-2xl sm:rounded-2xl sm:p-6">
-        <button aria-label="Fechar diálogo" className={`absolute right-4 top-4 ${iconButtonClassName}`} onClick={onClose} type="button"><X aria-hidden="true" className="size-5" /></button>
+        <button aria-label={t("users.closeDialog")} className={`absolute right-4 top-4 ${iconButtonClassName}`} onClick={onClose} type="button"><X aria-hidden="true" className="size-5" /></button>
         {children}
       </div>
     </div>

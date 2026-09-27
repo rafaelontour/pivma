@@ -23,6 +23,7 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import { useAccessibleDialog } from "@/components/accessible-dialog";
 import { AiEvaluationAssignmentManager } from "./ai-evaluation-assignments";
 import type {
@@ -69,6 +70,7 @@ const SEVERITIES: AiCriterionSeverity[] = ["info", "low", "medium", "high", "cri
 const MISSING_INFO: AiCriterionMissingInfoBehavior[] = ["non_compliant", "indeterminate"];
 
 export function AiEvaluationWorkspace() {
+  const { t } = useTranslation();
   const query = useSearchParams();
   const [library, setLibrary] = useState<AiEvaluationLibraryState>({ kind: "loading" });
   const [editor, setEditor] = useState<AiEvaluationEditorState>({ kind: "closed" });
@@ -115,18 +117,18 @@ export function AiEvaluationWorkspace() {
         if (controller.signal.aborted) return;
         if (!response.ok || !isDefinitionPage(payload)) {
           setLibrary(response.status === 403
-            ? { kind: "denied", message: getApiMessage(payload, "Seu perfil não pode consultar avaliações por IA.") }
-            : { kind: "error", message: getApiMessage(payload, "Não foi possível carregar a biblioteca de avaliações.") });
+            ? { kind: "denied", message: getApiMessage(payload, t("aiEvaluations.denied")) }
+            : { kind: "error", message: getApiMessage(payload, t("aiEvaluations.libraryFailed")) });
           return;
         }
         setLibrary({ kind: "ready", page: payload });
       } catch {
-        if (!controller.signal.aborted) setLibrary({ kind: "error", message: "Não foi possível conectar ao serviço de avaliações por IA." });
+        if (!controller.signal.aborted) setLibrary({ kind: "error", message: t("aiEvaluations.connectionFailed") });
       }
     }
     void loadLibrary();
     return () => controller.abort();
-  }, [reloadKey, search]);
+  }, [reloadKey, search, t]);
 
   async function loadDefinition(definitionId: string, versionNumber: number) {
     const requestId = ++selectionRequestId.current;
@@ -142,19 +144,19 @@ export function AiEvaluationWorkspace() {
       ]);
       if (selectionRequestId.current !== requestId) return;
       if (!definitionResponse.ok || !versionResponse.ok || !isDefinition(definitionPayload) || !isVersion(versionPayload)) {
-        setEditor({ kind: "error", definitionId, message: getApiMessage(!definitionResponse.ok ? definitionPayload : versionPayload, "Não foi possível carregar os detalhes da avaliação.") });
+        setEditor({ kind: "error", definitionId, message: getApiMessage(!definitionResponse.ok ? definitionPayload : versionPayload, t("aiEvaluations.detailsFailed")) });
         return;
       }
       setEditor({ kind: "ready", definition: definitionPayload, version: versionPayload, isSaving: false, isSuggesting: false, isTesting: false, isPublishing: false, testResult: null });
     } catch {
-      if (selectionRequestId.current === requestId) setEditor({ kind: "error", definitionId, message: "Não foi possível conectar ao serviço de avaliações por IA." });
+      if (selectionRequestId.current === requestId) setEditor({ kind: "error", definitionId, message: t("aiEvaluations.connectionFailed") });
     }
   }
 
   async function selectDefinition(definition: AiEvaluationDefinitionSummary) {
     const versionNumber = definition.latest_version?.version_number;
     if (!versionNumber) {
-      setEditor({ kind: "error", definitionId: definition.id, message: "A avaliação não possui uma versão disponível para consulta." });
+      setEditor({ kind: "error", definitionId: definition.id, message: t("aiEvaluations.noVersion") });
       return;
     }
     await loadDefinition(definition.id, versionNumber);
@@ -166,22 +168,22 @@ export function AiEvaluationWorkspace() {
       const response = await fetch("/api/ai-evaluations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(draft) });
       const payload = await response.json().catch(() => null);
       if (!response.ok || !isDefinition(payload)) {
-        toast.error(getApiMessage(payload, "Não foi possível criar a avaliação."));
+        toast.error(getApiMessage(payload, t("aiEvaluations.createFailed")));
         return false;
       }
       const latest = payload.versions?.slice().sort((first, second) => second.version_number - first.version_number)[0];
       if (!latest) {
-        toast.error("A avaliação foi criada, mas a API não retornou sua versão inicial.");
+        toast.error(t("aiEvaluations.initialVersionMissing"));
         setReloadKey((value) => value + 1);
         return false;
       }
       setCreateOpen(false);
       setReloadKey((value) => value + 1);
-      toast.success("Avaliação criada em rascunho.");
+      toast.success(t("aiEvaluations.created"));
       await loadDefinition(payload.id, latest.version_number);
       return true;
     } catch {
-      toast.error("Não foi possível conectar ao serviço de avaliações por IA.");
+      toast.error(t("aiEvaluations.connectionFailed"));
       return false;
     } finally {
       setIsCreating(false);
@@ -225,11 +227,11 @@ export function AiEvaluationWorkspace() {
     if (editor.kind !== "ready" || editor.version.status !== "draft") return;
     const criteria = (editor.version.criteria ?? []).map(toCriterionInput);
     if (editor.version.objective.trim().length < 3) {
-      toast.error("Informe um objetivo com ao menos 3 caracteres.");
+      toast.error(t("aiEvaluations.objectiveRequired"));
       return;
     }
     if (criteria.some((criterion) => criterion === null)) {
-      toast.error("Revise os critérios: cada descrição deve ter ao menos 3 caracteres.");
+      toast.error(t("aiEvaluations.criteriaInvalid"));
       return;
     }
     setEditor((current) => current.kind === "ready" ? { ...current, isSaving: true } : current);
@@ -237,14 +239,14 @@ export function AiEvaluationWorkspace() {
       const response = await fetch(`/api/ai-evaluations/${editor.definition.id}/versions/${editor.version.version_number}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ objective: editor.version.objective, criteria }) });
       const payload = await response.json().catch(() => null);
       if (!response.ok || !isVersion(payload)) {
-        toast.error(getApiMessage(payload, "Não foi possível salvar a versão."));
+        toast.error(getApiMessage(payload, t("aiEvaluations.saveFailed")));
         return;
       }
       setEditor((current) => current.kind === "ready" ? { ...current, version: payload, isSaving: false } : current);
       setReloadKey((value) => value + 1);
-      toast.success("Versão em rascunho salva.");
+      toast.success(t("aiEvaluations.saved"));
     } catch {
-      toast.error("Não foi possível conectar ao serviço de avaliações por IA.");
+      toast.error(t("aiEvaluations.connectionFailed"));
     } finally {
       setEditor((current) => current.kind === "ready" ? { ...current, isSaving: false } : current);
     }
@@ -254,7 +256,7 @@ export function AiEvaluationWorkspace() {
     if (editor.kind !== "ready" || editor.version.status !== "draft") return;
     const objective = editor.version.objective.trim();
     if (objective.length < 3) {
-      toast.error("Informe o objetivo antes de solicitar sugestões.");
+      toast.error(t("aiEvaluations.suggestObjective"));
       return;
     }
     setEditor((current) => current.kind === "ready" ? { ...current, isSuggesting: true } : current);
@@ -262,7 +264,7 @@ export function AiEvaluationWorkspace() {
       const response = await fetch("/api/ai-evaluations/suggest-criteria", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ objective, target_type: "field" }) });
       const payload = await response.json().catch(() => null);
       if (!response.ok || !isSuggestionResult(payload)) {
-        toast.error(getApiMessage(payload, "Não foi possível sugerir critérios."));
+        toast.error(getApiMessage(payload, t("aiEvaluations.suggestFailed")));
         return;
       }
       setEditor((current) => {
@@ -281,9 +283,9 @@ export function AiEvaluationWorkspace() {
         }));
         return { ...current, isSuggesting: false, version: { ...current.version, criteria: [...existing, ...suggestions] } };
       });
-      toast.success(payload.suggestions?.length ? "Sugestões adicionadas como critérios editáveis." : "A API não sugeriu novos critérios para este objetivo.");
+      toast.success(payload.suggestions?.length ? t("aiEvaluations.suggestionsAdded") : t("aiEvaluations.noSuggestions"));
     } catch {
-      toast.error("Não foi possível conectar ao serviço de sugestões.");
+      toast.error(t("aiEvaluations.suggestConnectionFailed"));
     } finally {
       setEditor((current) => current.kind === "ready" ? { ...current, isSuggesting: false } : current);
     }
@@ -296,13 +298,13 @@ export function AiEvaluationWorkspace() {
       const response = await fetch(`/api/ai-evaluations/${editor.definition.id}/versions/${editor.version.version_number}/test`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sample_content: sampleContent }) });
       const payload = await response.json().catch(() => null);
       if (!response.ok || !isTestResult(payload)) {
-        toast.error(getApiMessage(payload, "Não foi possível executar o teste."));
+        toast.error(getApiMessage(payload, t("aiEvaluations.testFailed")));
         return;
       }
       setEditor((current) => current.kind === "ready" ? { ...current, testResult: payload, isTesting: false } : current);
-      toast.success("Teste concluído sem alterar nenhum processo.");
+      toast.success(t("aiEvaluations.testSuccess"));
     } catch {
-      toast.error("Não foi possível conectar ao serviço de teste.");
+      toast.error(t("aiEvaluations.testConnectionFailed"));
     } finally {
       setEditor((current) => current.kind === "ready" ? { ...current, isTesting: false } : current);
     }
@@ -315,14 +317,14 @@ export function AiEvaluationWorkspace() {
       const response = await fetch(`/api/ai-evaluations/${editor.definition.id}/versions/${editor.version.version_number}/publish`, { method: "POST" });
       const payload = await response.json().catch(() => null);
       if (!response.ok || !isRecord(payload) || typeof payload.status !== "string") {
-        toast.error(getApiMessage(payload, "Não foi possível publicar a versão."));
+        toast.error(getApiMessage(payload, t("aiEvaluations.publishFailed")));
         return;
       }
       setReloadKey((value) => value + 1);
-      toast.success(payload.test_warning ? "Versão publicada. Atenção: ela ainda não possuía execução de teste." : "Versão publicada e bloqueada para edição.");
+      toast.success(payload.test_warning ? t("aiEvaluations.publishedWarning") : t("aiEvaluations.published"));
       await loadDefinition(editor.definition.id, editor.version.version_number);
     } catch {
-      toast.error("Não foi possível conectar ao serviço de publicação.");
+      toast.error(t("aiEvaluations.publishConnectionFailed"));
     } finally {
       setEditor((current) => current.kind === "ready" ? { ...current, isPublishing: false } : current);
     }
@@ -336,14 +338,14 @@ export function AiEvaluationWorkspace() {
       const response = await fetch(`/api/ai-evaluations/${definitionId}/versions`, { method: "POST" });
       const payload = await response.json().catch(() => null);
       if (!response.ok || !isVersion(payload)) {
-        toast.error(getApiMessage(payload, "Não foi possível criar uma nova versão."));
+        toast.error(getApiMessage(payload, t("aiEvaluations.newVersionFailed")));
         return;
       }
       setReloadKey((value) => value + 1);
-      toast.success("Nova versão criada em rascunho.");
+      toast.success(t("aiEvaluations.newVersionCreated"));
       await loadDefinition(definitionId, payload.version_number);
     } catch {
-      toast.error("Não foi possível conectar ao serviço de avaliações por IA.");
+      toast.error(t("aiEvaluations.connectionFailed"));
     } finally {
       setEditor((current) => current.kind === "ready" ? { ...current, isSaving: false } : current);
     }
@@ -361,20 +363,20 @@ export function AiEvaluationWorkspace() {
       {assignmentContext && <AiEvaluationAssignmentManager context={assignmentContext} />}
       <div className="grid flex-1 gap-5 py-7 lg:grid-cols-[21rem_minmax(0,1fr)]">
         <aside className="self-start rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          {canManage && <button className="mb-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-violet-700 px-4 text-sm font-bold text-white outline-none hover:bg-violet-800 focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2" onClick={() => setCreateOpen(true)} type="button"><Plus aria-hidden="true" className="size-4" />Nova avaliação</button>}
+          {canManage && <button className="mb-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-violet-700 px-4 text-sm font-bold text-white outline-none hover:bg-violet-800 focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2" onClick={() => setCreateOpen(true)} type="button"><Plus aria-hidden="true" className="size-4" />{t("aiEvaluations.newEvaluation")}</button>}
           <form className="flex gap-2" onSubmit={submitSearch} role="search">
-            <label className="min-w-0 flex-1"><span className="sr-only">Pesquisar avaliações</span><input className="min-h-11 w-full rounded-xl border border-slate-300 px-3 text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20" onChange={(event) => setSearchInput(event.target.value)} placeholder="Nome da avaliação" value={searchInput} /></label>
-            <button aria-label="Pesquisar avaliações" className="grid size-11 place-items-center rounded-xl bg-teal-700 text-white outline-none hover:bg-teal-800 focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2" type="submit"><Search aria-hidden="true" className="size-4" /></button>
+            <label className="min-w-0 flex-1"><span className="sr-only">{t("aiEvaluations.search")}</span><input className="min-h-11 w-full rounded-xl border border-slate-300 px-3 text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20" onChange={(event) => setSearchInput(event.target.value)} placeholder={t("aiEvaluations.searchPlaceholder")} value={searchInput} /></label>
+            <button aria-label={t("aiEvaluations.search")} className="grid size-11 place-items-center rounded-xl bg-teal-700 text-white outline-none hover:bg-teal-800 focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2" type="submit"><Search aria-hidden="true" className="size-4" /></button>
           </form>
           <div className="mt-4 grid gap-3">
-            {library.kind === "loading" ? <div className="flex min-h-32 items-center justify-center gap-2 text-sm text-slate-600"><LoaderCircle aria-hidden="true" className="size-5 animate-spin" />Carregando…</div>
-              : library.kind === "denied" || library.kind === "error" ? <LibraryMessage actionLabel={library.kind === "error" ? "Tentar novamente" : undefined} description={library.message} onAction={library.kind === "error" ? () => setReloadKey((value) => value + 1) : undefined} title={library.kind === "denied" ? "Acesso restrito" : "Falha na consulta"} />
-              : library.page.items.length === 0 ? <LibraryMessage description={search ? `Nenhuma avaliação corresponde a “${search}”.` : "A API ainda não retornou avaliações configuradas."} title="Nenhuma avaliação encontrada" />
+            {library.kind === "loading" ? <div className="flex min-h-32 items-center justify-center gap-2 text-sm text-slate-600"><LoaderCircle aria-hidden="true" className="size-5 animate-spin" />{t("common.loading")}</div>
+              : library.kind === "denied" || library.kind === "error" ? <LibraryMessage actionLabel={library.kind === "error" ? t("common.retry") : undefined} description={library.message} onAction={library.kind === "error" ? () => setReloadKey((value) => value + 1) : undefined} title={library.kind === "denied" ? t("aiEvaluations.restricted") : t("aiEvaluations.queryFailed")} />
+              : library.page.items.length === 0 ? <LibraryMessage description={search ? t("aiEvaluations.noSearchResults", { search }) : t("aiEvaluations.apiEmpty")} title={t("aiEvaluations.noneFound")} />
               : library.page.items.map((definition) => <LibraryCard definition={definition} key={definition.id} onSelect={(selected) => void selectDefinition(selected)} selected={selectedId === definition.id} />)}
           </div>
         </aside>
         <section className="min-w-0 rounded-2xl border border-slate-200 bg-white shadow-sm">
-          {editor.kind === "closed" ? <div className="grid min-h-96 place-items-center p-8 text-center"><div className="max-w-md"><Bot aria-hidden="true" className="mx-auto size-10 text-violet-700" /><h2 className="mt-4 text-xl font-bold text-slate-900">Selecione uma avaliação</h2><p className="mt-2 text-sm leading-6 text-slate-600">Consulte versões publicadas ou edite o rascunho atual conforme suas permissões.</p></div></div>
+          {editor.kind === "closed" ? <div className="grid min-h-96 place-items-center p-8 text-center"><div className="max-w-md"><Bot aria-hidden="true" className="mx-auto size-10 text-violet-700" /><h2 className="mt-4 text-xl font-bold text-slate-900">{t("aiEvaluations.select")}</h2><p className="mt-2 text-sm leading-6 text-slate-600">{t("aiEvaluations.selectDescription")}</p></div></div>
             : <AiEvaluationEditorPanel canManage={canManage} onCreateVersion={createVersion} onCriterionAdd={addCriterion} onCriterionChange={updateCriterion} onCriterionMove={moveCriterion} onCriterionRemove={removeCriterion} onObjectiveChange={updateObjective} onPublish={publishVersion} onRetry={(definitionId) => { const definition = library.kind === "ready" ? library.page.items.find((item) => item.id === definitionId) : undefined; if (definition) void selectDefinition(definition); }} onSave={saveVersion} onSuggest={suggestCriteria} onTest={testVersion} state={editor} />}
         </section>
       </div>
@@ -384,21 +386,23 @@ export function AiEvaluationWorkspace() {
 }
 
 function LibraryCard({ definition, selected, onSelect }: AiEvaluationLibraryCardProps) {
+  const { t } = useTranslation();
   return (
     <button aria-pressed={selected} className={`w-full rounded-xl border p-4 text-left outline-none transition focus-visible:ring-2 focus-visible:ring-teal-500 ${selected ? "border-teal-500 bg-teal-50 ring-1 ring-teal-500/20" : "border-slate-200 hover:border-teal-300 hover:bg-slate-50"}`} onClick={() => onSelect(definition)} type="button">
-      <div className="flex items-start justify-between gap-3"><p className="font-semibold text-slate-900">{definition.name}</p><span className="rounded-full bg-slate-100 px-2 py-1 text-[0.68rem] font-bold uppercase text-slate-600">{definition.latest_version ? formatStatus(definition.latest_version.status) : "Sem versão"}</span></div>
+      <div className="flex items-start justify-between gap-3"><p className="font-semibold text-slate-900">{definition.name}</p><span className="rounded-full bg-slate-100 px-2 py-1 text-[0.68rem] font-bold uppercase text-slate-600">{definition.latest_version ? t(`aiEvaluations.statuses.${definition.latest_version.status.toLocaleLowerCase()}`, { defaultValue: definition.latest_version.status }) : t("aiEvaluations.noVersionShort")}</span></div>
       <p className="mt-1 font-mono text-[0.7rem] text-slate-500">{definition.slug}</p>
-      <p className="mt-3 text-xs text-slate-600">{definition.latest_version ? `Versão ${definition.latest_version.version_number} · ${definition.latest_version.criteria_count ?? 0} critérios` : "Nenhuma versão disponível"}</p>
+      <p className="mt-3 text-xs text-slate-600">{definition.latest_version ? t("aiEvaluations.versionSummary", { version: definition.latest_version.version_number, count: definition.latest_version.criteria_count ?? 0 }) : t("aiEvaluations.versionUnavailable")}</p>
     </button>
   );
 }
 
 function AiEvaluationEditorPanel({ state, canManage, onRetry, onObjectiveChange, onCriterionChange, onCriterionAdd, onCriterionRemove, onCriterionMove, onSave, onSuggest, onTest, onPublish, onCreateVersion }: AiEvaluationEditorPanelProps) {
+  const { i18n, t } = useTranslation();
   const [sampleContent, setSampleContent] = useState("");
   const [publishOpen, setPublishOpen] = useState(false);
 
-  if (state.kind === "loading") return <div className="flex min-h-96 items-center justify-center gap-3 text-sm text-slate-600"><LoaderCircle aria-hidden="true" className="size-5 animate-spin" />Carregando avaliação…</div>;
-  if (state.kind === "error") return <div className="grid min-h-96 place-items-center p-8"><LibraryMessage actionLabel="Tentar novamente" description={state.message} onAction={() => onRetry(state.definitionId)} title="Não foi possível abrir a avaliação" /></div>;
+  if (state.kind === "loading") return <div className="flex min-h-96 items-center justify-center gap-3 text-sm text-slate-600"><LoaderCircle aria-hidden="true" className="size-5 animate-spin" />{t("aiEvaluations.loadingEvaluation")}</div>;
+  if (state.kind === "error") return <div className="grid min-h-96 place-items-center p-8"><LibraryMessage actionLabel={t("common.retry")} description={state.message} onAction={() => onRetry(state.definitionId)} title={t("aiEvaluations.openFailed")} /></div>;
 
   const editable = canManage && state.version.status === "draft";
   const busy = state.isSaving || state.isSuggesting || state.isTesting || state.isPublishing;
@@ -408,16 +412,16 @@ function AiEvaluationEditorPanel({ state, canManage, onRetry, onObjectiveChange,
     <div>
       <header className="border-b border-slate-200 p-5 sm:p-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div><p className="font-mono text-xs font-bold text-violet-700">{state.definition.slug} · versão {state.version.version_number}</p><h2 className="mt-1 text-2xl font-bold text-slate-900">{state.definition.name}</h2><p className="mt-1 text-xs text-slate-500">O nome é definido na criação e permanece somente para leitura.</p></div>
-          <span className="rounded-full border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-bold text-violet-900">{formatStatus(state.version.status)}</span>
+          <div><p className="font-mono text-xs font-bold text-violet-700">{state.definition.slug} · {t("aiEvaluations.version", { version: state.version.version_number })}</p><h2 className="mt-1 text-2xl font-bold text-slate-900">{state.definition.name}</h2><p className="mt-1 text-xs text-slate-500">{t("aiEvaluations.nameReadOnly")}</p></div>
+          <span className="rounded-full border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-bold text-violet-900">{t(`aiEvaluations.statuses.${state.version.status.toLocaleLowerCase()}`, { defaultValue: state.version.status })}</span>
         </div>
         {state.definition.description && <p className="mt-3 text-sm leading-6 text-slate-600">{state.definition.description}</p>}
-        {canManage && state.version.status !== "draft" && <button className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-lg bg-violet-700 px-4 text-sm font-bold text-white outline-none hover:bg-violet-800 focus-visible:ring-2 focus-visible:ring-violet-500" disabled={busy} onClick={() => void onCreateVersion()} type="button"><FilePlus2 aria-hidden="true" className="size-4" />Criar nova versão em rascunho</button>}
+        {canManage && state.version.status !== "draft" && <button className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-lg bg-violet-700 px-4 text-sm font-bold text-white outline-none hover:bg-violet-800 focus-visible:ring-2 focus-visible:ring-violet-500" disabled={busy} onClick={() => void onCreateVersion()} type="button"><FilePlus2 aria-hidden="true" className="size-4" />{t("aiEvaluations.newDraftVersion")}</button>}
       </header>
       <div className="grid gap-6 p-5 sm:p-6">
-        {!editable && <div className="flex gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700"><LockKeyhole aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-slate-500" /><p>{state.version.status === "draft" ? "Seu perfil pode consultar este rascunho, mas não alterá-lo." : "Versões publicadas são imutáveis. Crie um novo rascunho para fazer alterações."}</p></div>}
-        <section><label className="block text-sm font-bold uppercase tracking-wide text-slate-600" htmlFor="ai-objective">Objetivo</label><textarea className="mt-2 min-h-28 w-full resize-y rounded-xl border border-slate-300 p-4 text-sm leading-6 text-slate-800 outline-none disabled:bg-slate-50 focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20" disabled={!editable || busy} id="ai-objective" maxLength={2000} onChange={(event) => onObjectiveChange(event.target.value)} value={state.version.objective} /></section>
-        <div className="grid gap-3 sm:grid-cols-3"><Metric icon={<FlaskConical aria-hidden="true" className="size-4" />} label="Testes executados" value={String(state.version.test_run_count)} /><Metric icon={<Bot aria-hidden="true" className="size-4" />} label="Critérios" value={String(orderedCriteria.length)} /><Metric icon={<CircleDollarSign aria-hidden="true" className="size-4" />} label="Publicação" value={state.version.published_at ? formatDate(state.version.published_at) : "Não publicada"} /></div>
+        {!editable && <div className="flex gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700"><LockKeyhole aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-slate-500" /><p>{state.version.status === "draft" ? t("aiEvaluations.draftReadOnly") : t("aiEvaluations.publishedReadOnly")}</p></div>}
+        <section><label className="block text-sm font-bold uppercase tracking-wide text-slate-600" htmlFor="ai-objective">{t("aiEvaluations.objective")}</label><textarea className="mt-2 min-h-28 w-full resize-y rounded-xl border border-slate-300 p-4 text-sm leading-6 text-slate-800 outline-none disabled:bg-slate-50 focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20" disabled={!editable || busy} id="ai-objective" maxLength={2000} onChange={(event) => onObjectiveChange(event.target.value)} value={state.version.objective} /></section>
+        <div className="grid gap-3 sm:grid-cols-3"><Metric icon={<FlaskConical aria-hidden="true" className="size-4" />} label={t("aiEvaluations.testsRun")} value={String(state.version.test_run_count)} /><Metric icon={<Bot aria-hidden="true" className="size-4" />} label={t("aiEvaluations.criteria")} value={String(orderedCriteria.length)} /><Metric icon={<CircleDollarSign aria-hidden="true" className="size-4" />} label={t("aiEvaluations.publication")} value={state.version.published_at ? formatDate(state.version.published_at, i18n.resolvedLanguage) : t("aiEvaluations.notPublished")} /></div>
         <section>
           <div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="text-sm font-bold uppercase tracking-wide text-slate-600">Critérios</h3>{state.version.status === "draft" && <p className="mt-1 text-xs text-slate-500">Rascunhos não são disponibilizados para novas submissões.</p>}</div>{editable && <div className="flex flex-wrap gap-2"><button className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-violet-300 px-3 text-sm font-semibold text-violet-800 outline-none hover:bg-violet-50 focus-visible:ring-2 focus-visible:ring-violet-500" disabled={busy} onClick={() => void onSuggest()} type="button">{state.isSuggesting ? <LoaderCircle aria-hidden="true" className="size-4 animate-spin" /> : <Sparkles aria-hidden="true" className="size-4" />}Sugerir critérios</button><button className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-slate-300 px-3 text-sm font-semibold text-slate-800 outline-none hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-teal-500" disabled={busy} onClick={onCriterionAdd} type="button"><Plus aria-hidden="true" className="size-4" />Adicionar</button></div>}</div>
           <div className="mt-3 grid gap-3">
@@ -545,6 +549,6 @@ function isSeverity(value: string): value is AiCriterionSeverity { return SEVERI
 function isMissingInfo(value: string): value is AiCriterionMissingInfoBehavior { return MISSING_INFO.includes(value as AiCriterionMissingInfoBehavior); }
 function getApiMessage(value: unknown, fallback: string) { return isRecord(value) && typeof value.message === "string" ? value.message : fallback; }
 function formatStatus(status: string) { const normalized = status.toLocaleLowerCase("pt-BR"); if (normalized === "draft") return "Rascunho"; if (normalized === "published") return "Publicada"; return status; }
-function formatDate(value: string) { const date = new Date(value); return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat("pt-BR", { dateStyle: "short" }).format(date); }
+function formatDate(value: string, locale?: string) { const date = new Date(value); return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat(locale, { dateStyle: "short" }).format(date); }
 function formatOption(value: string) { return value.replaceAll("_", " "); }
 function formatCost(value: number) { return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "USD", minimumFractionDigits: 4 }).format(value); }

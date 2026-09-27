@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import type {
   LoginCurrentUser,
   LoginFormProps,
@@ -10,8 +11,10 @@ import type {
   PasswordVisibilityIconProps,
 } from "@/types/Autenticacao";
 import type { ApiMessage } from "@/types/Servico";
+import { getLocalizedApiError } from "@/i18n/errors";
 
 export function LoginForm({ onRegister }: LoginFormProps) {
+  const { t } = useTranslation();
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
   const [formState, setFormState] = useState<LoginFormState>({ kind: "idle" });
@@ -36,8 +39,7 @@ export function LoginForm({ onRegister }: LoginFormProps) {
       if (!loginResponse.ok) {
         setFormState({ kind: "idle" });
         toast.error(
-          loginPayload?.message ??
-            "Não foi possível iniciar sua sessão. Tente novamente.",
+          getLocalizedApiError(loginPayload, t("auth.login.failed"), t),
         );
         return;
       }
@@ -49,18 +51,18 @@ export function LoginForm({ onRegister }: LoginFormProps) {
 
       if (!userResponse.ok || !userPayload?.username || !userPayload.email) {
         setFormState({ kind: "idle" });
-        toast.error("Sua sessão foi iniciada, mas não foi possível carregar seu perfil.");
+        toast.error(t("auth.login.profileFailed"));
         return;
       }
 
-      toast.success("Sessão iniciada", {
-        description: `Boas-vindas, ${userPayload.username}.`,
+      toast.success(t("auth.login.success"), {
+        description: t("auth.login.welcome", { username: userPayload.username }),
       });
       form.reset();
       router.replace("/inicio");
     } catch {
       setFormState({ kind: "idle" });
-      toast.error("Não foi possível conectar ao serviço de autenticação.");
+      toast.error(t("auth.login.connectionFailed"));
     }
   }
 
@@ -70,13 +72,13 @@ export function LoginForm({ onRegister }: LoginFormProps) {
     <section className="rounded-2xl border border-slate-200 bg-white/95 p-6 shadow-2xl shadow-slate-400/20 backdrop-blur sm:p-7">
       <div className="mb-7">
         <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
-          Acesso à plataforma
+          {t("auth.login.eyebrow")}
         </p>
         <h2 className="mt-2 text-2xl font-bold tracking-tight text-slate-900">
-          Entre na sua conta
+          {t("auth.login.title")}
         </h2>
         <p className="mt-2 text-sm leading-6 text-slate-600">
-          Use as credenciais institucionais atribuídas ao seu perfil.
+          {t("auth.login.description")}
         </p>
       </div>
 
@@ -86,14 +88,14 @@ export function LoginForm({ onRegister }: LoginFormProps) {
             className="mb-2 block text-sm font-medium text-slate-700"
             htmlFor="identifier"
           >
-            E-mail ou nome de usuário
+            {t("auth.login.identifier")}
           </label>
           <input
             autoComplete="username"
             className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3.5 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-teal-600 focus:ring-3 focus:ring-teal-600/15"
             id="identifier"
             name="identifier"
-            placeholder="nome@instituicao.br"
+            placeholder={t("auth.login.identifierPlaceholder")}
             required
           />
         </div>
@@ -104,9 +106,9 @@ export function LoginForm({ onRegister }: LoginFormProps) {
               className="text-sm font-medium text-slate-700"
               htmlFor="password"
             >
-              Senha
+              {t("auth.login.password")}
             </label>
-            <span className="text-xs text-slate-500">Mínimo de 8 caracteres</span>
+            <span className="text-xs text-slate-500">{t("auth.login.passwordHint")}</span>
           </div>
           <div className="relative">
             <input
@@ -115,12 +117,12 @@ export function LoginForm({ onRegister }: LoginFormProps) {
               id="password"
               minLength={8}
               name="password"
-              placeholder="Digite sua senha"
+              placeholder={t("auth.login.passwordPlaceholder")}
               required
               type={showPassword ? "text" : "password"}
             />
             <button
-              aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
+              aria-label={showPassword ? t("auth.login.hidePassword") : t("auth.login.showPassword")}
               className="absolute inset-y-0 right-0 grid w-11 place-items-center text-slate-500 transition hover:text-teal-700 focus:outline-none"
               onClick={() => setShowPassword((value) => !value)}
               type="button"
@@ -135,21 +137,21 @@ export function LoginForm({ onRegister }: LoginFormProps) {
           disabled={isLoading}
           type="submit"
         >
-          {isLoading ? "Validando acesso…" : "Entrar na plataforma"}
+          {isLoading ? t("auth.login.validating") : t("auth.login.submit")}
           {!isLoading && <ArrowIcon />}
         </button>
       </form>
 
       <div className="mt-6 border-t border-slate-200 pt-5 text-center text-xs leading-5 text-slate-500">
-        <p>Não possui uma conta?</p>
+        <p>{t("auth.login.noAccount")}</p>
         <button
           className="mt-1 font-semibold text-teal-700 transition hover:text-teal-900 focus:outline-none focus:ring-2 focus:ring-teal-500"
           onClick={onRegister}
           type="button"
         >
-          Criar conta
+          {t("auth.login.createAccount")}
         </button>
-        <p className="mt-3">Perfis institucionais são vinculados pela equipe gestora da BraCVAM.</p>
+        <p className="mt-3">{t("auth.login.managedProfiles")}</p>
       </div>
     </section>
   );

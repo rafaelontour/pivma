@@ -3,6 +3,7 @@ export type ServiceResult<T> =
   | { ok: false; status?: number };
 
 export type ApiMessage = {
+  code?: string;
   message?: string;
 };
 

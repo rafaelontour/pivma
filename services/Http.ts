@@ -2,9 +2,20 @@ import "server-only";
 
 import axios from "axios";
 
-const baseURL = process.env.PIVMA_API_URL ?? "https://api.pivma.acerola.dev.br";
+const configuredApiUrl = process.env.API_PIVMA;
 
-export const apiOrigin = new URL(baseURL).origin;
+if (!configuredApiUrl) {
+  throw new Error("A variável de ambiente API_PIVMA não foi configurada.");
+}
+
+const parsedApiUrl = new URL(configuredApiUrl);
+parsedApiUrl.hash = "";
+parsedApiUrl.search = "";
+parsedApiUrl.pathname = parsedApiUrl.pathname.replace(/\/docs\/?$/, "") || "/";
+
+const baseURL = parsedApiUrl.toString().replace(/\/$/, "");
+
+export const apiOrigin = parsedApiUrl.origin;
 
 export const http = axios.create({
   baseURL,
