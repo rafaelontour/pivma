@@ -4,7 +4,13 @@ A equipe BraCVAM precisa acompanhar todos os processos da plataforma e identific
 
 ## What Changes
 
-- Adicionar uma página autenticada de Kanban para a equipe BraCVAM, com os processos agrupados em colunas conforme o estado informado pela API.
+- Adicionar uma página autenticada de Kanban para a equipe BraCVAM, com os processos agrupados nas macroetapas operacionais Novas submissões, Em revisão, Em andamento e Encerradas.
+- Derivar a posição operacional combinando o ciclo de vida do processo com as tarefas, fases e rodadas correntes informadas pela API, sem confundir `OPEN` com uma etapa do workflow.
+- Omitir do Kanban processos cujo formulário inicial ainda não foi enviado, de modo que rascunhos permaneçam visíveis somente ao proponente.
+- Sinalizar no cartão quando a ação pertence ao proponente, mantendo a consulta de detalhes disponível e bloqueando apenas a ação de análise até a correção ser reenviada.
+- Abrir a triagem do processo selecionado em um modal que use efetivamente 85% da viewport, reutilizando o workspace existente, mantendo a decisão Aprovado/Correção/Reprovado visível no painel e retirando o acesso redundante Triagem da barra lateral.
+- Exibir datas e motivo de encerramento nos detalhes somente para processos efetivamente encerrados.
+- Permitir filtrar a coluna Em andamento pela fase corrente do processo.
 - Exibir em cada cartão a identificação essencial do processo e disponibilizar acesso aos seus detalhes sem carregar dados sensíveis desnecessários.
 - Carregar todos os processos acessíveis, respeitando a paginação do serviço externo, e representar estados vazios, falhas e ausência de autorização.
 - Manter o Kanban estritamente em modo de consulta, sem permitir que a equipe BraCVAM ou qualquer outra pessoa mova cartões ou altere estados pela interface.
@@ -26,5 +32,5 @@ A equipe BraCVAM precisa acompanhar todos os processos da plataforma e identific
 ## Impact
 
 - Nova página autenticada, componentes de quadro, coluna e cartão, tipos de domínio, serviço de processos e Route Handlers internos.
-- Uso de `GET /processes`, atualmente paginado, para compor o quadro completo.
+- Uso de `GET /processes` e `GET /tasks`, ambos paginados, para compor o quadro completo.
 - Nenhuma operação de alteração de estado será adicionada: os cartões apenas refletem o valor de `status` retornado pela API.

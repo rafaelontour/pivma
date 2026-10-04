@@ -7,7 +7,6 @@ import { useEffect, useState } from "react";
 import {
   Activity,
   BrainCircuit,
-  ClipboardCheck,
   House,
   LayoutDashboard,
   FilePenLine,
@@ -21,6 +20,7 @@ import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import { LanguageToggle } from "./language-toggle";
 import { normalizeLocale } from "@/i18n/config";
+import { getLocalizedApiError } from "@/i18n/errors";
 import { useSessionLocale } from "@/i18n/provider";
 import type {
   AuthenticatedShellProps,
@@ -61,9 +61,7 @@ export function AuthenticatedShell({
             toast.error(
               response.status === 401
                 ? t("shell.sessionExpired")
-                : payload && "message" in payload && typeof payload.message === "string"
-                  ? payload.message
-                  : t("shell.sessionFailed"),
+                : getLocalizedApiError(payload, t("shell.sessionFailed"), t),
             );
             router.replace("/login");
           }
@@ -125,7 +123,6 @@ export function AuthenticatedShell({
     "ai_evaluations.read",
     "ai_evaluations.manage",
   ].some((permission) => session.user.permissions.includes(permission));
-  const canViewTriage = session.user.permissions.includes("triage.review");
   const canManageForms =
     session.user.isAdministrator ||
     session.user.permissions.includes("rbac.read") ||
@@ -232,11 +229,7 @@ export function AuthenticatedShell({
 
       <Sidebar
         activePage={activePage}
-        canViewSubmissions={session.user.profiles.some(
-          (profile) => profile.name === "Proponente",
-        )}
         canViewProcesses={canViewProcesses}
-        canViewTriage={canViewTriage}
         canViewObservability={session.user.isAdministrator}
         canViewSettings={canViewSettings}
         expanded={isSidebarExpanded}
@@ -296,9 +289,7 @@ export function AuthenticatedShell({
 
 function Sidebar({
   activePage,
-  canViewSubmissions,
   canViewProcesses,
-  canViewTriage,
   canViewObservability,
   canViewSettings,
   expanded,
@@ -338,21 +329,19 @@ function Sidebar({
           {expanded && <span>{t("shell.navigation.home")}</span>}
         </Link>
 
-        {canViewSubmissions && (
-          <Link
-            aria-current={activePage === "submissions" ? "page" : undefined}
-            aria-label={t("shell.navigation.submissions")}
-            className={`mt-2 ${linkClassName(activePage === "submissions")}`}
-            href="/submissoes"
-          >
-            <FilePenLine
-              aria-hidden="true"
-              className="size-5 shrink-0"
-              strokeWidth={2.2}
-            />
-            {expanded && <span>{t("shell.navigation.submissions")}</span>}
-          </Link>
-        )}
+        <Link
+          aria-current={activePage === "submissions" ? "page" : undefined}
+          aria-label={t("shell.navigation.submissions")}
+          className={`mt-2 ${linkClassName(activePage === "submissions")}`}
+          href="/submissoes"
+        >
+          <FilePenLine
+            aria-hidden="true"
+            className="size-5 shrink-0"
+            strokeWidth={2.2}
+          />
+          {expanded && <span>{t("shell.navigation.submissions")}</span>}
+        </Link>
 
         {canViewProcesses && (
           <Link
@@ -367,22 +356,6 @@ function Sidebar({
               strokeWidth={2.2}
             />
             {expanded && <span>{t("shell.navigation.processes")}</span>}
-          </Link>
-        )}
-
-        {canViewTriage && (
-          <Link
-            aria-current={activePage === "triage" ? "page" : undefined}
-            aria-label={t("shell.navigation.triage")}
-            className={`mt-2 ${linkClassName(activePage === "triage")}`}
-            href="/triagem"
-          >
-            <ClipboardCheck
-              aria-hidden="true"
-              className="size-5 shrink-0"
-              strokeWidth={2.2}
-            />
-            {expanded && <span>{t("shell.navigation.triage")}</span>}
           </Link>
         )}
 

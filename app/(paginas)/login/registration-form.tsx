@@ -4,6 +4,7 @@ import type { FormEvent } from "react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
+import { getLocalizedApiError } from "@/i18n/errors";
 import type {
   PasswordChecklistProps,
   PasswordFieldProps,
@@ -81,7 +82,7 @@ export function RegistrationForm({ onLogin }: RegistrationFormProps) {
         setPasswordConfirmation("");
         setRegistrationState({ kind: "idle" });
         toast.error(
-          responseBody?.message ?? t("auth.register.failed"),
+          getLocalizedApiError(responseBody, t("auth.register.failed"), t),
         );
         return;
       }

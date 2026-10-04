@@ -14,7 +14,7 @@ export async function GET(request: Request) {
   const accessToken = cookieStore.get("access_token")?.value;
 
   if (!accessToken) {
-    return NextResponse.json({ message: "Sessão não encontrada." }, { status: 401 });
+    return NextResponse.json({ code: "AUTH_REQUIRED", message: "Sessão não encontrada." }, { status: 401 });
   }
 
   const { searchParams } = new URL(request.url);
@@ -23,10 +23,7 @@ export async function GET(request: Request) {
   const status = searchParams.get("status")?.trim();
 
   if (page === null || size === null || (status && status.length > 128)) {
-    return NextResponse.json(
-      { message: "Parâmetros de paginação ou estado inválidos." },
-      { status: 400 },
-    );
+    return NextResponse.json({ code: "VALIDATION_ERROR", message: "Parâmetros de paginação ou estado inválidos." }, { status: 400 });
   }
 
   const currentUser = await getCurrentUser(accessToken);
@@ -36,10 +33,7 @@ export async function GET(request: Request) {
   }
 
   if (!canReadProcessKanban(currentUser.data.access.global_permissions)) {
-    return NextResponse.json(
-      { message: "Você não tem permissão para consultar processos." },
-      { status: 403 },
-    );
+    return NextResponse.json({ code: "FORBIDDEN", message: "Você não tem permissão para consultar processos." }, { status: 403 });
   }
 
   const result = await listProcesses(accessToken, {

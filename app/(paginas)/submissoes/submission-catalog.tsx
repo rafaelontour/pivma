@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import {
   AlertCircle,
   Check,
@@ -8,13 +11,16 @@ import {
   FileClock,
   FilePenLine,
   FilePlus2,
+  LockKeyhole,
   LoaderCircle,
   RefreshCw,
   Save,
   Send,
+  Trash2,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { getLocalizedApiError } from "@/i18n/errors";
 import { DynamicFormFieldControl } from "@/components/dynamic-form-field";
 import {
   buildDynamicFormInputs,
@@ -25,12 +31,16 @@ import type { ProcessInstance } from "@/types/Processo";
 import type { ApiMessage, ApiRecord } from "@/types/Servico";
 import type {
   DynamicFormField,
+  DynamicFormReview,
   SaveSubmissionDraftResult,
   SubmissionCatalogMessageProps,
   SubmissionCatalogState,
   SubmissionDialogContentProps,
+  SubmissionDialogIntent,
   SubmissionDialogState,
   SubmissionDraftCardProps,
+  SubmissionDraftDeletionDialogProps,
+  SubmissionDraftDeletionState,
   SubmissionDraftsState,
   SubmissionFieldInputs,
   SubmissionForm,
@@ -40,6 +50,10 @@ import type {
   SubmissionTab,
   SubmissionTemplate,
   SubmissionTemplateCardProps,
+  SubmissionReturnReview,
+  SubmissionReturnReviewChoice,
+  SubmissionReturnReviewResult,
+  SubmissionReturnReviewSnapshot,
   SubmittedSubmissionsState,
   SubmitSubmissionResult,
 } from "@/types/Submissao";
@@ -51,7 +65,8 @@ import {
 } from "./submission-pre-evaluation";
 
 export function SubmissionCatalog() {
-  const [activeTab, setActiveTab] = useState<SubmissionTab>("drafts");
+  const { t } = useTranslation();
+  const [activeTab, setActiveTab] = useState<SubmissionTab>("templates");
   const [state, setState] = useState<SubmissionCatalogState>({
     kind: "loading",
   });
@@ -65,28 +80,31 @@ export function SubmissionCatalog() {
   const [submittedState, setSubmittedState] =
     useState<SubmittedSubmissionsState>({ kind: "loading" });
   const [openingDraftId, setOpeningDraftId] = useState<string | null>(null);
+  const [draftDeletion, setDraftDeletion] =
+    useState<SubmissionDraftDeletionState>({ kind: "closed" });
   const [identificationTemplate, setIdentificationTemplate] =
     useState<SubmissionTemplate | null>(null);
   const [submissionTitle, setSubmissionTitle] = useState("");
   const isCreatingRef = useRef(false);
   const isOpeningRef = useRef(false);
+  const isDeletingRef = useRef(false);
 
   useEffect(() => {
     let active = true;
 
-    void requestTemplates().then((nextState) => {
+    void requestTemplates(t).then((nextState) => {
       if (active) {
         setState(nextState);
       }
     });
 
-    void requestDrafts().then((nextState) => {
+    void requestDrafts(t).then((nextState) => {
       if (active) {
         setDraftsState(nextState);
       }
     });
 
-    void requestSubmittedSubmissions().then((nextState) => {
+    void requestSubmittedSubmissions(t).then((nextState) => {
       if (active) {
         setSubmittedState(nextState);
       }
@@ -95,7 +113,7 @@ export function SubmissionCatalog() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (dialog.kind === "closed") {
@@ -124,7 +142,7 @@ export function SubmissionCatalog() {
       return;
     }
     if (!template || submissionTitle.trim().length < 3 || submissionTitle.trim().length > 255) {
-      toast.error("Informe um título entre 3 e 255 caracteres.");
+      toast.error(t("submissions.titleValidation"));
       return;
     }
 
@@ -141,18 +159,16 @@ export function SubmissionCatalog() {
 
       if (!createResponse.ok || !isProcessInstance(createPayload)) {
         toast.error(
-          getApiMessage(createPayload, "Não foi possível criar o rascunho."),
+          getApiMessage(createPayload, t("submissions.createFailed"), t),
         );
         return;
       }
 
-      toast.success(
-        `Formulário ${createPayload.code} iniciado. O preenchimento ainda não foi salvo.`,
-      );
+      toast.success(t("submissions.created", { code: createPayload.code }));
       setIdentificationTemplate(null);
       await loadForm(template, createPayload);
     } catch {
-      toast.error("Não foi possível conectar ao serviço de submissões.");
+      toast.error(t("submissions.connectionFailed"));
     } finally {
       isCreatingRef.current = false;
       setCreatingTemplateKey(null);
@@ -182,27 +198,80 @@ export function SubmissionCatalog() {
 
   function refreshDrafts() {
     setDraftsState({ kind: "loading" });
-    void requestDrafts().then(setDraftsState);
+    void requestDrafts(t).then(setDraftsState);
+  }
+
+  async function deleteDraft() {
+    if (draftDeletion.kind === "closed" || isDeletingRef.current) {
+      return;
+    }
+
+    const draft = draftDeletion.draft;
+    isDeletingRef.current = true;
+    setDraftDeletion({ kind: "deleting", draft });
+
+    try {
+      const response = await fetch(`/api/submissions/${draft.id}`, {
+        method: "DELETE",
+      });
+      const payload = response.status === 204
+        ? null
+        : await response.json().catch(() => null) as unknown;
+
+      if (!response.ok) {
+        setDraftDeletion({
+          kind: "error",
+          draft,
+          message: getApiMessage(payload, t("submissions.deleteFailed"), t),
+        });
+        return;
+      }
+
+      setDraftsState((current) =>
+        current.kind === "ready"
+          ? {
+              kind: "ready",
+              drafts: current.drafts.filter(
+                (candidate) => candidate.id !== draft.id,
+              ),
+            }
+          : current,
+      );
+      setDraftDeletion({ kind: "closed" });
+      toast.success(t("submissions.deleted", { code: draft.code }));
+    } catch {
+      setDraftDeletion({
+        kind: "error",
+        draft,
+        message: t("submissions.deleteFailed"),
+      });
+    } finally {
+      isDeletingRef.current = false;
+    }
   }
 
   function refreshTemplates() {
     setState({ kind: "loading" });
-    void requestTemplates().then(setState);
+    void requestTemplates(t).then(setState);
   }
 
   function refreshSubmittedSubmissions() {
     setSubmittedState({ kind: "loading" });
-    void requestSubmittedSubmissions().then(setSubmittedState);
+    void requestSubmittedSubmissions(t).then(setSubmittedState);
   }
 
   async function loadForm(
     template: SubmissionTemplate,
     process: ProcessInstance,
+    intent: SubmissionDialogIntent = "edit",
   ) {
     try {
-      const response = await fetch(`/api/submissions/${process.id}/form`, {
-        cache: "no-store",
-      });
+      const [response, returnReviewResponse] = await Promise.all([
+        fetch(`/api/submissions/${process.id}/form`, { cache: "no-store" }),
+        intent === "return-review"
+          ? fetch(`/api/submissions/${process.id}/return-review`, { cache: "no-store" })
+          : Promise.resolve(null),
+      ]);
       const payload = (await response.json().catch(() => null)) as unknown;
 
       if (!response.ok || !isSubmissionForm(payload)) {
@@ -210,29 +279,62 @@ export function SubmissionCatalog() {
           kind: "error",
           template,
           process,
+          intent,
           message: getApiMessage(
             payload,
-            "O rascunho foi criado, mas o formulário não pôde ser carregado.",
+            t("submissions.formLoadFailed"),
+            t,
           ),
         });
         return;
       }
 
-      setDialog({ kind: "ready", template, process, form: payload });
+      let returnReview: SubmissionReturnReview | null = null;
+      if (returnReviewResponse) {
+        const returnPayload = await returnReviewResponse.json().catch(() => null) as unknown;
+        if (!returnReviewResponse.ok || !isReturnReview(returnPayload)) {
+          setDialog({
+            kind: "error",
+            template,
+            process,
+            intent,
+            message: getApiMessage(returnPayload, t("submissions.returnReviewLoadFailed"), t),
+          });
+          return;
+        }
+        returnReview = returnPayload;
+        storeReturnReviewSnapshot(process.id, { returnReview, reviews: payload.reviews });
+      } else if (!payload.is_submitted) {
+        const snapshot = readReturnReviewSnapshot(process.id);
+        if (snapshot) {
+          returnReview = snapshot.returnReview;
+          payload.reviews = snapshot.reviews;
+        }
+      }
+
+      setDialog({ kind: "ready", template, process, intent, form: payload, returnReview });
     } catch {
       setDialog({
         kind: "error",
         template,
         process,
-        message: "O rascunho foi criado, mas o formulário não pôde ser carregado.",
+        intent,
+        message: t("submissions.formLoadFailed"),
       });
     }
+  }
+
+  async function openReturnReview(process: ProcessInstance) {
+    const template = state.kind === "ready"
+      ? state.templates.find((candidate) => candidate.key === process.template_key) ?? buildFallbackTemplate(process)
+      : buildFallbackTemplate(process);
+    await loadForm(template, process, "return-review");
   }
 
   return (
     <div className="flex flex-1 flex-col py-7">
       <div
-        aria-label="Áreas de submissões"
+        aria-label={t("submissions.tabsLabel")}
         className="mb-6 grid w-full grid-cols-3 rounded-xl border border-slate-200 bg-slate-100 p-1"
         role="tablist"
       >
@@ -249,7 +351,7 @@ export function SubmissionCatalog() {
           role="tab"
           type="button"
         >
-          Nova submissão
+          {t("submissions.tabs.new")}
         </button>
         <button
           aria-controls="submission-panel-submitted"
@@ -264,7 +366,7 @@ export function SubmissionCatalog() {
           role="tab"
           type="button"
         >
-          Submissões
+          {t("submissions.tabs.submitted")}
         </button>
           <button
           aria-controls="submission-panel-drafts"
@@ -279,7 +381,7 @@ export function SubmissionCatalog() {
           role="tab"
           type="button"
         >
-          Rascunhos
+          {t("submissions.tabs.drafts")}
         </button>
       </div>
 
@@ -293,10 +395,10 @@ export function SubmissionCatalog() {
         <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.12em] text-teal-700">
-              Continue de onde parou
+              {t("submissions.draftsEyebrow")}
             </p>
             <h2 className="mt-1 text-xl font-bold text-slate-900" id="drafts-title">
-              Meus rascunhos
+              {t("submissions.draftsTitle")}
             </h2>
           </div>
           {draftsState.kind === "ready" && draftsState.drafts.length > 0 && (
@@ -306,7 +408,7 @@ export function SubmissionCatalog() {
               type="button"
             >
               <RefreshCw aria-hidden="true" className="size-4" />
-              Atualizar
+              {t("submissions.refresh")}
             </button>
           )}
         </div>
@@ -314,14 +416,14 @@ export function SubmissionCatalog() {
         {draftsState.kind === "loading" ? (
           <div className="flex min-h-32 items-center justify-center gap-3 rounded-2xl border border-slate-200 bg-white text-sm text-slate-600">
             <LoaderCircle aria-hidden="true" className="size-5 animate-spin text-teal-700" />
-            Carregando seus rascunhos…
+            {t("submissions.loadingDrafts")}
           </div>
         ) : draftsState.kind === "error" ? (
           <div className="rounded-2xl border border-rose-200 bg-rose-50 p-5">
             <div className="flex items-start gap-3">
               <AlertCircle aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-rose-700" />
               <div>
-                <p className="font-semibold text-rose-900">Não foi possível carregar seus rascunhos</p>
+                <p className="font-semibold text-rose-900">{t("submissions.draftsLoadTitle")}</p>
                 <p className="mt-1 text-sm leading-6 text-rose-800">{draftsState.message}</p>
               </div>
             </div>
@@ -331,15 +433,15 @@ export function SubmissionCatalog() {
               type="button"
             >
               <RefreshCw aria-hidden="true" className="size-4" />
-              Tentar novamente
+              {t("common.retry")}
             </button>
           </div>
         ) : draftsState.drafts.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-5 py-8 text-center">
             <FileClock aria-hidden="true" className="mx-auto size-8 text-slate-400" />
-            <p className="mt-3 font-semibold text-slate-800">Nenhum rascunho disponível</p>
+            <p className="mt-3 font-semibold text-slate-800">{t("submissions.emptyDraftsTitle")}</p>
             <p className="mt-1 text-sm text-slate-500">
-              Depois de iniciar uma submissão, você poderá retomá-la por aqui.
+              {t("submissions.emptyDraftsDescription")}
             </p>
           </div>
         ) : (
@@ -353,8 +455,18 @@ export function SubmissionCatalog() {
                 <SubmissionDraftCard
                   draft={draft}
                   isOpening={openingDraftId === draft.id}
-                  isOpeningLocked={openingDraftId !== null || creatingTemplateKey !== null}
+                  isOpeningLocked={
+                    openingDraftId !== null ||
+                    creatingTemplateKey !== null ||
+                    draftDeletion.kind !== "closed"
+                  }
                   key={draft.id}
+                  onDelete={(selectedDraft) =>
+                    setDraftDeletion({
+                      kind: "confirming",
+                      draft: selectedDraft,
+                    })
+                  }
                   onOpen={(selectedDraft) => void openDraft(selectedDraft)}
                   templateName={templateName ?? draft.template_key}
                 />
@@ -375,13 +487,13 @@ export function SubmissionCatalog() {
         <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.12em] text-teal-700">
-              Acompanhe o andamento
+              {t("submissions.submittedEyebrow")}
             </p>
             <h2
               className="mt-1 text-xl font-bold text-slate-900"
               id="submitted-submissions-title"
             >
-              Submissões
+              {t("submissions.submittedTitle")}
             </h2>
           </div>
           {submittedState.kind === "ready" &&
@@ -392,7 +504,7 @@ export function SubmissionCatalog() {
                 type="button"
               >
                 <RefreshCw aria-hidden="true" className="size-4" />
-                Atualizar
+                {t("submissions.refresh")}
               </button>
             )}
         </div>
@@ -403,7 +515,7 @@ export function SubmissionCatalog() {
               aria-hidden="true"
               className="size-5 animate-spin text-teal-700"
             />
-            Carregando suas submissões…
+            {t("submissions.loadingSubmitted")}
           </div>
         ) : submittedState.kind === "error" ? (
           <div className="rounded-2xl border border-rose-200 bg-rose-50 p-5">
@@ -414,7 +526,7 @@ export function SubmissionCatalog() {
               />
               <div>
                 <p className="font-semibold text-rose-900">
-                  Não foi possível carregar suas submissões
+                  {t("submissions.submittedLoadTitle")}
                 </p>
                 <p className="mt-1 text-sm leading-6 text-rose-800">
                   {submittedState.message}
@@ -427,7 +539,7 @@ export function SubmissionCatalog() {
               type="button"
             >
               <RefreshCw aria-hidden="true" className="size-4" />
-              Tentar novamente
+              {t("common.retry")}
             </button>
           </div>
         ) : submittedState.submissions.length === 0 ? (
@@ -437,10 +549,10 @@ export function SubmissionCatalog() {
               className="mx-auto size-8 text-slate-400"
             />
             <p className="mt-3 font-semibold text-slate-800">
-              Nenhuma submissão enviada
+              {t("submissions.emptySubmittedTitle")}
             </p>
             <p className="mt-1 text-sm text-slate-500">
-              Quando você enviar um método para análise, ele aparecerá aqui.
+              {t("submissions.emptySubmittedDescription")}
             </p>
           </div>
         ) : (
@@ -456,6 +568,7 @@ export function SubmissionCatalog() {
               return (
                 <SubmissionTrackingCard
                   key={submission.id}
+                  onOpenReturnReview={(selected) => void openReturnReview(selected)}
                   onProcessChanged={() => {
                     refreshDrafts();
                     refreshSubmittedSubmissions();
@@ -478,40 +591,38 @@ export function SubmissionCatalog() {
         tabIndex={0}
       >
         <p className="text-xs font-bold uppercase tracking-[0.12em] text-teal-700">
-          Comece uma proposta
+          {t("submissions.newEyebrow")}
         </p>
         <h2 className="mt-1 text-xl font-bold text-slate-900" id="new-submission-title">
-          Nova submissão
+          {t("submissions.newTitle")}
         </h2>
 
       <div className="mb-6 mt-3 w-full">
         <p className="text-sm leading-6 text-slate-600">
-          Cada opção representa um propósito de submissão diferente. Ao escolher
-          um template, criaremos a estrutura necessária para abrir o formulário.
-          O preenchimento só será guardado quando você clicar em Salvar rascunho.
+          {t("submissions.newDescription")}
         </p>
       </div>
 
       {state.kind === "loading" ? (
         <SubmissionCatalogMessage
-          description="Estamos consultando os tipos de formulário publicados pelo BraCVAM."
-          title="Carregando tipos de submissão…"
+          description={t("submissions.loadingTemplatesDescription")}
+          title={t("submissions.loadingTemplatesTitle")}
         />
       ) : state.kind === "error" ? (
         <SubmissionCatalogMessage
-          actionLabel="Tentar novamente"
+          actionLabel={t("common.retry")}
           description={state.message}
           onAction={refreshTemplates}
-          title="Não foi possível carregar as submissões"
+          title={t("submissions.templatesLoadTitle")}
         />
       ) : state.templates.length === 0 ? (
         <SubmissionCatalogMessage
-          description="Quando um template for publicado, ele aparecerá aqui para iniciar o preenchimento."
-          title="Nenhum tipo de submissão disponível"
+          description={t("submissions.emptyTemplatesDescription")}
+          title={t("submissions.emptyTemplatesTitle")}
         />
       ) : (
         <section
-          aria-label="Tipos de submissão disponíveis"
+          aria-label={t("submissions.templatesLabel")}
           className="grid content-start gap-4 pb-8 md:grid-cols-2 xl:grid-cols-3"
         >
           {state.templates.map((template) => (
@@ -532,9 +643,38 @@ export function SubmissionCatalog() {
         <SubmissionFormDialog
           key={`${dialog.process.id}-${dialog.kind}`}
           onClose={() => setDialog({ kind: "closed" })}
-          onRetry={() => void loadForm(dialog.template, dialog.process)}
+          onRetry={() => void loadForm(dialog.template, dialog.process, dialog.intent)}
+          onReturnResolved={(choice) => {
+            setDialog({ kind: "closed" });
+            if (choice === "REVISE") {
+              setActiveTab("drafts");
+            }
+            refreshDrafts();
+            refreshSubmittedSubmissions();
+          }}
           onSaved={refreshDrafts}
-          onSubmitted={() => {
+          onSubmitted={(submittedProcess) => {
+            setDraftsState((current) =>
+              current.kind === "ready"
+                ? {
+                    kind: "ready",
+                    drafts: current.drafts.filter(
+                      (draft) => draft.id !== submittedProcess.id,
+                    ),
+                  }
+                : current,
+            );
+            setSubmittedState((current) =>
+              current.kind === "ready" &&
+              !current.submissions.some(
+                (submission) => submission.id === submittedProcess.id,
+              )
+                ? {
+                    kind: "ready",
+                    submissions: [submittedProcess, ...current.submissions],
+                  }
+                : current,
+            );
             setDialog({ kind: "closed" });
             setActiveTab("submitted");
             refreshDrafts();
@@ -554,6 +694,18 @@ export function SubmissionCatalog() {
           title={submissionTitle}
         />
       )}
+
+      {draftDeletion.kind !== "closed" && (
+        <SubmissionDraftDeletionDialog
+          onClose={() => {
+            if (draftDeletion.kind !== "deleting") {
+              setDraftDeletion({ kind: "closed" });
+            }
+          }}
+          onConfirm={() => void deleteDraft()}
+          state={draftDeletion}
+        />
+      )}
     </div>
   );
 }
@@ -564,6 +716,8 @@ function SubmissionTemplateCard({
   isCreationLocked,
   onSelect,
 }: SubmissionTemplateCardProps) {
+  const { t } = useTranslation();
+
   return (
     <article className="flex min-h-64 flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-300/30 transition hover:border-teal-300 hover:shadow-md">
       <div className="grid size-11 place-items-center rounded-xl bg-teal-600/10 text-teal-800 ring-1 ring-inset ring-teal-700/15">
@@ -574,7 +728,7 @@ function SubmissionTemplateCard({
       </p>
       <h2 className="mt-2 text-lg font-bold text-slate-900">{template.name}</h2>
       <p className="mt-3 flex-1 text-sm leading-6 text-slate-600">
-        {template.description || "Este tipo de submissão ainda não possui descrição."}
+        {template.description || t("submissions.noTemplateDescription")}
       </p>
       <button
         className="mt-5 inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-semibold text-white outline-none transition hover:bg-teal-800 focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2 disabled:cursor-wait disabled:bg-slate-400"
@@ -587,7 +741,7 @@ function SubmissionTemplateCard({
         ) : (
           <FilePlus2 aria-hidden="true" className="size-4" />
         )}
-        {isCreating ? "Criando rascunho…" : "Iniciar submissão"}
+        {isCreating ? t("submissions.creatingDraft") : t("submissions.startSubmission")}
       </button>
     </article>
   );
@@ -601,14 +755,16 @@ function SubmissionIdentificationDialog({
   onClose,
   onConfirm,
 }: SubmissionIdentificationDialogProps) {
+  const { t } = useTranslation();
+
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/50 p-4" role="presentation">
       <div aria-labelledby="submission-identification-title" aria-modal="true" className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl" role="dialog">
         <FilePlus2 aria-hidden="true" className="size-8 text-teal-700" />
-        <h2 className="mt-3 text-xl font-bold text-slate-900" id="submission-identification-title">Identifique sua submissão</h2>
-        <p className="mt-2 text-sm leading-6 text-slate-600">Informe um título significativo para “{template.name}”. O processo só será criado depois desta confirmação.</p>
-        <label className="mt-4 grid gap-1.5 text-sm font-semibold text-slate-800">Título<input autoFocus className="min-h-11 rounded-xl border border-slate-300 px-3 font-normal outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20" disabled={isCreating} maxLength={255} minLength={3} onChange={(event) => onTitleChange(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") onConfirm(); }} placeholder="Ex.: Validação do método de irritação ocular" value={title} /></label>
-        <div className="mt-5 flex justify-end gap-3"><button className="min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-bold text-slate-700 outline-none focus-visible:ring-2 focus-visible:ring-teal-500" disabled={isCreating} onClick={onClose} type="button">Cancelar</button><button className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-teal-700 px-4 text-sm font-bold text-white outline-none focus-visible:ring-2 focus-visible:ring-teal-500 disabled:opacity-60" disabled={isCreating || title.trim().length < 3} onClick={onConfirm} type="button">{isCreating && <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />}Criar e abrir formulário</button></div>
+        <h2 className="mt-3 text-xl font-bold text-slate-900" id="submission-identification-title">{t("submissions.identifyTitle")}</h2>
+        <p className="mt-2 text-sm leading-6 text-slate-600">{t("submissions.identifyDescription", { template: template.name })}</p>
+        <label className="mt-4 grid gap-1.5 text-sm font-semibold text-slate-800">{t("submissions.titleLabel")}<input autoFocus className="min-h-11 rounded-xl border border-slate-300 px-3 font-normal outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20" disabled={isCreating} maxLength={255} minLength={3} onChange={(event) => onTitleChange(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") onConfirm(); }} placeholder={t("submissions.titlePlaceholder")} value={title} /></label>
+        <div className="mt-5 flex justify-end gap-3"><button className="min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-bold text-slate-700 outline-none focus-visible:ring-2 focus-visible:ring-teal-500" disabled={isCreating} onClick={onClose} type="button">{t("common.cancel")}</button><button className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-teal-700 px-4 text-sm font-bold text-white outline-none focus-visible:ring-2 focus-visible:ring-teal-500 disabled:opacity-60" disabled={isCreating || title.trim().length < 3} onClick={onConfirm} type="button">{isCreating && <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />}{t("submissions.createAndOpen")}</button></div>
       </div>
     </div>
   );
@@ -620,9 +776,13 @@ function SubmissionDraftCard({
   isOpening,
   isOpeningLocked,
   onOpen,
+  onDelete,
 }: SubmissionDraftCardProps) {
+  const { t } = useTranslation();
   const [evaluation, setEvaluation] = useState<import("@/types/Submissao").SubmissionPreEvaluation | null>(null);
   const [directReviewOpen, setDirectReviewOpen] = useState(false);
+  const isCorrection = draft.has_been_submitted === true;
+  const canDelete = !isCorrection && (draft.available_actions?.includes("DELETE") ?? false);
 
   useEffect(() => {
     let active = true;
@@ -639,7 +799,7 @@ function SubmissionDraftCard({
           <FileClock aria-hidden="true" className="size-5" />
         </div>
         <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-amber-800">
-          Em preenchimento
+          {t(isCorrection ? "submissions.correctionStatus" : "submissions.draftStatus")}
         </span>
       </div>
       <p className="mt-4 font-mono text-[11px] font-bold uppercase tracking-[0.1em] text-teal-700">
@@ -662,14 +822,116 @@ function SubmissionDraftCard({
           ) : (
             <FilePenLine aria-hidden="true" className="size-3.5" />
           )}
-          {isOpening ? "Abrindo…" : "Retomar edição"}
+          {isOpening ? t("submissions.opening") : t("submissions.resumeEditing")}
         </button>
-        {evaluation?.consolidated_result === "negative" && !evaluation.direct_review_request && (
-          <button className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg border border-violet-300 px-3 py-1.5 text-xs font-semibold text-violet-800 outline-none hover:bg-violet-50 focus-visible:ring-2 focus-visible:ring-violet-500" disabled={isOpeningLocked} onClick={() => setDirectReviewOpen(true)} type="button">Solicitar revisão humana</button>
+        {!isCorrection && evaluation?.consolidated_result === "negative" && !evaluation.direct_review_request && (
+          <button className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg border border-violet-300 px-3 py-1.5 text-xs font-semibold text-violet-800 outline-none hover:bg-violet-50 focus-visible:ring-2 focus-visible:ring-violet-500" disabled={isOpeningLocked} onClick={() => setDirectReviewOpen(true)} type="button">{t("submissions.requestHumanReview")}</button>
         )}
+        {canDelete && <button
+          className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg border border-rose-300 px-3 py-1.5 text-xs font-semibold text-rose-800 outline-none transition hover:bg-rose-50 focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:ring-offset-2 disabled:cursor-wait disabled:border-slate-300 disabled:text-slate-400"
+          disabled={isOpeningLocked}
+          onClick={() => onDelete(draft)}
+          type="button"
+        >
+          <Trash2 aria-hidden="true" className="size-3.5" />
+          {t("submissions.deleteDraft")}
+        </button>}
       </div>
       <DirectReviewDialog isOpen={directReviewOpen} onClose={() => setDirectReviewOpen(false)} onConfirmed={() => window.location.reload()} process={draft} />
     </article>
+  );
+}
+
+function SubmissionDraftDeletionDialog({
+  state,
+  onClose,
+  onConfirm,
+}: SubmissionDraftDeletionDialogProps) {
+  const { t } = useTranslation();
+  const isDeleting = state.kind === "deleting";
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape" && !isDeleting) {
+        onClose();
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [isDeleting, onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 grid place-items-center bg-slate-950/50 p-4"
+      role="presentation"
+    >
+      <div
+        aria-describedby="delete-draft-description"
+        aria-labelledby="delete-draft-title"
+        aria-modal="true"
+        className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl"
+        role="dialog"
+      >
+        <div className="grid size-11 place-items-center rounded-xl bg-rose-100 text-rose-800">
+          <Trash2 aria-hidden="true" className="size-5" />
+        </div>
+        <h2
+          className="mt-4 text-xl font-bold text-slate-900"
+          id="delete-draft-title"
+        >
+          {t("submissions.deleteDraftTitle")}
+        </h2>
+        <p
+          className="mt-2 text-sm leading-6 text-slate-600"
+          id="delete-draft-description"
+        >
+          {t("submissions.deleteDraftDescription", {
+            code: state.draft.code,
+            title: state.draft.title,
+          })}
+        </p>
+
+        {state.kind === "error" && (
+          <div
+            className="mt-4 flex items-start gap-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800"
+            role="alert"
+          >
+            <AlertCircle
+              aria-hidden="true"
+              className="mt-0.5 size-4 shrink-0"
+            />
+            <span>{state.message}</span>
+          </div>
+        )}
+
+        <div className="mt-6 flex justify-end gap-3">
+          <button
+            className="min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-bold text-slate-700 outline-none focus-visible:ring-2 focus-visible:ring-teal-500 disabled:opacity-60"
+            disabled={isDeleting}
+            onClick={onClose}
+            type="button"
+          >
+            {t("common.cancel")}
+          </button>
+          <button
+            className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-rose-700 px-4 text-sm font-bold text-white outline-none transition hover:bg-rose-800 focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:ring-offset-2 disabled:cursor-wait disabled:bg-slate-400"
+            disabled={isDeleting}
+            onClick={onConfirm}
+            type="button"
+          >
+            {isDeleting ? (
+              <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
+            ) : (
+              <Trash2 aria-hidden="true" className="size-4" />
+            )}
+            {isDeleting
+              ? t("submissions.deletingDraft")
+              : t("submissions.confirmDeleteDraft")}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -679,12 +941,44 @@ function SubmissionFormDialog({
   onRetry,
   onSaved,
   onSubmitted,
+  onReturnResolved,
 }: SubmissionFormDialogProps) {
+  const { t } = useTranslation();
+  const [form] = useState<SubmissionForm | null>(() =>
+    state.kind === "ready" ? state.form : null,
+  );
+  const [returnReview] = useState<SubmissionReturnReview | null>(() =>
+    state.kind === "ready" ? state.returnReview ?? null : null,
+  );
   const [inputs, setInputs] = useState<SubmissionFieldInputs>(() =>
     state.kind === "ready" ? buildDynamicFormInputs(state.form) : {},
   );
   const [operation, setOperation] = useState<SubmissionFormOperation>("idle");
+  const [returnChoice, setReturnChoice] = useState<SubmissionReturnReviewChoice>(() =>
+    state.kind === "ready" && state.returnReview?.available_choices.includes("REVISE")
+      ? "REVISE"
+      : state.kind === "ready" && state.returnReview?.available_choices[0]
+        ? state.returnReview.available_choices[0]
+        : "REVISE",
+  );
+  const [returnJustification, setReturnJustification] = useState("");
+  const [activeSectionIndex, setActiveSectionIndex] = useState(() =>
+    state.kind === "ready"
+      ? getFirstReviewedSectionIndex(
+          state.form,
+          t("submissions.generalSection"),
+        )
+      : 0,
+  );
   const operationRef = useRef<SubmissionFormOperation>("idle");
+  const defaultSection = t("submissions.generalSection");
+  const sections = form
+    ? getSubmissionFormSections(form.fields, defaultSection)
+    : [];
+  const visibleSectionIndex = Math.min(
+    activeSectionIndex,
+    Math.max(sections.length - 1, 0),
+  );
 
   function updateField(fieldKey: string, value: string | boolean) {
     setInputs((current) => ({ ...current, [fieldKey]: value }));
@@ -693,7 +987,8 @@ function SubmissionFormDialog({
   async function saveDraft() {
     if (
       state.kind !== "ready" ||
-      state.form.is_submitted ||
+      !form ||
+      form.is_submitted ||
       operationRef.current !== "idle"
     ) {
       return;
@@ -707,7 +1002,7 @@ function SubmissionFormDialog({
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          values: buildDynamicFormValues(state.form.fields, inputs, false),
+          values: buildDynamicFormValues(form.fields, inputs, false),
         }),
       });
       const payload = (await response.json().catch(() => null)) as
@@ -716,14 +1011,14 @@ function SubmissionFormDialog({
         | null;
 
       if (!response.ok || !isSaveResult(payload)) {
-        toast.error(getApiMessage(payload, "Não foi possível salvar o rascunho."));
+        toast.error(getApiMessage(payload, t("submissions.saveFailed"), t));
         return;
       }
 
-      toast.success(payload.message || "Rascunho salvo com sucesso.");
+      toast.success(t("submissions.saved"));
       onSaved();
     } catch {
-      toast.error("Não foi possível conectar ao serviço de submissões.");
+      toast.error(t("submissions.connectionFailed"));
     } finally {
       operationRef.current = "idle";
       setOperation("idle");
@@ -733,18 +1028,31 @@ function SubmissionFormDialog({
   async function submitForAnalysis() {
     if (
       state.kind !== "ready" ||
-      state.form.is_submitted ||
+      !form ||
+      form.is_submitted ||
       operationRef.current !== "idle"
     ) {
       return;
     }
 
-    const validation = validateDynamicFormValues(state.form.fields, inputs);
+    const validation = validateDynamicFormValues(form.fields, inputs, t);
     if (!validation.valid) {
       toast.error(validation.message);
-      document
-        .getElementById(`dynamic-form-field-${validation.fieldKey}`)
-        ?.focus();
+      const invalidField = form.fields.find(
+        (field) => field.field_key === validation.fieldKey,
+      );
+      const invalidSectionIndex = invalidField
+        ? sections.indexOf(getSubmissionFieldSection(invalidField, defaultSection))
+        : -1;
+
+      if (invalidSectionIndex >= 0) {
+        setActiveSectionIndex(invalidSectionIndex);
+      }
+      requestAnimationFrame(() => {
+        document
+          .getElementById(`dynamic-form-field-${validation.fieldKey}`)
+          ?.focus();
+      });
       return;
     }
 
@@ -756,22 +1064,55 @@ function SubmissionFormDialog({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          values: buildDynamicFormValues(state.form.fields, inputs, true),
+          values: buildDynamicFormValues(form.fields, inputs, true),
         }),
       });
       const payload = (await response.json().catch(() => null)) as unknown;
 
       if (!response.ok || !isSubmitResult(payload)) {
         toast.error(
-          getApiMessage(payload, "Não foi possível enviar a submissão para análise."),
+          getApiMessage(payload, t("submissions.submitFailed"), t),
         );
         return;
       }
 
-      toast.success("Submissão enviada para análise.");
-      onSubmitted();
+      toast.success(t("submissions.submitted"));
+      removeReturnReviewSnapshot(state.process.id);
+      onSubmitted(state.process);
     } catch {
-      toast.error("Não foi possível conectar ao serviço de submissões.");
+      toast.error(t("submissions.connectionFailed"));
+    } finally {
+      operationRef.current = "idle";
+      setOperation("idle");
+    }
+  }
+
+  async function respondToReturn() {
+    if (state.kind !== "ready" || !form || !returnReview || operationRef.current !== "idle") return;
+    operationRef.current = "responding";
+    setOperation("responding");
+    try {
+      const response = await fetch(`/api/submissions/${state.process.id}/return-review`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ choice: returnChoice, justification: returnJustification.trim() || null }),
+      });
+      const payload = await response.json().catch(() => null) as unknown;
+      if (!response.ok || !isReturnReviewResult(payload)) {
+        toast.error(getApiMessage(payload, t("submissions.returnReviewResponseFailed"), t));
+        return;
+      }
+      if (payload.choice !== "REVISE") {
+        toast.success(t(`submissions.returnChoicesSuccess.${payload.choice}`));
+        onReturnResolved(payload.choice);
+        return;
+      }
+
+      storeReturnReviewSnapshot(state.process.id, { returnReview, reviews: form.reviews });
+      toast.success(t("submissions.returnRevisionOpened"));
+      onReturnResolved(payload.choice);
+    } catch {
+      toast.error(t("submissions.connectionFailed"));
     } finally {
       operationRef.current = "idle";
       setOperation("idle");
@@ -785,11 +1126,11 @@ function SubmissionFormDialog({
       className="fixed inset-0 z-50 grid place-items-center bg-slate-950/50 p-3 backdrop-blur-[2px] sm:p-6"
       role="dialog"
     >
-      <div className="flex max-h-[94dvh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+      <div className={`flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl ${returnReview ? "h-[92dvh] w-[94vw] max-w-none" : "max-h-[94dvh] w-full max-w-3xl"}`}>
         <header className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200 px-5 py-4 sm:px-6">
           <div className="min-w-0">
             <p className="font-mono text-xs font-bold uppercase tracking-wide text-teal-700">
-              {state.process.code} · Rascunho
+              {state.process.code} · {t(returnReview ? "submissions.returnReviewLabel" : "submissions.draftLabel")}
             </p>
             <h2
               className="mt-1 truncate text-xl font-bold text-slate-900"
@@ -799,7 +1140,7 @@ function SubmissionFormDialog({
             </h2>
           </div>
           <button
-            aria-label="Fechar formulário de submissão"
+            aria-label={t("submissions.closeForm")}
             autoFocus
             className="grid size-10 shrink-0 place-items-center rounded-lg text-slate-500 outline-none transition hover:bg-slate-100 hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-teal-500"
             onClick={onClose}
@@ -815,83 +1156,216 @@ function SubmissionFormDialog({
               <AlertCircle aria-hidden="true" className="size-6 text-rose-700" />
               <p className="mt-3 text-sm leading-6 text-rose-800">{state.message}</p>
               <p className="mt-2 text-xs leading-5 text-rose-700">
-                A estrutura {state.process.code} já existe. Nenhum valor digitado
-                é enviado enquanto Salvar rascunho não for acionado.
+                {t("submissions.existingStructure", { code: state.process.code })}
               </p>
               <button
                 className="mt-4 rounded-lg bg-rose-800 px-4 py-2 text-sm font-semibold text-white outline-none focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:ring-offset-2"
                 onClick={onRetry}
                 type="button"
               >
-                Tentar carregar novamente
+                {t("submissions.retryForm")}
               </button>
             </div>
           </div>
-        ) : (
+        ) : form ? (
           <SubmissionDialogContent
-            form={state.form}
+            activeSectionIndex={visibleSectionIndex}
+            form={form}
             inputs={inputs}
             operation={operation}
+            returnChoice={returnChoice}
+            returnJustification={returnJustification}
+            returnReview={returnReview}
             processId={state.process.id}
             onFieldChange={updateField}
+            onSectionChange={setActiveSectionIndex}
             onSave={() => void saveDraft()}
             onSubmit={() => void submitForAnalysis()}
+            onReturnChoiceChange={setReturnChoice}
+            onReturnJustificationChange={setReturnJustification}
+            onReturnResponse={() => void respondToReturn()}
           />
-        )}
+        ) : null}
       </div>
     </div>
   );
 }
 
 function SubmissionDialogContent({
+  activeSectionIndex,
   processId,
   form,
   inputs,
   operation,
+  returnReview,
+  returnChoice,
+  returnJustification,
   onFieldChange,
+  onSectionChange,
   onSave,
   onSubmit,
+  onReturnChoiceChange,
+  onReturnJustificationChange,
+  onReturnResponse,
 }: SubmissionDialogContentProps) {
+  const { t, i18n } = useTranslation();
   const orderedFields = [...form.fields].sort(
     (first, second) => first.order_index - second.order_index,
   );
-  const sections = [...new Set(orderedFields.map((field) => field.section?.trim() || "Geral"))];
+  const defaultSection = t("submissions.generalSection");
+  const sections = getSubmissionFormSections(orderedFields, defaultSection);
+  const hasSectionTabs = sections.length > 1;
+  const awaitingReturnResponse = Boolean(returnReview && form.is_submitted);
+
+  function handleSectionTabKeyDown(
+    event: ReactKeyboardEvent<HTMLButtonElement>,
+    sectionIndex: number,
+  ) {
+    let nextSectionIndex: number | null = null;
+
+    if (event.key === "ArrowRight") {
+      nextSectionIndex = (sectionIndex + 1) % sections.length;
+    } else if (event.key === "ArrowLeft") {
+      nextSectionIndex = (sectionIndex - 1 + sections.length) % sections.length;
+    } else if (event.key === "Home") {
+      nextSectionIndex = 0;
+    } else if (event.key === "End") {
+      nextSectionIndex = sections.length - 1;
+    }
+
+    if (nextSectionIndex === null) {
+      return;
+    }
+
+    event.preventDefault();
+    onSectionChange(nextSectionIndex);
+    requestAnimationFrame(() => {
+      document
+        .getElementById(`submission-form-section-tab-${nextSectionIndex}`)
+        ?.focus();
+    });
+  }
 
   return (
     <>
-      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-6">
-        {form.is_submitted && (
-          <div className="mb-5 flex items-start gap-3 rounded-xl border border-teal-200 bg-teal-50 p-4 text-sm text-teal-900">
+      <div className={returnReview ? "grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)] lg:grid-cols-[22rem_minmax(0,1fr)] lg:grid-rows-1 xl:grid-cols-[26rem_minmax(0,1fr)]" : "flex min-h-0 flex-1 flex-col"}>
+        {returnReview && (
+          <aside className="max-h-[40dvh] overflow-y-auto border-b border-amber-200 bg-amber-50/50 p-4 sm:p-5 lg:max-h-none lg:border-b-0 lg:border-r lg:p-6">
+          <section className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-950" aria-labelledby="return-review-summary-title">
+            <div className="flex items-start gap-3">
+              <AlertCircle aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-amber-800" />
+              <div className="min-w-0">
+                <h3 className="text-sm font-bold" id="return-review-summary-title">{t(awaitingReturnResponse ? "submissions.returnReviewTitle" : "submissions.correctionModeTitle")}</h3>
+                <p className="mt-1 text-sm leading-6">{awaitingReturnResponse ? t("submissions.returnReviewDescription") : t("submissions.correctionModeDescription")}</p>
+                {returnReview.triage_decision?.justification && <div className="mt-3 rounded-lg border border-amber-200 bg-white/75 p-3"><p className="text-xs font-bold uppercase tracking-wide text-amber-800">{t("submissions.bracvamJustification")}</p><p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-slate-800">{returnReview.triage_decision.justification}</p></div>}
+                <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-amber-900">
+                  <span>{t("submissions.returnOpenedAt", { date: formatSubmissionDate(returnReview.opened_at, i18n.resolvedLanguage) })}</span>
+                  {returnReview.due_date && <span>{t("submissions.returnDueDate", { date: formatSubmissionDate(returnReview.due_date, i18n.resolvedLanguage) })}</span>}
+                </div>
+              </div>
+            </div>
+            {awaitingReturnResponse && <div className="mt-4 grid gap-3 border-t border-amber-200 pt-4"><label className="grid gap-1.5 text-sm font-bold">{t("submissions.returnChoiceLabel")}<select className="min-h-11 rounded-xl border border-amber-300 bg-white px-3 font-normal text-slate-900" disabled={operation !== "idle"} onChange={(event) => onReturnChoiceChange(event.target.value as SubmissionReturnReviewChoice)} value={returnChoice}>{returnReview.available_choices.map((choice) => <option key={choice} value={choice}>{t(`submissions.returnChoices.${choice}`)}</option>)}</select></label><label className="grid gap-1.5 text-sm font-bold">{t("submissions.returnJustificationLabel")}<textarea className="min-h-20 rounded-xl border border-amber-300 bg-white p-3 font-normal text-slate-900" disabled={operation !== "idle"} maxLength={4000} onChange={(event) => onReturnJustificationChange(event.target.value)} placeholder={t("submissions.returnJustificationPlaceholder")} value={returnJustification} /></label><button className="inline-flex min-h-11 w-fit items-center gap-2 rounded-xl bg-amber-800 px-4 text-sm font-bold text-white disabled:opacity-60" disabled={operation !== "idle"} onClick={onReturnResponse} type="button">{operation === "responding" && <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />}{operation === "responding" ? t("submissions.respondingToReturn") : t("submissions.confirmReturnChoice")}</button></div>}
+          </section>
+          </aside>
+        )}
+
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        {form.is_submitted && !returnReview && (
+          <div className="mx-5 mt-5 flex shrink-0 items-start gap-3 rounded-xl border border-teal-200 bg-teal-50 p-4 text-sm text-teal-900 sm:mx-6">
             <Check aria-hidden="true" className="mt-0.5 size-5 shrink-0" />
-            Este formulário já foi submetido e está disponível somente para
-            consulta.
+            {t("submissions.alreadySubmitted")}
           </div>
         )}
 
-        <form className="grid gap-5" onSubmit={(event) => event.preventDefault()}>
-          {sections.map((section) => (
-            <fieldset className="grid gap-5 rounded-2xl border border-slate-200 p-4 sm:p-5" key={section}>
-              <legend className="px-2 text-sm font-bold uppercase tracking-wide text-teal-800">{section}</legend>
-              {orderedFields.filter((field) => (field.section?.trim() || "Geral") === section).map((field) => (
-                <DynamicFormFieldControl
-                  disabled={form.is_submitted || operation !== "idle"}
-                  field={field}
-                  key={field.field_key}
-                  onChange={(value) => onFieldChange(field.field_key, value)}
-                  processId={processId}
-                  value={inputs[field.field_key]}
-                />
-              ))}
-            </fieldset>
+        {hasSectionTabs && (
+          <div
+            aria-label={t("submissions.formSectionsLabel")}
+            className="flex shrink-0 gap-1 overflow-x-auto border-b border-slate-200 bg-slate-50 px-5 pt-3 sm:px-6"
+            role="tablist"
+          >
+            {sections.map((section, sectionIndex) => {
+              const isActive = sectionIndex === activeSectionIndex;
+              const reviewedCount = orderedFields.filter(
+                (field) =>
+                  getSubmissionFieldSection(field, defaultSection) === section &&
+                  isCorrectableReview(form.reviews[field.field_key]),
+              ).length;
+
+              return (
+                <button
+                  aria-controls={`submission-form-section-panel-${sectionIndex}`}
+                  aria-selected={isActive}
+                  className={`min-h-11 shrink-0 whitespace-nowrap rounded-t-xl border border-b-0 px-4 py-2 text-sm font-bold outline-none transition focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-teal-500 ${
+                    isActive
+                      ? "border-slate-200 bg-white text-teal-800"
+                      : "border-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                  }`}
+                  id={`submission-form-section-tab-${sectionIndex}`}
+                  key={section}
+                  onClick={() => onSectionChange(sectionIndex)}
+                  onKeyDown={(event) =>
+                    handleSectionTabKeyDown(event, sectionIndex)
+                  }
+                  role="tab"
+                  tabIndex={isActive ? 0 : -1}
+                  type="button"
+                >
+                  {section}{reviewedCount > 0 && <span className="ml-2 rounded-full bg-amber-200 px-2 py-0.5 text-[0.65rem] text-amber-950" aria-label={t("submissions.reviewedFieldsCount", { count: reviewedCount })}>{reviewedCount}</span>}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        <form
+          className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-6"
+          onSubmit={(event) => event.preventDefault()}
+        >
+          {sections.map((section, sectionIndex) => (
+            <div
+              aria-labelledby={hasSectionTabs ? `submission-form-section-tab-${sectionIndex}` : undefined}
+              hidden={hasSectionTabs && sectionIndex !== activeSectionIndex}
+              id={hasSectionTabs ? `submission-form-section-panel-${sectionIndex}` : undefined}
+              key={section}
+              role={hasSectionTabs ? "tabpanel" : undefined}
+            >
+              <fieldset className="grid gap-5 rounded-2xl border border-slate-200 p-4 sm:p-5">
+                <legend className={hasSectionTabs ? "sr-only" : "px-2 text-sm font-bold uppercase tracking-wide text-teal-800"}>
+                  {section}
+                </legend>
+                {orderedFields
+                  .filter(
+                    (field) =>
+                      getSubmissionFieldSection(field, defaultSection) === section,
+                  )
+                  .map((field) => {
+                    const review = form.reviews[field.field_key];
+                    const isCorrectionField = isCorrectableReview(review);
+                    const isLockedDuringCorrection = Boolean(
+                      returnReview && !form.is_submitted && !isCorrectionField,
+                    );
+
+                    return <div className={isCorrectionField ? "rounded-xl border-2 border-amber-400 bg-amber-50/60 p-4" : undefined} key={field.field_key}>
+                      {review && <div className="mb-4 border-b border-amber-200 pb-3"><p className="text-xs font-bold uppercase tracking-wide text-amber-900">{t("submissions.fieldReviewed", { status: t(`submissions.reviewStatuses.${review.status}`, { defaultValue: review.status }) })}</p>{review.comments && <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-amber-950">{review.comments}</p>}</div>}
+                      {isLockedDuringCorrection && <div className="mb-3 flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600"><LockKeyhole aria-hidden="true" className="size-3.5 shrink-0" />{t("submissions.fieldLockedDuringCorrection")}</div>}
+                      <DynamicFormFieldControl
+                        disabled={form.is_submitted || operation !== "idle" || isLockedDuringCorrection}
+                        field={field}
+                        onChange={(value) => onFieldChange(field.field_key, value)}
+                        processId={processId}
+                        value={inputs[field.field_key]}
+                      />
+                    </div>;
+                  })}
+              </fieldset>
+            </div>
           ))}
         </form>
+        </div>
       </div>
 
       <footer className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:px-6">
-        <p className="text-xs leading-5 text-slate-500">
-          Somente os valores confirmados em Salvar rascunho ficam disponíveis
-          para continuar depois.
-        </p>
+        <p className="text-xs leading-5 text-slate-500">{t(returnReview ? form.is_submitted ? "submissions.returnReviewFooterNotice" : "submissions.correctionSaveNotice" : "submissions.saveNotice")}</p>
         {!form.is_submitted && (
           <div className="flex flex-wrap justify-end gap-2">
             <button
@@ -905,7 +1379,7 @@ function SubmissionDialogContent({
               ) : (
                 <Save aria-hidden="true" className="size-4" />
               )}
-              {operation === "saving" ? "Salvando…" : "Salvar rascunho"}
+              {operation === "saving" ? t("submissions.saving") : t("submissions.saveDraft")}
             </button>
             <button
               className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-teal-700 px-4 py-2 text-sm font-semibold text-white outline-none transition hover:bg-teal-800 focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-60"
@@ -918,13 +1392,52 @@ function SubmissionDialogContent({
               ) : (
                 <Send aria-hidden="true" className="size-4" />
               )}
-              {operation === "submitting" ? "Enviando…" : "Enviar para análise"}
+              {operation === "submitting" ? t("submissions.submitting") : t("submissions.submit")}
             </button>
           </div>
         )}
       </footer>
     </>
   );
+}
+
+function getSubmissionFormSections(
+  fields: DynamicFormField[],
+  defaultSection: string,
+) {
+  return [
+    ...new Set(
+      [...fields]
+        .sort((first, second) => first.order_index - second.order_index)
+        .map((field) => getSubmissionFieldSection(field, defaultSection)),
+    ),
+  ];
+}
+
+function isCorrectableReview(review: DynamicFormReview | undefined) {
+  return review?.status === "NEEDS_REVISION" || review?.status === "REJECTED";
+}
+
+function getSubmissionFieldSection(
+  field: DynamicFormField,
+  defaultSection: string,
+) {
+  return field.section?.trim() || defaultSection;
+}
+
+function getFirstReviewedSectionIndex(form: SubmissionForm, defaultSection: string) {
+  const sections = getSubmissionFormSections(form.fields, defaultSection);
+  const reviewedField = form.fields.find((field) =>
+    isCorrectableReview(form.reviews[field.field_key]),
+  );
+  return reviewedField ? Math.max(sections.indexOf(getSubmissionFieldSection(reviewedField, defaultSection)), 0) : 0;
+}
+
+function formatSubmissionDate(value: string, locale: string | undefined) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? value
+    : new Intl.DateTimeFormat(locale, { dateStyle: "short", timeStyle: "short" }).format(date);
 }
 
 function SubmissionCatalogMessage({
@@ -1041,17 +1554,66 @@ function isSubmitResult(value: unknown): value is SubmitSubmissionResult {
   );
 }
 
+function isReturnReview(value: unknown): value is SubmissionReturnReview {
+  return isRecord(value) && typeof value.run_number === "number" && (value.source === "TRIAGE" || value.source === "AI_PRE_EVALUATION") && typeof value.opened_at === "string" && Array.isArray(value.available_choices) && value.available_choices.every(isReturnReviewChoice);
+}
+
+function isReturnReviewResult(value: unknown): value is SubmissionReturnReviewResult {
+  return isRecord(value) && isReturnReviewChoice(value.choice) && typeof value.process_status === "string";
+}
+
+function isReturnReviewChoice(value: unknown): value is SubmissionReturnReviewChoice {
+  return value === "REVISE" || value === "CONTEST_AI" || value === "WITHDRAW";
+}
+
+function returnReviewStorageKey(processId: string) {
+  return `pivma:return-review:${processId}`;
+}
+
+function storeReturnReviewSnapshot(processId: string, snapshot: SubmissionReturnReviewSnapshot) {
+  try {
+    window.sessionStorage.setItem(returnReviewStorageKey(processId), JSON.stringify(snapshot));
+  } catch {
+    // The API remains authoritative; storage only preserves comments across a same-tab reload.
+  }
+}
+
+function readReturnReviewSnapshot(processId: string): SubmissionReturnReviewSnapshot | null {
+  try {
+    const raw = window.sessionStorage.getItem(returnReviewStorageKey(processId));
+    if (!raw) return null;
+    const value = JSON.parse(raw) as unknown;
+    return isRecord(value) && isReturnReview(value.returnReview) && isDynamicFormReviews(value.reviews)
+      ? { returnReview: value.returnReview, reviews: value.reviews }
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function removeReturnReviewSnapshot(processId: string) {
+  try {
+    window.sessionStorage.removeItem(returnReviewStorageKey(processId));
+  } catch {
+    // Ignore unavailable browser storage.
+  }
+}
+
+function isDynamicFormReviews(value: unknown): value is Record<string, DynamicFormReview> {
+  return isRecord(value) && Object.values(value).every(
+    (review) => isRecord(review) && typeof review.status === "string" && (review.comments === undefined || review.comments === null || typeof review.comments === "string") && (review.reviewed_at === undefined || review.reviewed_at === null || typeof review.reviewed_at === "string"),
+  );
+}
+
 function isRecord(value: unknown): value is ApiRecord {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function getApiMessage(value: unknown, fallback: string) {
-  return isRecord(value) && typeof value.message === "string"
-    ? value.message
-    : fallback;
+function getApiMessage(value: unknown, fallback: string, t: TFunction) {
+  return getLocalizedApiError(isRecord(value) ? value : null, fallback, t);
 }
 
-async function requestTemplates(): Promise<SubmissionCatalogState> {
+async function requestTemplates(t: TFunction): Promise<SubmissionCatalogState> {
   try {
     const response = await fetch("/api/submissions/templates", {
       cache: "no-store",
@@ -1063,7 +1625,8 @@ async function requestTemplates(): Promise<SubmissionCatalogState> {
         kind: "error",
         message: getApiMessage(
           payload,
-          "Não foi possível carregar os tipos de submissão.",
+          t("submissions.templatesLoadFailed"),
+          t,
         ),
       };
     }
@@ -1072,12 +1635,12 @@ async function requestTemplates(): Promise<SubmissionCatalogState> {
   } catch {
     return {
       kind: "error",
-      message: "Não foi possível conectar ao serviço de submissões.",
+      message: t("submissions.connectionFailed"),
     };
   }
 }
 
-async function requestDrafts(): Promise<SubmissionDraftsState> {
+async function requestDrafts(t: TFunction): Promise<SubmissionDraftsState> {
   try {
     const response = await fetch("/api/submissions/drafts", {
       cache: "no-store",
@@ -1089,7 +1652,8 @@ async function requestDrafts(): Promise<SubmissionDraftsState> {
         kind: "error",
         message: getApiMessage(
           payload,
-          "Não foi possível carregar seus rascunhos.",
+          t("submissions.draftsLoadFailed"),
+          t,
         ),
       };
     }
@@ -1098,12 +1662,12 @@ async function requestDrafts(): Promise<SubmissionDraftsState> {
   } catch {
     return {
       kind: "error",
-      message: "Não foi possível conectar ao serviço de submissões.",
+      message: t("submissions.connectionFailed"),
     };
   }
 }
 
-async function requestSubmittedSubmissions(): Promise<SubmittedSubmissionsState> {
+async function requestSubmittedSubmissions(t: TFunction): Promise<SubmittedSubmissionsState> {
   try {
     const response = await fetch("/api/submissions/sent", {
       cache: "no-store",
@@ -1115,7 +1679,8 @@ async function requestSubmittedSubmissions(): Promise<SubmittedSubmissionsState>
         kind: "error",
         message: getApiMessage(
           payload,
-          "Não foi possível carregar suas submissões.",
+          t("submissions.submittedLoadFailed"),
+          t,
         ),
       };
     }
@@ -1124,7 +1689,7 @@ async function requestSubmittedSubmissions(): Promise<SubmittedSubmissionsState>
   } catch {
     return {
       kind: "error",
-      message: "Não foi possível conectar ao serviço de submissões.",
+      message: t("submissions.connectionFailed"),
     };
   }
 }

@@ -4,6 +4,7 @@ import type {
 } from "@/types/Configuracoes";
 import type { ApiRecord } from "@/types/Servico";
 import type { CurrentUser } from "@/types/Usuario";
+import type { TFunction } from "i18next";
 
 export function isCurrentUser(value: unknown): value is CurrentUser {
   if (!value || typeof value !== "object") return false;
@@ -54,43 +55,38 @@ export function hasAnySettingsAccess(
 
 export function getSettingsModules(
   capabilities: SettingsSessionCapabilities,
+  t: TFunction,
 ): SettingsModuleItem[] {
   return [
     {
       id: "forms",
-      title: "Formulários",
-      description:
-        "Edite e estruture os formulários dos processos, definindo seções, campos dinâmicos, obrigatoriedade e habilitação para IA.",
+      title: t("settings.modules.forms.title"),
+      description: t("settings.modules.forms.description"),
       href: "/formularios",
-      badge: "Configuração BraCVAM",
+      badge: t("settings.modules.forms.badge"),
       iconName: "ListChecks",
       isAllowed: capabilities.canManageForms,
-      deniedReason:
-        "Seu perfil não possui permissão para gerenciar os formulários de processo.",
+      deniedReason: t("settings.modules.forms.denied"),
     },
     {
       id: "ai-evaluations",
-      title: "Avaliações por IA",
-      description:
-        "Consulte e configure objetivos, versões publicadas, sugestões de critérios e associações com campos avaliados.",
+      title: t("settings.modules.ai-evaluations.title"),
+      description: t("settings.modules.ai-evaluations.description"),
       href: "/avaliacoes-ia",
-      badge: "Inteligência Artificial",
+      badge: t("settings.modules.ai-evaluations.badge"),
       iconName: "Bot",
       isAllowed: capabilities.canViewAiEvaluations,
-      deniedReason:
-        "Seu perfil não possui permissão para consultar ou configurar avaliações por IA.",
+      deniedReason: t("settings.modules.ai-evaluations.denied"),
     },
     {
       id: "users",
-      title: "Usuários",
-      description:
-        "Consulte as contas cadastradas, gerencie a situação de acesso, edite nomes completos e configure perfis de permissão.",
+      title: t("settings.modules.users.title"),
+      description: t("settings.modules.users.description"),
       href: "/usuarios",
-      badge: "Administração",
+      badge: t("settings.modules.users.badge"),
       iconName: "UsersRound",
       isAllowed: capabilities.canManageUsers,
-      deniedReason:
-        "Seu perfil não possui permissão para consultar o diretório de usuários.",
+      deniedReason: t("settings.modules.users.denied"),
     },
   ];
 }

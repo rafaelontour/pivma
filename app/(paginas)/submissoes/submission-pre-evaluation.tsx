@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertCircle, Bot, CheckCircle2, Clock3, LoaderCircle, RefreshCw, Send, XCircle } from "lucide-react";
+import { AlertCircle, Bot, CheckCircle2, Clock3, FilePenLine, LoaderCircle, RefreshCw, Send, XCircle } from "lucide-react";
 import { toast } from "sonner";
+import { getLocalizedApiError } from "@/i18n/errors";
 import { useTranslation } from "react-i18next";
 import { useAccessibleDialog } from "@/components/accessible-dialog";
 import type { ProcessInstance } from "@/types/Processo";
@@ -17,11 +18,12 @@ import type { ApiRecord } from "@/types/Servico";
 
 const POLL_INTERVAL_MS = 5000;
 
-export function SubmissionTrackingCard({ submission, templateName, onProcessChanged }: SubmissionTrackingCardProps) {
+export function SubmissionTrackingCard({ submission, templateName, onProcessChanged, onOpenReturnReview }: SubmissionTrackingCardProps) {
   const { t } = useTranslation();
   const [process, setProcess] = useState(submission);
   const [evaluation, setEvaluation] = useState<SubmissionPreEvaluation | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [hasReturnReview, setHasReturnReview] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const inFlight = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
@@ -39,7 +41,14 @@ export function SubmissionTrackingCard({ submission, templateName, onProcessChan
       if (evaluationResponse.ok && isPreEvaluation(evaluationPayload)) {
         setEvaluation(evaluationPayload);
       } else if (evaluationResponse.status !== 404 && evaluationResponse.status !== 409) {
-        setError(getApiMessage(evaluationPayload, t("submissionTracking.refreshFailed")));
+        setError(getLocalizedApiError(isRecord(evaluationPayload) ? evaluationPayload : null, t("submissionTracking.refreshFailed"), t));
+      }
+
+      const returnReviewResponse = await fetch(`/api/submissions/${process.id}/return-review`, { cache: "no-store", signal: controller.signal });
+      if (returnReviewResponse.ok) {
+        setHasReturnReview(true);
+      } else if (returnReviewResponse.status === 404 || returnReviewResponse.status === 409) {
+        setHasReturnReview(false);
       }
 
       const processResponse = await fetch(`/api/submissions/${process.id}`, { cache: "no-store", signal: controller.signal });
@@ -57,14 +66,13 @@ export function SubmissionTrackingCard({ submission, templateName, onProcessChan
   }, [onProcessChanged, process.id, process.status, t]);
 
   useEffect(() => {
-    const shouldPoll = process.status === "AI_PRE_EVALUATION";
-    if (!shouldPoll) return;
     const initial = window.setTimeout(() => void refresh(), 0);
-    const interval = window.setInterval(() => void refresh(), POLL_INTERVAL_MS);
+    const shouldPoll = !["CLOSED", "CANCELLED", "ARCHIVED"].includes(process.status);
+    const interval = shouldPoll ? window.setInterval(() => void refresh(), POLL_INTERVAL_MS) : null;
     function handleVisibility() { if (document.visibilityState === "visible") void refresh(); }
     document.addEventListener("visibilitychange", handleVisibility);
     return () => {
-      window.clearInterval(interval);
+      if (interval !== null) window.clearInterval(interval);
       window.clearTimeout(initial);
       document.removeEventListener("visibilitychange", handleVisibility);
       abortRef.current?.abort();
@@ -73,13 +81,14 @@ export function SubmissionTrackingCard({ submission, templateName, onProcessChan
 
   return (
     <article className="flex min-h-52 flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-300/30">
-      <div className="flex items-start justify-between gap-3"><div className="grid size-10 shrink-0 place-items-center rounded-xl bg-teal-100 text-teal-800"><Bot aria-hidden="true" className="size-5" /></div><span className="max-w-48 rounded-full bg-teal-100 px-2.5 py-1 text-center text-[11px] font-bold uppercase tracking-wide text-teal-800">{t(`submissionTracking.statuses.${process.status}`, { defaultValue: process.status.replaceAll("_", " ") })}</span></div>
+      <div className="flex items-start justify-between gap-3"><div className="grid size-10 shrink-0 place-items-center rounded-xl bg-teal-100 text-teal-800"><Bot aria-hidden="true" className="size-5" /></div><span className="max-w-48 rounded-full bg-teal-100 px-2.5 py-1 text-center text-[11px] font-bold uppercase tracking-wide text-teal-800">{t(`submissionTracking.statuses.${process.status}`, { defaultValue: process.status })}</span></div>
       <p className="mt-4 font-mono text-[11px] font-bold uppercase tracking-[0.1em] text-teal-700">{process.code}</p>
       <h3 className="mt-1 text-base font-bold text-slate-900">{process.title}</h3>
       <p className="mt-1 text-sm leading-6 text-slate-600">{templateName}</p>
       {process.status === "AI_PRE_EVALUATION" && <div className="mt-4 flex items-center gap-2 rounded-xl bg-violet-50 p-3 text-xs font-semibold text-violet-900"><LoaderCircle aria-hidden="true" className="size-4 animate-spin" />{t("submissionTracking.inProgress")}</div>}
       {evaluation && <SubmissionPreEvaluationPanel compact evaluation={evaluation} />}
       {!evaluation && process.status !== "AI_PRE_EVALUATION" && <p className="mt-4 rounded-xl bg-slate-50 p-3 text-xs leading-5 text-slate-600">{t("submissionTracking.noReport")}</p>}
+      {hasReturnReview && <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-3"><div className="flex items-start gap-2"><FilePenLine aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-amber-800" /><p className="text-xs font-semibold leading-5 text-amber-950">{t("submissionTracking.returnReviewAvailable")}</p></div><button className="mt-3 inline-flex min-h-9 items-center gap-2 rounded-lg bg-amber-800 px-3 text-xs font-bold text-white outline-none hover:bg-amber-900 focus-visible:ring-2 focus-visible:ring-amber-500" onClick={() => onOpenReturnReview(process)} type="button">{t("submissionTracking.openReturnReview")}</button></div>}
       {error && <p className="mt-3 text-xs leading-5 text-rose-700" role="alert">{error}</p>}
       <button className="mt-4 inline-flex min-h-9 w-fit items-center gap-2 rounded-lg border border-teal-700 px-3 text-xs font-bold text-teal-800 outline-none hover:bg-teal-50 focus-visible:ring-2 focus-visible:ring-teal-500 disabled:opacity-60" disabled={isRefreshing} onClick={() => void refresh()} type="button">{isRefreshing ? <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" /> : <RefreshCw aria-hidden="true" className="size-3.5" />}{t("submissionTracking.refresh")}</button>
     </article>
@@ -95,7 +104,7 @@ export function SubmissionPreEvaluationPanel({ evaluation, compact = false }: Su
     <section className={`mt-4 rounded-xl border p-4 ${failed ? "border-rose-200 bg-rose-50" : negative ? "border-amber-200 bg-amber-50" : positive ? "border-emerald-200 bg-emerald-50" : "border-violet-200 bg-violet-50"}`}>
       <div className="flex items-start gap-2">{failed ? <XCircle aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-rose-700" /> : positive ? <CheckCircle2 aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-emerald-700" /> : negative ? <AlertCircle aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-amber-700" /> : <Clock3 aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-violet-700" />}<div><p className="text-sm font-bold text-slate-900">{failed ? t("submissionTracking.technicalFailure") : positive ? t("submissionTracking.positive") : negative ? t("submissionTracking.corrections") : t("submissionTracking.processing")}</p><p className="mt-1 text-xs text-slate-600">{t("submissionTracking.summary", { compliant: evaluation.summary.compliant, nonCompliant: evaluation.summary.non_compliant, indeterminate: evaluation.summary.indeterminate })}</p></div></div>
       {evaluation.error_summary && <p className="mt-3 text-xs leading-5 text-rose-800">{evaluation.error_summary}</p>}
-      {(evaluation.attention_points ?? []).length > 0 && <div className="mt-3 grid gap-2">{(evaluation.attention_points ?? []).slice(0, compact ? 3 : undefined).map((point) => <article className="rounded-lg border border-black/10 bg-white/75 p-3" key={point.item_id}><div className="flex flex-wrap gap-2 text-[0.65rem] font-bold uppercase text-slate-500"><span>{formatOption(point.conclusion)}</span><span>{formatOption(point.severity)}</span></div><p className="mt-1 text-xs font-semibold leading-5 text-slate-800">{point.criterion_statement}</p>{point.recommendation && <p className="mt-1 text-xs leading-5 text-slate-600">{point.recommendation}</p>}{point.evidence_location && <p className="mt-1 font-mono text-[0.65rem] text-slate-500">{t("submissionTracking.field", { field: point.evidence_location })}</p>}</article>)}</div>}
+      {(evaluation.attention_points ?? []).length > 0 && <div className="mt-3 grid gap-2">{(evaluation.attention_points ?? []).slice(0, compact ? 3 : undefined).map((point) => <article className="rounded-lg border border-black/10 bg-white/75 p-3" key={point.item_id}><div className="flex flex-wrap gap-2 text-[0.65rem] font-bold uppercase text-slate-500"><span>{t(`aiEvaluations.options.${point.conclusion}`, { defaultValue: point.conclusion })}</span><span>{t(`aiEvaluations.options.${point.severity}`, { defaultValue: point.severity })}</span></div><p className="mt-1 text-xs font-semibold leading-5 text-slate-800">{point.criterion_statement}</p>{point.recommendation && <p className="mt-1 text-xs leading-5 text-slate-600">{point.recommendation}</p>}{point.evidence_location && <p className="mt-1 font-mono text-[0.65rem] text-slate-500">{t("submissionTracking.field", { field: point.evidence_location })}</p>}</article>)}</div>}
     </section>
   );
 }
@@ -112,7 +121,7 @@ export function DirectReviewDialog({ process, isOpen, onClose, onConfirmed }: Di
     try {
       const response = await fetch(`/api/submissions/${process.id}/direct-review`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ justification: justification.trim() || null }) });
       const payload = await response.json().catch(() => null);
-      if (!response.ok || !isDirectReviewResult(payload)) { toast.error(getApiMessage(payload, t("submissionTracking.directReviewFailed"))); return; }
+      if (!response.ok || !isDirectReviewResult(payload)) { toast.error(getLocalizedApiError(isRecord(payload) ? payload : null, t("submissionTracking.directReviewFailed"), t)); return; }
       const reachedTriage = payload.process_status === "TRIAGE" || await waitForTriage(process.id);
       toast.success(reachedTriage ? t("submissionTracking.sentToTriage") : t("submissionTracking.requestRecorded"));
       onConfirmed();
@@ -146,5 +155,3 @@ function isPreEvaluation(value: unknown): value is SubmissionPreEvaluation { ret
 function isDirectReviewResult(value: unknown): value is DirectReviewResult { return isRecord(value) && typeof value.process_status === "string" && typeof value.direct_review_request_id === "string"; }
 function isProcess(value: unknown): value is ProcessInstance { return isRecord(value) && typeof value.id === "string" && typeof value.code === "string" && typeof value.title === "string" && typeof value.status === "string" && typeof value.template_key === "string" && typeof value.version_number === "number"; }
 function isRecord(value: unknown): value is ApiRecord { return Boolean(value) && typeof value === "object" && !Array.isArray(value); }
-function getApiMessage(value: unknown, fallback: string) { return isRecord(value) && typeof value.message === "string" ? value.message : fallback; }
-function formatOption(value: string) { return value.replaceAll("_", " "); }

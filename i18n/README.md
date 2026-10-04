@@ -46,3 +46,14 @@ mostrados sem alteração.
 
 As marcas e o nome de perfis cadastrados não são reescritos nos dados. A forma
 inglesa do glossário só deve aparecer em textos controlados pela interface.
+
+## Auditoria de cobertura
+
+Na auditoria de 29/09/2026, não restaram textos próprios de interface em
+`app/` ou `components/` fora dos dicionários. As exceções encontradas são
+intencionais: marcas (`pi*VMA`, `BraCVAM`, `Fiocruz`), identificadores técnicos
+de versão (`v`), separadores visuais (`·`), o exemplo configurável de extensões
+de arquivo (`pdf, docx`) e valores retornados pela API. Os validadores e as
+Route Handlers mantêm mensagens em português somente como fallback de
+compatibilidade; as respostas internas agora incluem códigos estáveis e os
+clientes resolvem esses códigos pelos dicionários.

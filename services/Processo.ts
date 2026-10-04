@@ -18,7 +18,11 @@ export async function listProcesses(
   const [error, response] = await tryit(() =>
     http.get<unknown>("/processes", {
       headers: { Cookie: `access_token=${accessToken}` },
-      params: options,
+      params: {
+        page: options.page,
+        per_page: options.size,
+        ...(options.status ? { status: options.status } : {}),
+      },
     }),
   )();
 
@@ -26,11 +30,12 @@ export async function listProcesses(
     return { ok: false, status: getStatus(error) };
   }
 
-  if (!isProcessList(response.data)) {
+  const data = normalizeProcessList(response.data);
+  if (!data) {
     return { ok: false };
   }
 
-  return { ok: true, data: response.data };
+  return { ok: true, data };
 }
 
 export async function getProcess(
@@ -47,11 +52,12 @@ export async function getProcess(
     return { ok: false, status: getStatus(error) };
   }
 
-  if (!isProcessInstance(response.data)) {
+  const data = normalizeProcessInstance(response.data);
+  if (!data) {
     return { ok: false };
   }
 
-  return { ok: true, data: response.data };
+  return { ok: true, data };
 }
 
 export function canReadProcessKanban(permissions: string[]) {
@@ -60,19 +66,46 @@ export function canReadProcessKanban(permissions: string[]) {
   );
 }
 
-function isProcessList(value: unknown): value is ProcessList {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
+export function normalizeProcessList(value: unknown): ProcessList | null {
+  if (!value || typeof value !== "object") return null;
+  const response = value as ApiRecord;
+  const items = Array.isArray(response.data)
+    ? response.data.map(normalizeProcessInstance)
+    : null;
+  const pagination = response.pagination;
+  if (
+    !items ||
+    items.some((item) => !item) ||
+    !pagination ||
+    typeof pagination !== "object" ||
+    typeof (pagination as ApiRecord).page !== "number" ||
+    typeof (pagination as ApiRecord).per_page !== "number" ||
+    typeof (pagination as ApiRecord).total_items !== "number"
+  ) return null;
+  return {
+    items: items as ProcessInstance[],
+    total: (pagination as ApiRecord).total_items as number,
+    page: (pagination as ApiRecord).page as number,
+    size: (pagination as ApiRecord).per_page as number,
+  };
+}
 
-  const list = value as ApiRecord;
-  return (
-    Array.isArray(list.items) &&
-    list.items.every(isProcessInstance) &&
-    typeof list.total === "number" &&
-    typeof list.page === "number" &&
-    typeof list.size === "number"
-  );
+export function normalizeProcessInstance(value: unknown): ProcessInstance | null {
+  if (!value || typeof value !== "object") return null;
+  const process = value as ApiRecord;
+  const template = process.template;
+  if (!template || typeof template !== "object") return null;
+  const templateRecord = template as ApiRecord;
+  if (
+    typeof templateRecord.key !== "string" ||
+    typeof templateRecord.version !== "number"
+  ) return null;
+  const normalized = {
+    ...process,
+    template_key: templateRecord.key,
+    version_number: templateRecord.version,
+  };
+  return isProcessInstance(normalized) ? normalized : null;
 }
 
 function isProcessInstance(value: unknown): value is ProcessInstance {
@@ -88,9 +121,18 @@ function isProcessInstance(value: unknown): value is ProcessInstance {
     typeof process.status === "string" &&
     typeof process.template_key === "string" &&
     typeof process.version_number === "number" &&
+    isAvailableActions(process.available_actions) &&
     isOptionalNullableString(process.started_at) &&
     isOptionalNullableString(process.closed_at) &&
     isOptionalNullableString(process.closure_reason)
+  );
+}
+
+function isAvailableActions(value: unknown) {
+  return (
+    value === undefined ||
+    (Array.isArray(value) &&
+      value.every((action) => action === "DELETE" || action === "ARCHIVE"))
   );
 }
 

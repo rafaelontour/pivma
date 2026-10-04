@@ -13,7 +13,7 @@ export async function POST(
   const { definitionId, versionNumber: value } = await context.params;
   const versionNumber = Number(value);
   if (!isUuid(definitionId) || !Number.isInteger(versionNumber) || versionNumber < 1) {
-    return NextResponse.json({ message: "Avaliação ou versão inválida." }, { status: 400 });
+    return NextResponse.json({ code: "VALIDATION_ERROR", message: "Avaliação ou versão inválida." }, { status: 400 });
   }
 
   const authorization = await authorizeInternalApi(["ai_evaluations.manage"]);

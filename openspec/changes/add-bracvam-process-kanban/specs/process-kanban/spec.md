@@ -23,19 +23,72 @@ O sistema SHALL carregar todos os processos que a pessoa autenticada estiver aut
 - **WHEN** alguma etapa necessária para carregar o conjunto completo falha
 - **THEN** o sistema não apresenta dados parciais como quadro completo e oferece uma ação para tentar novamente
 
-### Requirement: Organização dos processos por estado
+### Requirement: Organização dos processos por macroetapa operacional
 
-O sistema SHALL representar os estados do fluxo como colunas ordenadas e MUST colocar cada processo em exatamente uma coluna correspondente ao seu estado atual. A quantidade de processos de cada estado MUST permanecer visível no cabeçalho da respectiva coluna.
+O sistema SHALL apresentar, nessa ordem, as colunas Novas submissões, Em revisão, Em andamento e Encerradas. A posição de cada processo MUST ser derivada do ciclo de vida, da fase, da atividade, da rodada e da responsabilidade das tarefas correntes devolvidas pela API. Cada processo MUST aparecer em exatamente uma coluna e a contagem de cada coluna MUST permanecer visível.
 
-#### Scenario: Processo possui estado reconhecido
+#### Scenario: Submissão inicial aguarda análise
 
-- **WHEN** o quadro recebe um processo cujo estado pertence ao fluxo configurado
-- **THEN** o sistema apresenta o cartão na coluna correspondente e o inclui na contagem da coluna
+- **WHEN** a submissão inicial foi concluída e o processo ainda não avançou da primeira rodada de triagem
+- **THEN** o sistema apresenta o cartão em Novas submissões
 
-#### Scenario: Estado não reconhecido
+#### Scenario: Processo está em revisão ou correção
 
-- **WHEN** o serviço retorna um processo com um estado que não pertence à configuração conhecida pelo quadro
-- **THEN** o sistema mantém o processo visível em uma coluna de estado não reconhecido sem alterar o valor recebido
+- **WHEN** a triagem está em uma rodada posterior, foi concluída sem avanço de fase ou existe uma tarefa corrente de retorno ao proponente
+- **THEN** o sistema apresenta o cartão em Em revisão e sinaliza de quem é a ação
+
+#### Scenario: Processo avançou para execução
+
+- **WHEN** um processo aberto possui tarefa corrente em fase posterior à submissão e triagem
+- **THEN** o sistema apresenta o cartão em Em andamento
+
+#### Scenario: Processo terminou seu ciclo de vida
+
+- **WHEN** o ciclo de vida do processo é `CLOSED`, `CANCELLED` ou `ARCHIVED`
+- **THEN** o sistema apresenta o cartão em Encerradas, preservando o estado técnico e o motivo recebido
+
+#### Scenario: Submissão enviada ainda não possui classificação mais específica
+
+- **WHEN** o processo está aberto, há evidência de que a submissão inicial foi enviada e não há tarefa suficiente para indicar revisão ou andamento
+- **THEN** o sistema o mantém visível em Novas submissões e não apresenta uma coluna de estado não mapeado
+
+#### Scenario: Rascunho inicial não aparece para a BraCVAM
+
+- **WHEN** o processo está aberto e possui somente a submissão inicial ainda não concluída
+- **THEN** o sistema não apresenta esse processo em nenhuma coluna do Kanban
+
+### Requirement: Sinalização da responsabilidade durante a revisão
+
+O cartão em Em revisão SHALL informar quando a ação está com a BraCVAM, aguardando o proponente ou voltou corrigida. Quando a tarefa corrente estiver atribuída ao proponente, o sistema MUST desabilitar somente a ação de analisar e MUST manter a consulta dos detalhes disponível.
+
+#### Scenario: Proponente está corrigindo a submissão
+
+- **WHEN** existe uma tarefa corrente `submission_return_review` atribuída ao papel `proponent`
+- **THEN** o cartão informa que aguarda correção do proponente, mantém Ver detalhes disponível e apresenta Analisar desabilitado
+
+#### Scenario: Correção foi reenviada
+
+- **WHEN** a atividade de submissão possui rodada posterior concluída e a nova triagem pode ser executada pela BraCVAM
+- **THEN** o cartão informa Correção recebida e habilita a ação de análise
+
+#### Scenario: Nova triagem confirma o recebimento da correção
+
+- **WHEN** uma tarefa de triagem em rodada posterior está pronta para a BraCVAM, mesmo que a consulta de tarefas não inclua a submissão concluída correspondente
+- **THEN** o cartão informa Correção recebida e habilita a ação de análise
+
+### Requirement: Filtro da coluna Em andamento por fase
+
+O sistema SHALL obter as fases correntes dos processos em andamento e SHALL oferecer um filtro que afeta somente essa coluna. O filtro MUST preservar a contagem total da coluna e comunicar a quantidade atualmente exibida.
+
+#### Scenario: Pessoa escolhe uma fase
+
+- **WHEN** uma fase é selecionada no filtro de Em andamento
+- **THEN** a coluna mostra apenas os processos cuja tarefa corrente pertence à fase escolhida
+
+#### Scenario: Pessoa volta para todas as fases
+
+- **WHEN** a opção Todas as fases é selecionada
+- **THEN** a coluna volta a mostrar todos os processos em andamento
 
 ### Requirement: Identificação e consulta do processo
 
@@ -50,6 +103,55 @@ Cada cartão SHALL exibir pelo menos o código e o título do processo e MUST po
 
 - **WHEN** a pessoa consulta o quadro sem distinguir as cores das colunas
 - **THEN** o texto e os nomes acessíveis continuam identificando o estado e o processo
+
+#### Scenario: Detalhes de processo ainda aberto
+
+- **WHEN** a pessoa consulta os detalhes de um processo cujo ciclo de vida não é terminal
+- **THEN** o sistema mostra template, versão e início, sem apresentar o ciclo de vida técnico, encerramento ou motivo do encerramento
+
+#### Scenario: Detalhes de processo encerrado
+
+- **WHEN** a pessoa consulta os detalhes de um processo `CLOSED`, `CANCELLED` ou `ARCHIVED`
+- **THEN** o sistema apresenta data e motivo do encerramento sem expor o identificador técnico do ciclo de vida
+
+### Requirement: Triagem contextual no Kanban
+
+O sistema SHALL abrir a análise da submissão selecionada em um modal sobre o Kanban. O modal MUST ocupar 85% da largura e 85% da altura da viewport, o conteúdo interno MUST usar essa área sem limitação adicional de largura, MUST reutilizar o workspace de triagem e MUST preservar fechamento acessível por botão e tecla Escape. A decisão Aprovado, Solicitar correção ou Reprovado MUST permanecer visível no painel de análise sem exigir a abertura de outro modal.
+
+#### Scenario: BraCVAM inicia a análise de uma nova submissão
+
+- **WHEN** a pessoa aciona Analisar em um cartão disponível para a BraCVAM
+- **THEN** o sistema abre um modal amplo com o conteúdo de triagem já carregando o processo selecionado
+
+#### Scenario: Modal usa a área disponível
+
+- **WHEN** o modal de análise é aberto
+- **THEN** ele ocupa 85% da largura e da altura da viewport e distribui o conteúdo interno por toda essa área
+
+#### Scenario: Carregamento da proposta é interrompido
+
+- **WHEN** a requisição incorporada é abortada por uma remontagem controlada ou excede o tempo limite
+- **THEN** o sistema reinicia a carga quando aplicável ou apresenta uma falha recuperável com ação para tentar novamente, sem permanecer indefinidamente no estado de carregamento
+
+#### Scenario: Decisão final permanece disponível
+
+- **WHEN** a BraCVAM revisa a submissão no modal
+- **THEN** o painel mantém visíveis as opções Aprovado, Solicitar correção e Reprovado, a justificativa e a ação de confirmação
+
+#### Scenario: Pessoa consulta o histórico da submissão
+
+- **WHEN** a pessoa aciona Histórico no modal de análise
+- **THEN** o sistema orienta que o botão alterna entre análise e histórico, apresenta os eventos com rótulos compreensíveis em uma linha do tempo de pontos conectados e destaca o evento mais recente com uma onda circular animada
+
+#### Scenario: Cartão está em Novas submissões
+
+- **WHEN** um cartão é apresentado na coluna Novas submissões
+- **THEN** o sistema mantém Analisar habilitado e permite abrir o workspace, mesmo que a tarefa `triage_evaluation` ou a pré-avaliação ainda não estejam disponíveis
+
+#### Scenario: Análise pertence ao proponente
+
+- **WHEN** a tarefa corrente exige correção do proponente
+- **THEN** Analisar permanece desabilitado e nenhum modal de triagem é aberto
 
 ### Requirement: Quadro sem rolagem horizontal
 
@@ -81,7 +183,7 @@ O Kanban SHALL ser uma visualização somente leitura dos estados dos processos.
 
 ### Requirement: Sincronização dos estados exibidos
 
-O sistema SHALL tratar o valor de estado retornado pela API como fonte de verdade e SHALL revalidar periodicamente o conjunto completo enquanto o quadro estiver visível. Quando uma revalidação concluída retornar um estado diferente, o sistema MUST reposicionar automaticamente o cartão na coluna correspondente e atualizar as contagens sem exigir ação manual.
+O sistema SHALL tratar os processos e as tarefas retornados pela API como fontes de verdade e SHALL revalidar periodicamente os dois conjuntos completos enquanto o quadro estiver visível. Quando uma revalidação concluída alterar o ciclo de vida, a fase, a atividade, a rodada ou a responsabilidade, o sistema MUST recalcular a macroetapa, reposicionar automaticamente o cartão e atualizar as contagens sem exigir ação manual.
 
 #### Scenario: Processo avança no fluxo
 
@@ -111,3 +213,31 @@ O navegador MUST usar somente rotas internas da aplicação para consultar proce
 
 - **WHEN** o quadro carrega ou revalida os processos
 - **THEN** o navegador consulta uma rota interna sem receber a URL externa ou a credencial de sessão
+
+### Requirement: Retorno amplo para o proponente
+
+O sistema SHALL apresentar a revisão do retorno em um modal amplo que aproveite a viewport e SHALL separar, em telas largas, a decisão e os avisos da equipe BraCVAM do formulário tabulado. Depois que o proponente escolher corrigir a submissão, o sistema SHALL permitir a edição somente dos campos marcados pela BraCVAM como `NEEDS_REVISION` ou `REJECTED`, mantendo os demais visíveis apenas para consulta.
+
+#### Scenario: Proponente consulta um retorno da BraCVAM
+
+- **WHEN** o proponente abre uma submissão devolvida para revisão ou correção
+- **THEN** o modal ocupa aproximadamente 94% da largura e 92% da altura disponíveis, mantém avisos e decisão em uma lateral e usa a área restante para o formulário
+
+#### Scenario: Proponente corrige somente os campos sinalizados
+
+- **WHEN** o proponente escolhe `REVISE` e abre a nova rodada de correção
+- **THEN** somente os campos com parecer `NEEDS_REVISION` ou `REJECTED` ficam editáveis, enquanto campos aprovados ou sem parecer continuam visíveis e bloqueados
+
+#### Scenario: Nova rodada é liberada para correção
+
+- **WHEN** a API confirma a escolha `REVISE`
+- **THEN** o modal de retorno é fechado, as listas são atualizadas, a aba Rascunhos é selecionada e o proponente pode abrir o formulário para salvar ou reenviar, sem indicar que a correção já chegou à BraCVAM
+
+### Requirement: Entrada na área de submissões
+
+O sistema SHALL selecionar Nova submissão como a aba inicial sempre que a página de submissões for carregada.
+
+#### Scenario: Proponente abre a página de submissões
+
+- **WHEN** a página de submissões conclui sua abertura inicial
+- **THEN** a aba Nova submissão está selecionada e apresenta os tipos de formulário disponíveis

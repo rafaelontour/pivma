@@ -30,10 +30,10 @@ export type TriageDecisionInput = {
 
 export type TriageDecisionResult = {
   process_id: string;
-  new_process_status: string;
+  process_status: string;
   decision_id: string;
-  outcome: string;
-  next_activity_run?: number | null;
+  outcome: TriageDecisionOutcome;
+  return_review_run?: number | null;
 };
 
 export type TriageTimelineEvent = {
@@ -63,6 +63,12 @@ export type TriageQueueState =
   | { kind: "denied"; message: string }
   | { kind: "error"; message: string }
   | { kind: "ready"; processes: ProcessInstance[] };
+
+export type TriageWorkspaceProps = {
+  embedded?: boolean;
+  initialProcess?: ProcessInstance;
+  onCompleted?: () => void;
+};
 
 export type TriageWorkspaceState =
   | { kind: "closed" }
@@ -109,13 +115,6 @@ export type TriageAiReportProps = {
   onChange: (itemId: string, verdict: TriageFeedbackVerdict, reason: string) => void;
 };
 
-export type TriageDecisionDialogProps = {
-  isOpen: boolean;
-  isSaving: boolean;
-  onClose: () => void;
-  onSubmit: (input: TriageDecisionInput) => Promise<boolean>;
-};
-
 export type TriageLoadingProps = {
   label: string;
 };
@@ -123,4 +122,9 @@ export type TriageLoadingProps = {
 export type TriageMessageProps = {
   message: string;
   action?: () => void;
+};
+
+export type TriageTimelineViewProps = {
+  timeline: TriageTimeline;
+  onClose: () => void;
 };

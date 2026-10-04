@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 import type {
-  AiCriterion,
   AiEvaluationAssignment,
   AiEvaluationDefinitionSummary,
   AiEvaluationTestResult,

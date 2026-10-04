@@ -14,7 +14,7 @@ export async function GET(request: Request) {
   const status = readFilter(query.get("status"));
   const operationType = readFilter(query.get("operation_type"));
   if (limit === null || status === null || operationType === null) {
-    return NextResponse.json({ message: "Filtros operacionais inválidos." }, { status: 400 });
+    return NextResponse.json({ code: "VALIDATION_ERROR", message: "Filtros operacionais inválidos." }, { status: 400 });
   }
 
   const result = await getOperationalHistory(authorization.accessToken, {

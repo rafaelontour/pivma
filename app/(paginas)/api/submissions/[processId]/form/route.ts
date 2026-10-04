@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { internalApiErrorResponse } from "@/app/(paginas)/api/_shared/responses";
 import { getCurrentUser } from "@/services/Autenticacao";
+import type { CurrentSessionUser } from "@/types/Autenticacao";
 import {
   getSubmissionForm,
   saveSubmissionDraft,
@@ -21,20 +22,20 @@ export async function GET(
   const { processId } = await context.params;
 
   if (!isUuid(processId)) {
-    return NextResponse.json(
-      { message: "Submissão inválida." },
-      { status: 400 },
-    );
+    return NextResponse.json({ code: "VALIDATION_ERROR", message: "Submissão inválida." }, { status: 400 });
   }
 
   const cookieStore = await cookies();
   const accessToken = cookieStore.get("access_token")?.value;
 
   if (!accessToken) {
-    return NextResponse.json(
-      { message: "Sessão não encontrada." },
-      { status: 401 },
-    );
+    return NextResponse.json({ code: "AUTH_REQUIRED", message: "Sessão não encontrada." }, { status: 401 });
+  }
+
+  const currentUser = await getCurrentUser(accessToken);
+  if (!currentUser.ok) return formErrorResponse(currentUser.status, cookieStore, "consultar");
+  if (!hasProponentScope(currentUser.data.access.scopes, processId)) {
+    return NextResponse.json({ code: "FORBIDDEN", message: "Você não pode acessar este formulário." }, { status: 403 });
   }
 
   const result = await getSubmissionForm(accessToken, processId);
@@ -55,20 +56,20 @@ export async function PUT(
     | null;
 
   if (!isUuid(processId) || !isValidValues(payload?.values)) {
-    return NextResponse.json(
-      { message: "Informe valores de rascunho válidos." },
-      { status: 400 },
-    );
+    return NextResponse.json({ code: "VALIDATION_ERROR", message: "Informe valores de rascunho válidos." }, { status: 400 });
   }
 
   const cookieStore = await cookies();
   const accessToken = cookieStore.get("access_token")?.value;
 
   if (!accessToken) {
-    return NextResponse.json(
-      { message: "Sessão não encontrada." },
-      { status: 401 },
-    );
+    return NextResponse.json({ code: "AUTH_REQUIRED", message: "Sessão não encontrada." }, { status: 401 });
+  }
+
+  const currentUser = await getCurrentUser(accessToken);
+  if (!currentUser.ok) return formErrorResponse(currentUser.status, cookieStore, "salvar");
+  if (!hasProponentScope(currentUser.data.access.scopes, processId)) {
+    return NextResponse.json({ code: "FORBIDDEN", message: "Você não pode alterar este formulário." }, { status: 403 });
   }
 
   const result = await saveSubmissionDraft(
@@ -93,20 +94,14 @@ export async function POST(
     | null;
 
   if (!isUuid(processId) || !isValidValues(payload?.values)) {
-    return NextResponse.json(
-      { message: "Informe valores de submissão válidos." },
-      { status: 400 },
-    );
+    return NextResponse.json({ code: "VALIDATION_ERROR", message: "Informe valores de submissão válidos." }, { status: 400 });
   }
 
   const cookieStore = await cookies();
   const accessToken = cookieStore.get("access_token")?.value;
 
   if (!accessToken) {
-    return NextResponse.json(
-      { message: "Sessão não encontrada." },
-      { status: 401 },
-    );
+    return NextResponse.json({ code: "AUTH_REQUIRED", message: "Sessão não encontrada." }, { status: 401 });
   }
 
   const currentUser = await getCurrentUser(accessToken);
@@ -115,16 +110,10 @@ export async function POST(
     return formErrorResponse(currentUser.status, cookieStore, "enviar");
   }
 
-  const canSubmit = currentUser.data.access.scopes.some(
-    (scope) =>
-      scope.process_id === processId && scope.roles.includes("proponent"),
-  );
+  const canSubmit = hasProponentScope(currentUser.data.access.scopes, processId);
 
   if (!canSubmit) {
-    return NextResponse.json(
-      { message: "Você não pode enviar esta submissão." },
-      { status: 403 },
-    );
+    return NextResponse.json({ code: "FORBIDDEN", message: "Você não pode enviar esta submissão." }, { status: 403 });
   }
 
   const result = await submitSubmission(accessToken, processId, payload);
@@ -184,5 +173,14 @@ function isValidValues(
 function isUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
     value,
+  );
+}
+
+function hasProponentScope(
+  scopes: CurrentSessionUser["access"]["scopes"],
+  processId: string,
+) {
+  return scopes.some(
+    (scope) => scope.process_id === processId && scope.roles.includes("proponent"),
   );
 }

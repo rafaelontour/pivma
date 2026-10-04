@@ -9,6 +9,7 @@ import type {
   FormTemplateField,
   UpdateFormTemplateInput,
 } from "@/types/Formulario";
+import type { TFunction } from "i18next";
 import type { AiEvaluationTargetType } from "@/types/AvaliacaoIa";
 import type { ApiRecord } from "@/types/Servico";
 import type {
@@ -32,11 +33,11 @@ export const FORM_FIELD_TYPES = [
   "file_upload",
 ] as const;
 
-export function groupFormSections(fields: FormTemplateField[]) {
+export function groupFormSections(fields: FormTemplateField[], defaultSectionName = "Geral") {
   const sections: FormEditorSection[] = [];
 
   for (const field of [...fields].sort((left, right) => left.order_index - right.order_index)) {
-    const name = field.section?.trim() || "Geral";
+    const name = field.section?.trim() || defaultSectionName;
     let section = sections.find((candidate) => candidate.name === name);
 
     if (!section) {
@@ -49,7 +50,7 @@ export function groupFormSections(fields: FormTemplateField[]) {
 
   return sections.length > 0
     ? sections
-    : [{ id: createSectionId("Geral", 0), name: "Geral", fields: [] }];
+    : [{ id: createSectionId(defaultSectionName, 0), name: defaultSectionName, fields: [] }];
 }
 
 export function flattenFormSections(sections: FormEditorSection[]) {
@@ -58,15 +59,14 @@ export function flattenFormSections(sections: FormEditorSection[]) {
   );
 }
 
-export function createEmptyFormSection(index: number): FormEditorSection {
-  const name = `Nova seção ${index + 1}`;
+export function createEmptyFormSection(index: number, name = `Nova seção ${index + 1}`): FormEditorSection {
   return { id: createSectionId(name, Date.now()), name, fields: [] };
 }
 
-export function createEmptyFormField(index: number, section: string): FormTemplateField {
+export function createEmptyFormField(index: number, section: string, label = `Novo campo ${index + 1}`): FormTemplateField {
   return {
     field_key: `campo_${index + 1}`,
-    label: `Novo campo ${index + 1}`,
+    label,
     help_text: null,
     field_type: "text",
     is_required: false,
@@ -102,9 +102,9 @@ export function normalizeFormForSave(
   };
 }
 
-export function validateFormDefinition(value: unknown): FormDefinitionValidation {
+export function validateFormDefinition(value: unknown, t?: TFunction): FormDefinitionValidation {
   if (!isRecord(value) || typeof value.name !== "string" || !Array.isArray(value.fields)) {
-    return { valid: false, message: "Informe os metadados e os campos do formulário." };
+    return { valid: false, message: t?.("formBuilder.validation.metadata") ?? "Informe os metadados e os campos do formulário." };
   }
 
   const description =
@@ -114,11 +114,11 @@ export function validateFormDefinition(value: unknown): FormDefinitionValidation
   const fields = value.fields.map(normalizeFieldInput);
 
   if (value.name.trim().length < 1) {
-    return { valid: false, message: "O nome do formulário é obrigatório." };
+    return { valid: false, message: t?.("formBuilder.validation.nameRequired") ?? "O nome do formulário é obrigatório." };
   }
 
   if (fields.some((field) => field === null)) {
-    return { valid: false, message: "Há campos com formato inválido na definição." };
+    return { valid: false, message: t?.("formBuilder.validation.invalidFields") ?? "Há campos com formato inválido na definição." };
   }
 
   const input = normalizeFormForSave({
@@ -132,37 +132,37 @@ export function validateFormDefinition(value: unknown): FormDefinitionValidation
     if (!/^[a-z0-9_]+$/.test(field.field_key)) {
       return {
         valid: false,
-        message: `A chave “${field.field_key || "vazia"}” deve usar apenas letras minúsculas, números e sublinhados.`,
+        message: t?.("formBuilder.validation.invalidKey", { key: field.field_key || t("formBuilder.validation.emptyKey") }) ?? `A chave “${field.field_key || "vazia"}” deve usar apenas letras minúsculas, números e sublinhados.`,
       };
     }
 
     if (keys.has(field.field_key)) {
-      return { valid: false, message: `A chave “${field.field_key}” está duplicada.` };
+      return { valid: false, message: t?.("formBuilder.validation.duplicateKey", { key: field.field_key }) ?? `A chave “${field.field_key}” está duplicada.` };
     }
     keys.add(field.field_key);
 
     if (!field.label || !field.section) {
-      return { valid: false, message: `Revise o rótulo e a seção do campo “${field.field_key}”.` };
+      return { valid: false, message: t?.("formBuilder.validation.reviewField", { key: field.field_key }) ?? `Revise o rótulo e a seção do campo “${field.field_key}”.` };
     }
 
     if (!FORM_FIELD_TYPES.includes(field.field_type as (typeof FORM_FIELD_TYPES)[number])) {
-      return { valid: false, message: `O tipo “${field.field_type}” não é suportado.` };
+      return { valid: false, message: t?.("formBuilder.validation.unsupportedType", { type: field.field_type }) ?? `O tipo “${field.field_type}” não é suportado.` };
     }
 
     if (field.field_type === "select") {
       if (!field.options || field.options.length === 0) {
-        return { valid: false, message: `Inclua ao menos uma opção em “${field.label}”.` };
+        return { valid: false, message: t?.("formBuilder.validation.optionRequired", { label: field.label }) ?? `Inclua ao menos uma opção em “${field.label}”.` };
       }
       const optionValues = new Set(field.options.map((option) => String(option.value)));
       if (optionValues.size !== field.options.length) {
-        return { valid: false, message: `As opções de “${field.label}” devem ter valores únicos.` };
+        return { valid: false, message: t?.("formBuilder.validation.uniqueOptions", { label: field.label }) ?? `As opções de “${field.label}” devem ter valores únicos.` };
       }
     }
 
     const minimum = field.validation_rules?.min;
     const maximum = field.validation_rules?.max;
     if (typeof minimum === "number" && typeof maximum === "number" && minimum > maximum) {
-      return { valid: false, message: `O mínimo de “${field.label}” não pode superar o máximo.` };
+      return { valid: false, message: t?.("formBuilder.validation.minimumMaximum", { label: field.label }) ?? `O mínimo de “${field.label}” não pode superar o máximo.` };
     }
   }
 
@@ -253,6 +253,7 @@ export function buildDynamicFormValues(
 export function validateDynamicFormValues(
   fields: DynamicFormField[],
   inputs: SubmissionFieldInputs,
+  t?: TFunction,
 ): DynamicFormValidationResult {
   for (const field of [...fields].sort(
     (first, second) => first.order_index - second.order_index,
@@ -264,7 +265,7 @@ export function validateDynamicFormValues(
         return {
           valid: false,
           fieldKey: field.field_key,
-          message: `O campo obrigatório “${field.label}” usa um tipo ainda não suportado.`,
+          message: t?.("submissions.validation.unsupportedRequired", { field: field.label }) ?? `O campo obrigatório “${field.label}” usa um tipo ainda não suportado.`,
         };
       }
       continue;
@@ -275,7 +276,7 @@ export function validateDynamicFormValues(
         return {
           valid: false,
           fieldKey: field.field_key,
-          message: `Selecione o arquivo obrigatório: ${field.label}.`,
+          message: t?.("submissions.validation.requiredFile", { field: field.label }) ?? `Selecione o arquivo obrigatório: ${field.label}.`,
         };
       }
       continue;
@@ -283,14 +284,14 @@ export function validateDynamicFormValues(
 
     if (field.field_type === "boolean") {
       if (field.is_required && typeof value !== "boolean") {
-        return requiredFieldError(field);
+        return requiredFieldError(field, t);
       }
       continue;
     }
 
     const textValue = typeof value === "string" ? value.trim() : "";
     if (field.is_required && textValue === "") {
-      return requiredFieldError(field);
+      return requiredFieldError(field, t);
     }
 
     if (textValue === "") {
@@ -300,35 +301,29 @@ export function validateDynamicFormValues(
     if (field.field_type === "integer" || field.field_type === "float") {
       const numericValue = Number(textValue);
       if (!Number.isFinite(numericValue)) {
-        return fieldValidationError(field, "Informe um número válido");
+        return localizedFieldValidationError(field, t, "invalidNumber", "Informe um número válido");
       }
       if (field.field_type === "integer" && !Number.isInteger(numericValue)) {
-        return fieldValidationError(field, "Informe um número inteiro");
+        return localizedFieldValidationError(field, t, "invalidInteger", "Informe um número inteiro");
       }
 
       const minimum = getDynamicFormNumericRule(field, "min");
       const maximum = getDynamicFormNumericRule(field, "max");
       if (minimum !== undefined && numericValue < minimum) {
-        return fieldValidationError(field, `Informe um valor maior ou igual a ${minimum}`);
+        return localizedFieldValidationError(field, t, "minimum", `Informe um valor maior ou igual a ${minimum}`, { minimum });
       }
       if (maximum !== undefined && numericValue > maximum) {
-        return fieldValidationError(field, `Informe um valor menor ou igual a ${maximum}`);
+        return localizedFieldValidationError(field, t, "maximum", `Informe um valor menor ou igual a ${maximum}`, { maximum });
       }
     }
 
     const minimumLength = getDynamicFormNumericRule(field, "min_length");
     const maximumLength = getDynamicFormNumericRule(field, "max_length");
     if (minimumLength !== undefined && textValue.length < minimumLength) {
-      return fieldValidationError(
-        field,
-        `Informe ao menos ${minimumLength} caracteres`,
-      );
+      return localizedFieldValidationError(field, t, "minimumLength", `Informe ao menos ${minimumLength} caracteres`, { minimum: minimumLength });
     }
     if (maximumLength !== undefined && textValue.length > maximumLength) {
-      return fieldValidationError(
-        field,
-        `Informe no máximo ${maximumLength} caracteres`,
-      );
+      return localizedFieldValidationError(field, t, "maximumLength", `Informe no máximo ${maximumLength} caracteres`, { maximum: maximumLength });
     }
 
     if (
@@ -337,7 +332,7 @@ export function validateDynamicFormValues(
         (option) => serializeDynamicFormOption(option.value) === value,
       )
     ) {
-      return fieldValidationError(field, "Selecione uma opção válida");
+      return localizedFieldValidationError(field, t, "invalidOption", "Selecione uma opção válida");
     }
   }
 
@@ -400,21 +395,20 @@ export function getDynamicFormMaximumFileSizeMb(field: DynamicFormField) {
   return typeof maximum === "number" && maximum > 0 ? maximum : undefined;
 }
 
-export function validateDynamicFormFile(file: File, field: DynamicFormField) {
+export function validateDynamicFormFile(file: File, field: DynamicFormField, t?: TFunction) {
   const extensions = getDynamicFormAllowedFileExtensions(field);
   const extension = file.name.includes(".")
     ? file.name.split(".").pop()?.toLowerCase()
     : undefined;
 
   if (extensions.length > 0 && (!extension || !extensions.includes(extension))) {
-    return `Selecione um arquivo nos formatos: ${extensions
-      .map((value) => value.toUpperCase())
-      .join(", ")}.`;
+    const formats = extensions.map((value) => value.toUpperCase()).join(", ");
+    return t?.("submissions.validation.fileFormats", { formats }) ?? `Selecione um arquivo nos formatos: ${formats}.`;
   }
 
   const maximumSizeMb = getDynamicFormMaximumFileSizeMb(field);
   if (maximumSizeMb && file.size > maximumSizeMb * 1024 * 1024) {
-    return `O arquivo deve ter no máximo ${maximumSizeMb} MB.`;
+    return t?.("submissions.validation.fileSize", { size: maximumSizeMb }) ?? `O arquivo deve ter no máximo ${maximumSizeMb} MB.`;
   }
 
   return null;
@@ -428,8 +422,25 @@ export function getDynamicFormNumericRule(
   return typeof value === "number" ? value : undefined;
 }
 
-function requiredFieldError(field: DynamicFormField): DynamicFormValidationResult {
-  return fieldValidationError(field, "Este campo é obrigatório");
+function requiredFieldError(field: DynamicFormField, t?: TFunction): DynamicFormValidationResult {
+  return localizedFieldValidationError(field, t, "requiredField", "Este campo é obrigatório");
+}
+
+function localizedFieldValidationError(
+  field: DynamicFormField,
+  t: TFunction | undefined,
+  key: string,
+  fallback: string,
+  variables: Record<string, string | number> = {},
+): DynamicFormValidationResult {
+  if (t) {
+    return {
+      valid: false,
+      fieldKey: field.field_key,
+      message: t(`submissions.validation.${key}`, { field: field.label, ...variables }),
+    };
+  }
+  return fieldValidationError(field, fallback);
 }
 
 function fieldValidationError(
@@ -514,82 +525,27 @@ function isRecord(value: unknown): value is ApiRecord {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-export const AI_SEVERITY_OPTIONS: { value: FieldAiRuleSeverity; label: string }[] = [
-  { value: "info", label: "Informativo" },
-  { value: "low", label: "Baixa" },
-  { value: "medium", label: "Média" },
-  { value: "high", label: "Alta" },
-  { value: "critical", label: "Crítica" },
+export const AI_SEVERITY_OPTIONS: { value: FieldAiRuleSeverity }[] = [
+  { value: "info" },
+  { value: "low" },
+  { value: "medium" },
+  { value: "high" },
+  { value: "critical" },
 ];
 
-export const AI_CHECK_TYPE_OPTIONS: {
-  value: FieldAiRuleCheckType;
-  label: string;
-  description: string;
-}[] = [
-  {
-    value: "presence",
-    label: "Presença",
-    description: "Verifica se uma informação essencial está presente na resposta.",
-  },
-  {
-    value: "conformity",
-    label: "Conformidade",
-    description: "Verifica se a resposta segue uma diretriz, norma ou formato específico.",
-  },
-  {
-    value: "quality",
-    label: "Qualidade",
-    description: "Avalia a clareza, completude, fundamentação ou coerência do texto.",
-  },
-  {
-    value: "cross_field_consistency",
-    label: "Consistência",
-    description: "Compara informações entre dois ou mais campos para evitar contradições.",
-  },
-  {
-    value: "comparison",
-    label: "Comparação",
-    description: "Confronta dados com parâmetros de referência técnicos.",
-  },
+export const AI_CHECK_TYPE_OPTIONS: { value: FieldAiRuleCheckType }[] = [
+  { value: "presence" },
+  { value: "conformity" },
+  { value: "quality" },
+  { value: "cross_field_consistency" },
+  { value: "comparison" },
 ];
 
-export const AI_SCOPE_OPTIONS: {
-  value: FieldAiRuleScope;
-  label: string;
-  description: string;
-}[] = [
-  {
-    value: "field",
-    label: "Somente este campo",
-    description: "A IA avaliará exclusivamente o conteúdo digitado neste campo.",
-  },
-  {
-    value: "cross_field",
-    label: "Este campo + outros campos",
-    description: "A IA confrontará a resposta deste campo com outros campos selecionados do formulário.",
-  },
-  {
-    value: "form",
-    label: "Todo o formulário",
-    description: "A IA terá visão abrangente de todas as respostas do formulário durante a análise.",
-  },
+export const AI_SCOPE_OPTIONS: { value: FieldAiRuleScope }[] = [
+  { value: "field" },
+  { value: "cross_field" },
+  { value: "form" },
 ];
-
-export function mapSeverityToLabel(severity: string): string {
-  const match = AI_SEVERITY_OPTIONS.find((item) => item.value === severity);
-  return match ? match.label : severity;
-}
-
-export function mapCheckTypeToLabel(checkType: string): string {
-  const match = AI_CHECK_TYPE_OPTIONS.find((item) => item.value === checkType);
-  return match ? match.label : checkType;
-}
-
-export function mapScopeToLabel(scope: FieldAiRuleScope): string {
-  const match = AI_SCOPE_OPTIONS.find((item) => item.value === scope);
-  return match ? match.label : scope;
-}
 
 export function mapScopeToTargetType(scope: FieldAiRuleScope): AiEvaluationTargetType {
   switch (scope) {
@@ -603,33 +559,33 @@ export function mapScopeToTargetType(scope: FieldAiRuleScope): AiEvaluationTarge
   }
 }
 
-export function validateAiRuleDraft(draft: FieldAiRuleQuickDraft): {
+export function validateAiRuleDraft(draft: FieldAiRuleQuickDraft, t?: TFunction): {
   valid: boolean;
   errors: string[];
 } {
   const errors: string[] = [];
 
   if (!draft.name.trim()) {
-    errors.push("Informe um nome para a regra.");
+    errors.push(t?.("fieldAiRules.validation.nameRequired") ?? "Informe um nome para a regra.");
   }
 
   if (!draft.objective.trim()) {
-    errors.push("Descreva o que a IA deve avaliar (objetivo).");
+    errors.push(t?.("fieldAiRules.validation.objectiveRequired") ?? "Descreva o que a IA deve avaliar (objetivo).");
   }
 
   const enabledCriteria = draft.criteria.filter((c) => c.enabled);
   if (enabledCriteria.length === 0) {
-    errors.push("A regra precisa de ao menos um critério ativo.");
+    errors.push(t?.("fieldAiRules.validation.criterionRequired") ?? "A regra precisa de ao menos um critério ativo.");
   } else {
     for (let i = 0; i < enabledCriteria.length; i++) {
       if (!enabledCriteria[i].statement.trim()) {
-        errors.push(`O critério ${i + 1} precisa ter um texto descritivo.`);
+        errors.push(t?.("fieldAiRules.validation.criterionDescription", { number: i + 1 }) ?? `O critério ${i + 1} precisa ter um texto descritivo.`);
       }
     }
   }
 
   if (draft.scope === "cross_field" && draft.selectedFieldKeys.length === 0) {
-    errors.push("Selecione os outros campos a serem considerados na análise cruzada.");
+    errors.push(t?.("fieldAiRules.selectCrossFields") ?? "Selecione os outros campos a serem considerados na análise cruzada.");
   }
 
   return {

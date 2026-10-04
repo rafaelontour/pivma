@@ -12,14 +12,14 @@ export async function GET(
   const { userId } = await context.params;
 
   if (!isUuid(userId)) {
-    return NextResponse.json({ message: "Usuário inválido." }, { status: 400 });
+    return NextResponse.json({ code: "VALIDATION_ERROR", message: "Usuário inválido." }, { status: 400 });
   }
 
   const cookieStore = await cookies();
   const accessToken = cookieStore.get("access_token")?.value;
 
   if (!accessToken) {
-    return NextResponse.json({ message: "Sessão não encontrada." }, { status: 401 });
+    return NextResponse.json({ code: "AUTH_REQUIRED", message: "Sessão não encontrada." }, { status: 401 });
   }
 
   const result = await getUserAccess(accessToken, userId);

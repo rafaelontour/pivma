@@ -11,10 +11,7 @@ export async function POST(request: Request) {
   const password = typeof payload?.password === "string" ? payload.password : "";
 
   if (!identifier || password.length < 8) {
-    return NextResponse.json(
-      { message: "Informe seu e-mail ou usuário e uma senha válida." },
-      { status: 400 },
-    );
+    return NextResponse.json({ code: "VALIDATION_ERROR", message: "Informe seu e-mail ou usuário e uma senha válida." }, { status: 400 });
   }
 
   const result = await login(identifier, password);
@@ -35,10 +32,7 @@ export async function POST(request: Request) {
   );
 
   if (!accessTokenCookie) {
-    return NextResponse.json(
-      { message: "O serviço não retornou uma sessão válida." },
-      { status: 502 },
-    );
+    return NextResponse.json({ code: "UPSTREAM_UNAVAILABLE", message: "O serviço não retornou uma sessão válida." }, { status: 502 });
   }
 
   const response = NextResponse.json({ success: true });

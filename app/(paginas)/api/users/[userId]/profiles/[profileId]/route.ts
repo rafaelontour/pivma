@@ -16,14 +16,14 @@ export async function POST(
   const { userId, profileId } = await context.params;
 
   if (!isUuid(userId) || !isUuid(profileId)) {
-    return NextResponse.json({ message: "Usuário ou perfil inválido." }, { status: 400 });
+    return NextResponse.json({ code: "VALIDATION_ERROR", message: "Usuário ou perfil inválido." }, { status: 400 });
   }
 
   const cookieStore = await cookies();
   const accessToken = cookieStore.get("access_token")?.value;
 
   if (!accessToken) {
-    return NextResponse.json({ message: "Sessão não encontrada." }, { status: 401 });
+    return NextResponse.json({ code: "AUTH_REQUIRED", message: "Sessão não encontrada." }, { status: 401 });
   }
 
   const result = await grantUserProfile(accessToken, userId, profileId);
@@ -51,14 +51,14 @@ export async function DELETE(
   const { userId, profileId } = await context.params;
 
   if (!isUuid(userId) || !isUuid(profileId)) {
-    return NextResponse.json({ message: "Usuário ou perfil inválido." }, { status: 400 });
+    return NextResponse.json({ code: "VALIDATION_ERROR", message: "Usuário ou perfil inválido." }, { status: 400 });
   }
 
   const cookieStore = await cookies();
   const accessToken = cookieStore.get("access_token")?.value;
 
   if (!accessToken) {
-    return NextResponse.json({ message: "Sessão não encontrada." }, { status: 401 });
+    return NextResponse.json({ code: "AUTH_REQUIRED", message: "Sessão não encontrada." }, { status: 401 });
   }
 
   const accessResult = await getUserAccess(accessToken, userId);
@@ -75,10 +75,7 @@ export async function DELETE(
   }
 
   if (accessResult.data.profiles.length <= 1) {
-    return NextResponse.json(
-      { message: "Todo usuário precisa manter pelo menos um cargo atribuído." },
-      { status: 400 },
-    );
+    return NextResponse.json({ code: "VALIDATION_ERROR", message: "Todo usuário precisa manter pelo menos um cargo atribuído." }, { status: 400 });
   }
 
   const result = await revokeUserProfile(accessToken, userId, profileId);

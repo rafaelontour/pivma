@@ -16,17 +16,14 @@ export async function PATCH(
     typeof payload?.full_name === "string" ? payload.full_name.trim() : "";
 
   if (!isUuid(userId) || fullName.length < 1 || fullName.length > 255) {
-    return NextResponse.json(
-      { message: "Informe um usuário e um nome completo válidos." },
-      { status: 400 },
-    );
+    return NextResponse.json({ code: "VALIDATION_ERROR", message: "Informe um usuário e um nome completo válidos." }, { status: 400 });
   }
 
   const cookieStore = await cookies();
   const accessToken = cookieStore.get("access_token")?.value;
 
   if (!accessToken) {
-    return NextResponse.json({ message: "Sessão não encontrada." }, { status: 401 });
+    return NextResponse.json({ code: "AUTH_REQUIRED", message: "Sessão não encontrada." }, { status: 401 });
   }
 
   const result = await updateUser(accessToken, userId, { full_name: fullName });

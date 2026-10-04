@@ -18,7 +18,7 @@ export async function GET(
 ) {
   const parameters = await getParameters(context);
   if (!parameters) {
-    return NextResponse.json({ message: "Avaliação ou versão inválida." }, { status: 400 });
+    return NextResponse.json({ code: "VALIDATION_ERROR", message: "Avaliação ou versão inválida." }, { status: 400 });
   }
 
   const authorization = await authorizeInternalApi([
@@ -48,7 +48,7 @@ export async function PATCH(
 ) {
   const parameters = await getParameters(context);
   if (!parameters) {
-    return NextResponse.json({ message: "Avaliação ou versão inválida." }, { status: 400 });
+    return NextResponse.json({ code: "VALIDATION_ERROR", message: "Avaliação ou versão inválida." }, { status: 400 });
   }
 
   const authorization = await authorizeInternalApi(["ai_evaluations.manage"]);
@@ -58,7 +58,7 @@ export async function PATCH(
     await request.json().catch(() => null),
   );
   if (!validation.valid) {
-    return NextResponse.json({ message: validation.message }, { status: 400 });
+    return NextResponse.json({ code: "VALIDATION_ERROR", message: validation.message }, { status: 400 });
   }
 
   const result = await patchAiEvaluationVersion(

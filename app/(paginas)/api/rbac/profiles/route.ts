@@ -14,7 +14,7 @@ export async function GET() {
   const accessToken = cookieStore.get("access_token")?.value;
 
   if (!accessToken) {
-    return NextResponse.json({ message: "Sessão não encontrada." }, { status: 401 });
+    return NextResponse.json({ code: "AUTH_REQUIRED", message: "Sessão não encontrada." }, { status: 401 });
   }
 
   const result = await listPermissionProfiles(accessToken);
@@ -54,17 +54,14 @@ export async function POST(request: Request) {
       (code) => typeof code !== "string" || code.length < 1 || code.length > 100,
     )
   ) {
-    return NextResponse.json(
-      { message: "Revise o nome, a descrição e as permissões do perfil." },
-      { status: 400 },
-    );
+    return NextResponse.json({ code: "VALIDATION_ERROR", message: "Revise o nome, a descrição e as permissões do perfil." }, { status: 400 });
   }
 
   const cookieStore = await cookies();
   const accessToken = cookieStore.get("access_token")?.value;
 
   if (!accessToken) {
-    return NextResponse.json({ message: "Sessão não encontrada." }, { status: 401 });
+    return NextResponse.json({ code: "AUTH_REQUIRED", message: "Sessão não encontrada." }, { status: 401 });
   }
 
   const result = await createPermissionProfile(accessToken, {

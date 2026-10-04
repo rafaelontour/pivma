@@ -27,3 +27,10 @@ export type LocalizedDateFormatOptions = LocalizedFormatOptions &
 export type LocalizedNumberFormatOptions = LocalizedFormatOptions &
   Intl.NumberFormatOptions;
 
+export type LocalizedCurrencyFormatOptions = LocalizedNumberFormatOptions & {
+  currency: string;
+};
+
+export type LocalizedDurationFormatOptions = LocalizedFormatOptions & {
+  maximumFractionDigits?: number;
+};

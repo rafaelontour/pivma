@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import {
   AlertCircle,
@@ -8,7 +7,6 @@ import {
   ArrowLeft,
   ArrowRight,
   ArrowUp,
-  Bot,
   LoaderCircle,
   Plus,
   RefreshCw,
@@ -16,6 +14,9 @@ import {
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
+import { getLocalizedApiError } from "@/i18n/errors";
 import { useAccessibleDialog } from "@/components/accessible-dialog";
 import {
   FORM_FIELD_TYPES,
@@ -48,26 +49,17 @@ import type {
   FormTemplateField,
 } from "@/types/Formulario";
 import type { ApiRecord } from "@/types/Servico";
+import type { AiEvaluationTargetType } from "@/types/AvaliacaoIa";
 import {
   FieldAiRuleModal,
   FieldAiRuleSection,
 } from "./field-ai-rule-manager";
 
-const FIELD_TYPE_LABELS = {
-  text: "Texto curto",
-  textarea: "Texto longo",
-  select: "Seleção",
-  integer: "Número inteiro",
-  float: "Número decimal",
-  boolean: "Sim ou não",
-  date: "Data",
-  file_upload: "Arquivo",
-};
-
 const EDITOR_INPUT_CLASS =
   "mt-2 min-h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-normal normal-case tracking-normal text-slate-900 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500";
 
 export function FormTemplateManager() {
+  const { t } = useTranslation();
   const [catalog, setCatalog] = useState<FormCatalogState>({ kind: "loading" });
   const [editor, setEditor] = useState<FormEditorState>({ kind: "closed" });
   const [permissions, setPermissions] = useState<string[]>([]);
@@ -106,14 +98,14 @@ export function FormTemplateManager() {
                   kind: "denied",
                   message: getApiMessage(
                     catalogPayload,
-                    "Seu perfil não pode consultar a gestão de formulários.",
+                    t("formBuilder.denied"), t,
                   ),
                 }
               : {
                   kind: "error",
                   message: getApiMessage(
                     catalogPayload,
-                    "Não foi possível carregar os formulários.",
+                    t("formBuilder.loadFailed"), t,
                   ),
                 },
           );
@@ -125,7 +117,7 @@ export function FormTemplateManager() {
         if (!controller.signal.aborted) {
           setCatalog({
             kind: "error",
-            message: "Não foi possível conectar ao serviço de formulários.",
+            message: t("formBuilder.connectionFailed"),
           });
         }
       }
@@ -133,7 +125,7 @@ export function FormTemplateManager() {
 
     void load();
     return () => controller.abort();
-  }, [reloadKey]);
+  }, [reloadKey, t]);
 
   const canManageAi = permissions.includes("ai_evaluations.manage");
 
@@ -167,7 +159,7 @@ export function FormTemplateManager() {
           item,
           message: getApiMessage(
             detailPayload,
-            "Não foi possível carregar a definição do formulário.",
+            t("formBuilder.definitionFailed"), t,
           ),
         });
         return;
@@ -187,7 +179,7 @@ export function FormTemplateManager() {
         kind: "ready",
         item,
         detail: detailPayload,
-        sections: groupFormSections(detailPayload.fields),
+        sections: groupFormSections(detailPayload.fields, t("formBuilder.general")),
         assignments,
         isSaving: false,
       });
@@ -197,7 +189,7 @@ export function FormTemplateManager() {
         setEditor({
           kind: "error",
           item,
-          message: "Não foi possível conectar ao serviço de formulários.",
+          message: t("formBuilder.connectionFailed"),
         });
       }
     }
@@ -254,7 +246,7 @@ export function FormTemplateManager() {
         .map((a) => ({
           definition_id: a.definition_id,
           pinned_version_id: a.pinned_version_id ?? null,
-          target_type: a.target_type as any,
+          target_type: a.target_type as AiEvaluationTargetType,
           field_keys: a.field_keys ?? [],
           enabled: a.enabled !== false,
         }));
@@ -281,17 +273,17 @@ export function FormTemplateManager() {
             ? { ...current, assignments: mapped }
             : current,
         );
-        toast.success("Avaliação por IA desvinculada deste campo.");
+        toast.success(t("formBuilder.aiUnlinked"));
       }
     } catch {
-      toast.error("Não foi possível sincronizar a desvinculação com o servidor.");
+      toast.error(t("formBuilder.unlinkFailed"));
     }
   }
 
   async function saveForm() {
     if (editor.kind !== "ready" || editor.isSaving) return;
 
-    const sectionError = validateSections(editor.sections);
+    const sectionError = validateSections(editor.sections, t);
     if (sectionError) {
       toast.error(sectionError);
       return;
@@ -301,7 +293,7 @@ export function FormTemplateManager() {
       name: editor.detail.name,
       description: editor.detail.description,
       fields: flattenFormSections(editor.sections),
-    });
+    }, t);
     if (!validation.valid) {
       toast.error(validation.message);
       return;
@@ -323,7 +315,7 @@ export function FormTemplateManager() {
       if (!response.ok || !isFormDetail(payload)) {
         updateReadyEditor((current) => ({ ...current, isSaving: false }));
         toast.error(
-          getApiMessage(payload, "Não foi possível salvar o formulário."),
+          getApiMessage(payload, t("formBuilder.saveFailed"), t),
         );
         return;
       }
@@ -351,15 +343,15 @@ export function FormTemplateManager() {
         kind: "ready",
         item: updatedItem,
         detail: payload,
-        sections: groupFormSections(payload.fields),
+        sections: groupFormSections(payload.fields, t("formBuilder.general")),
         assignments: editor.assignments,
         isSaving: false,
       });
       setHasPendingChanges(false);
-      toast.success("Formulário salvo com os dados confirmados pela API.");
+      toast.success(t("formBuilder.saved"));
     } catch {
       updateReadyEditor((current) => ({ ...current, isSaving: false }));
-      toast.error("Não foi possível conectar ao serviço de formulários.");
+      toast.error(t("formBuilder.connectionFailed"));
     }
   }
 
@@ -368,39 +360,39 @@ export function FormTemplateManager() {
       <div className="flex-1 pb-12 pt-2">
         <div className="mb-6">
           <p className="text-xs font-bold uppercase tracking-[0.14em] text-teal-700">
-            Gestão de formulários
+            {t("formBuilder.management")}
           </p>
           <h1 className="mt-1 text-2xl font-bold text-slate-900">
-            Formulários dos processos
+            {t("formBuilder.heading")}
           </h1>
           <p className="mt-1 text-sm text-slate-600">
-            Selecione um formulário abaixo para configurar seções, campos e critérios de avaliação de IA.
+            {t("formBuilder.description")}
           </p>
         </div>
 
         {catalog.kind === "loading" ? (
           <div className="flex min-h-64 items-center justify-center gap-3 rounded-2xl border border-slate-200 bg-white p-8 text-sm text-slate-600 shadow-sm">
             <LoaderCircle aria-hidden="true" className="size-5 animate-spin text-teal-700" />
-            Carregando formulários dos processos…
+            {t("formBuilder.loading")}
           </div>
         ) : catalog.kind === "denied" || catalog.kind === "error" ? (
           <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
             <FormPageMessage
-              actionLabel={catalog.kind === "error" ? "Tentar novamente" : undefined}
+              actionLabel={catalog.kind === "error" ? t("common.retry") : undefined}
               description={catalog.message}
               onAction={
                 catalog.kind === "error"
                   ? () => setReloadKey((value) => value + 1)
                   : undefined
               }
-              title={catalog.kind === "denied" ? "Acesso restrito" : "Falha na listagem"}
+              title={catalog.kind === "denied" ? t("formBuilder.restricted") : t("formBuilder.listFailed")}
             />
           </div>
         ) : catalog.items.length === 0 ? (
           <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
             <FormPageMessage
-              description="Nenhum formulário de processo administrável foi encontrado."
-              title="Nenhum formulário disponível"
+              description={t("formBuilder.emptyDescription")}
+              title={t("formBuilder.emptyTitle")}
             />
           </div>
         ) : (
@@ -428,12 +420,12 @@ export function FormTemplateManager() {
             type="button"
           >
             <ArrowLeft aria-hidden="true" className="size-4" />
-            Voltar para a lista de formulários
+            {t("formBuilder.backToList")}
           </button>
         </div>
         <div className="flex min-h-96 items-center justify-center gap-3 rounded-2xl border border-slate-200 bg-white p-8 text-sm text-slate-600 shadow-sm">
           <LoaderCircle aria-hidden="true" className="size-5 animate-spin text-teal-700" />
-          Carregando formulário {editor.item.name}…
+          {t("formBuilder.loadingForm", { name: editor.item.name })}
         </div>
       </div>
     );
@@ -449,15 +441,15 @@ export function FormTemplateManager() {
             type="button"
           >
             <ArrowLeft aria-hidden="true" className="size-4" />
-            Voltar para a lista de formulários
+            {t("formBuilder.backToList")}
           </button>
         </div>
         <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
           <FormPageMessage
-            actionLabel="Tentar novamente"
+            actionLabel={t("common.retry")}
             description={editor.message}
             onAction={() => void selectForm(editor.item)}
-            title="Não foi possível abrir o formulário"
+            title={t("formBuilder.openFailed")}
           />
         </div>
       </div>
@@ -485,6 +477,12 @@ export function FormTemplateManager() {
                             0,
                           ),
                           section.name,
+                          t("formBuilder.newField", {
+                            number: current.sections.reduce(
+                              (total, item) => total + item.fields.length,
+                              0,
+                            ) + 1,
+                          }),
                         ),
                       ],
                     }
@@ -497,7 +495,10 @@ export function FormTemplateManager() {
               ...current,
               sections: [
                 ...current.sections,
-                createEmptyFormSection(current.sections.length),
+                createEmptyFormSection(
+                  current.sections.length,
+                  t("formBuilder.newSection", { number: current.sections.length + 1 }),
+                ),
               ],
             }))
           }
@@ -630,6 +631,7 @@ export function FormTemplateManager() {
 }
 
 function FormCatalogCard({ item, onSelect }: FormCatalogCardProps) {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-col justify-between rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition hover:border-teal-300 hover:shadow-md">
       <div>
@@ -652,7 +654,7 @@ function FormCatalogCard({ item, onSelect }: FormCatalogCardProps) {
             onClick={() => onSelect(item)}
             type="button"
           >
-            <span>Configurar formulário</span>
+            <span>{t("formBuilder.configure")}</span>
             <ArrowRight aria-hidden="true" className="size-3.5" />
           </button>
         </div>
@@ -680,6 +682,7 @@ function FormEditor({
   onOpenAiModal,
   onUnlinkAiRule,
 }: FormEditorProps) {
+  const { t } = useTranslation();
   const allFields = flattenFormSections(state.sections);
 
   return (
@@ -693,7 +696,7 @@ function FormEditor({
               type="button"
             >
               <ArrowLeft aria-hidden="true" className="size-4" />
-              <span>Voltar para a lista de formulários</span>
+              <span>{t("formBuilder.backToList")}</span>
             </button>
           </div>
         )}
@@ -706,12 +709,12 @@ function FormEditor({
               </p>
               {hasPendingChanges && (
                 <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800">
-                  Alterações não salvas
+                  {t("formBuilder.unsaved")}
                 </span>
               )}
             </div>
             <h2 className="mt-1 text-xl font-bold text-slate-900">
-              {state.detail.name || "Editar formulário"}
+              {state.detail.name || t("formBuilder.editForm")}
             </h2>
           </div>
           <button
@@ -725,13 +728,13 @@ function FormEditor({
             ) : (
               <Save aria-hidden="true" className="size-4" />
             )}
-            {state.isSaving ? "Salvando…" : "Salvar formulário"}
+            {state.isSaving ? t("formBuilder.saving") : t("formBuilder.save")}
           </button>
         </div>
 
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
           <label className="text-sm font-semibold text-slate-800">
-            Nome do formulário
+            {t("formBuilder.formName")}
             <input
               className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 px-3 text-sm font-normal outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20"
               disabled={state.isSaving}
@@ -741,7 +744,7 @@ function FormEditor({
             />
           </label>
           <label className="text-sm font-semibold text-slate-800 sm:row-span-2">
-            Descrição
+            {t("formBuilder.formDescription")}
             <textarea
               className="mt-2 min-h-24 w-full resize-y rounded-xl border border-slate-300 p-3 text-sm font-normal outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20"
               disabled={state.isSaving}
@@ -750,7 +753,7 @@ function FormEditor({
             />
           </label>
           <div>
-            <p className="text-sm font-semibold text-slate-800">Chave técnica</p>
+            <p className="text-sm font-semibold text-slate-800">{t("formBuilder.technicalKey")}</p>
             <p className="mt-2 min-h-11 rounded-xl border border-slate-200 bg-slate-100 px-3 py-3 font-mono text-xs text-slate-600">
               {state.detail.key}
             </p>
@@ -793,7 +796,7 @@ function FormEditor({
           type="button"
         >
           <Plus aria-hidden="true" className="size-4" />
-          Adicionar seção
+          {t("formBuilder.addSection")}
         </button>
       </div>
     </div>
@@ -819,11 +822,12 @@ function FormSectionEditor({
   onOpenAiModal,
   onUnlinkAiRule,
 }: FormSectionEditorProps) {
+  const { t } = useTranslation();
   return (
     <section className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
       <div className="flex flex-wrap items-end gap-2">
         <label className="min-w-56 flex-1 text-xs font-bold uppercase tracking-wide text-slate-600">
-          Nome da seção
+          {t("formBuilder.sectionName")}
           <input
             className="mt-2 min-h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold normal-case tracking-normal text-slate-900 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20"
             disabled={disabled}
@@ -835,11 +839,11 @@ function FormSectionEditor({
           canMoveDown={sectionIndex < sectionCount - 1}
           canMoveUp={sectionIndex > 0}
           disabled={disabled}
-          label="seção"
+          label={t("formBuilder.section")}
           onMove={onMove}
         />
         <button
-          aria-label={`Remover seção ${section.name}`}
+          aria-label={t("formBuilder.removeSection", { name: section.name })}
           className="grid size-10 place-items-center rounded-lg text-rose-700 outline-none hover:bg-rose-100 focus-visible:ring-2 focus-visible:ring-rose-500 disabled:opacity-50"
           disabled={disabled}
           onClick={onRemove}
@@ -852,7 +856,7 @@ function FormSectionEditor({
       <div className="mt-4 grid gap-3">
         {section.fields.length === 0 ? (
           <p className="rounded-xl border border-dashed border-slate-300 bg-white p-4 text-center text-sm text-slate-500">
-            Adicione ao menos um campo antes de salvar esta seção.
+            {t("formBuilder.sectionNeedsField")}
           </p>
         ) : (
           section.fields.map((field, index) => (
@@ -889,7 +893,7 @@ function FormSectionEditor({
         type="button"
       >
         <Plus aria-hidden="true" className="size-4" />
-        Adicionar campo
+        {t("formBuilder.addField")}
       </button>
     </section>
   );
@@ -912,24 +916,25 @@ function FormFieldEditor({
   onOpenAiModal,
   onUnlinkAiRule,
 }: FormFieldEditorProps) {
+  const { t } = useTranslation();
   const inputId = `form-editor-${sectionId}-${fieldIndex}`;
 
   return (
     <article className="rounded-xl border border-slate-200 bg-white p-4">
       <div className="flex items-center justify-between gap-3">
         <p className="text-xs font-bold uppercase tracking-wide text-teal-700">
-          Campo {fieldIndex + 1}
+          {t("formBuilder.fieldNumber", { number: fieldIndex + 1 })}
         </p>
         <div className="flex items-center gap-1">
           <OrderButtons
             canMoveDown={canMoveDown}
             canMoveUp={canMoveUp}
             disabled={disabled}
-            label={`campo ${field.label}`}
+            label={t("formBuilder.fieldNamed", { name: field.label })}
             onMove={onMove}
           />
           <button
-            aria-label={`Remover campo ${field.label}`}
+            aria-label={t("formBuilder.removeField", { name: field.label })}
             className="grid size-9 place-items-center rounded-lg text-rose-700 outline-none hover:bg-rose-50 focus-visible:ring-2 focus-visible:ring-rose-500 disabled:opacity-50"
             disabled={disabled}
             onClick={onRemove}
@@ -941,7 +946,7 @@ function FormFieldEditor({
       </div>
 
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
-        <FieldInput label="Chave" inputId={`${inputId}-key`}>
+        <FieldInput label={t("formBuilder.key")} inputId={`${inputId}-key`}>
           <input
             className={`${EDITOR_INPUT_CLASS} font-mono`}
             disabled={disabled}
@@ -950,7 +955,7 @@ function FormFieldEditor({
             value={field.field_key}
           />
         </FieldInput>
-        <FieldInput label="Rótulo" inputId={`${inputId}-label`}>
+        <FieldInput label={t("formBuilder.label")} inputId={`${inputId}-label`}>
           <input
             className={EDITOR_INPUT_CLASS}
             disabled={disabled}
@@ -959,7 +964,7 @@ function FormFieldEditor({
             value={field.label}
           />
         </FieldInput>
-        <FieldInput label="Tipo" inputId={`${inputId}-type`}>
+        <FieldInput label={t("formBuilder.type")} inputId={`${inputId}-type`}>
           <select
             className={EDITOR_INPUT_CLASS}
             disabled={disabled}
@@ -978,7 +983,7 @@ function FormFieldEditor({
             ) && <option value={field.field_type}>{field.field_type}</option>}
             {FORM_FIELD_TYPES.map((type) => (
               <option key={type} value={type}>
-                {FIELD_TYPE_LABELS[type]}
+                {t(`formBuilder.fieldTypes.${type}`, { defaultValue: type })}
               </option>
             ))}
           </select>
@@ -991,9 +996,9 @@ function FormFieldEditor({
             onChange={(event) => onChange({ ...field, is_required: event.target.checked })}
             type="checkbox"
           />
-          Campo obrigatório
+          {t("formBuilder.requiredField")}
         </label>
-        <FieldInput label="Orientação" inputId={`${inputId}-help`} wide>
+        <FieldInput label={t("formBuilder.guidance")} inputId={`${inputId}-help`} wide>
           <textarea
             className={`${EDITOR_INPUT_CLASS} min-h-20 py-2`}
             disabled={disabled}
@@ -1008,9 +1013,9 @@ function FormFieldEditor({
 
       {field.field_type === "select" && (
         <FieldInput
-          help="Uma opção por linha, no formato valor|rótulo."
+          help={t("formBuilder.optionsHelp")}
           inputId={`${inputId}-options`}
-          label="Opções"
+          label={t("formBuilder.options")}
           wide
         >
           <textarea
@@ -1031,7 +1036,7 @@ function FormFieldEditor({
             disabled={disabled}
             field={field}
             inputId={`${inputId}-min`}
-            label="Valor mínimo"
+            label={t("formBuilder.minimumValue")}
             onChange={onChange}
             rule="min"
           />
@@ -1039,7 +1044,7 @@ function FormFieldEditor({
             disabled={disabled}
             field={field}
             inputId={`${inputId}-max`}
-            label="Valor máximo"
+            label={t("formBuilder.maximumValue")}
             onChange={onChange}
             rule="max"
           />
@@ -1052,7 +1057,7 @@ function FormFieldEditor({
             disabled={disabled}
             field={field}
             inputId={`${inputId}-min-length`}
-            label="Mínimo de caracteres"
+            label={t("formBuilder.minimumCharacters")}
             onChange={onChange}
             rule="min_length"
           />
@@ -1060,7 +1065,7 @@ function FormFieldEditor({
             disabled={disabled}
             field={field}
             inputId={`${inputId}-max-length`}
-            label="Máximo de caracteres"
+            label={t("formBuilder.maximumCharacters")}
             onChange={onChange}
             rule="max_length"
           />
@@ -1069,7 +1074,7 @@ function FormFieldEditor({
 
       {field.field_type === "file_upload" && (
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          <FieldInput label="Extensões permitidas" inputId={`${inputId}-extensions`}>
+          <FieldInput label={t("formBuilder.allowedExtensions")} inputId={`${inputId}-extensions`}>
             <input
               className={EDITOR_INPUT_CLASS}
               disabled={disabled}
@@ -1094,7 +1099,7 @@ function FormFieldEditor({
             disabled={disabled}
             field={field}
             inputId={`${inputId}-max-size`}
-            label="Tamanho máximo (MB)"
+            label={t("formBuilder.maximumSize")}
             onChange={onChange}
             rule="max_size_mb"
           />
@@ -1148,6 +1153,7 @@ function FormConfirmDiscardDialog({
   onCancel,
   onConfirm,
 }: FormConfirmDiscardDialogProps) {
+  const { t } = useTranslation();
   const dialogRef = useAccessibleDialog(isOpen, false, onCancel);
   if (!isOpen) return null;
 
@@ -1171,11 +1177,10 @@ function FormConfirmDiscardDialog({
           className="mt-4 text-xl font-bold text-slate-900"
           id="discard-changes-title"
         >
-          Descartar alterações?
+          {t("formBuilder.discardTitle")}
         </h2>
         <p className="mt-2 text-sm leading-6 text-slate-600">
-          Você possui modificações não salvas neste formulário. Ao voltar para a
-          lista de formulários, todas as alterações pendentes serão perdidas.
+          {t("formBuilder.discardDescription")}
         </p>
         <div className="mt-6 flex flex-wrap justify-end gap-3">
           <button
@@ -1183,14 +1188,14 @@ function FormConfirmDiscardDialog({
             onClick={onCancel}
             type="button"
           >
-            Continuar editando
+            {t("formBuilder.keepEditing")}
           </button>
           <button
             className="min-h-11 rounded-xl bg-rose-600 px-4 text-sm font-semibold text-white outline-none transition hover:bg-rose-700 focus-visible:ring-2 focus-visible:ring-rose-500"
             onClick={onConfirm}
             type="button"
           >
-            Descartar alterações
+            {t("formBuilder.discard")}
           </button>
         </div>
       </div>
@@ -1209,19 +1214,19 @@ function moveItem<T>(items: T[], index: number, direction: -1 | 1) {
   return next;
 }
 
-function validateSections(sections: FormEditorSection[]) {
-  if (sections.length === 0) return "Inclua ao menos uma seção.";
+function validateSections(sections: FormEditorSection[], t: TFunction) {
+  if (sections.length === 0) return t("formBuilder.validation.sectionRequired");
 
   const names = new Set<string>();
   for (const section of sections) {
     const name = section.name.trim();
-    if (!name) return "Todas as seções precisam de nome.";
+    if (!name) return t("formBuilder.validation.sectionNamesRequired");
     if (names.has(name.toLocaleLowerCase("pt-BR"))) {
-      return `O nome de seção “${name}” está duplicado.`;
+      return t("formBuilder.validation.duplicateSection", { name });
     }
     names.add(name.toLocaleLowerCase("pt-BR"));
     if (section.fields.length === 0) {
-      return `Inclua ao menos um campo na seção “${name}”.`;
+      return t("formBuilder.validation.fieldRequired", { name });
     }
   }
   return null;
@@ -1293,10 +1298,8 @@ function isRecord(value: unknown): value is ApiRecord {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function getApiMessage(value: unknown, fallback: string) {
-  return isRecord(value) && typeof value.message === "string"
-    ? value.message
-    : fallback;
+function getApiMessage(value: unknown, fallback: string, t: TFunction) {
+  return getLocalizedApiError(isRecord(value) ? value : null, fallback, t);
 }
 
 function updateRule(
@@ -1327,10 +1330,11 @@ function OrderButtons({
   label,
   onMove,
 }: FormOrderButtonsProps) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center gap-1">
       <button
-        aria-label={`Mover ${label} para cima`}
+        aria-label={t("formBuilder.moveUp", { label })}
         className="grid size-9 place-items-center rounded-lg text-slate-600 outline-none hover:bg-slate-100 focus-visible:ring-2 focus-visible:ring-teal-500 disabled:opacity-30"
         disabled={disabled || !canMoveUp}
         onClick={() => onMove(-1)}
@@ -1339,7 +1343,7 @@ function OrderButtons({
         <ArrowUp aria-hidden="true" className="size-4" />
       </button>
       <button
-        aria-label={`Mover ${label} para baixo`}
+        aria-label={t("formBuilder.moveDown", { label })}
         className="grid size-9 place-items-center rounded-lg text-slate-600 outline-none hover:bg-slate-100 focus-visible:ring-2 focus-visible:ring-teal-500 disabled:opacity-30"
         disabled={disabled || !canMoveDown}
         onClick={() => onMove(1)}

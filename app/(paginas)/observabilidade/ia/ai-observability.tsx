@@ -5,6 +5,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { BrainCircuit, LoaderCircle, RefreshCw, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
+import { getLocalizedApiError } from "@/i18n/errors";
 import {
   isAiPipelineExecution,
   isAiStepExecution,
@@ -39,7 +41,7 @@ export function AiObservability() {
       const response = await fetch(`/api/observability/ai?${query}`, { cache: "no-store" });
       const payload = await response.json().catch(() => null);
       if (!response.ok || !Array.isArray(payload) || !payload.every(isAiPipelineExecution)) {
-        const message = getApiMessage(payload, t("observability.executionsFailed"));
+        const message = getApiMessage(payload, t("observability.executionsFailed"), t);
         setState((current) => response.status === 403 ? { kind: "denied", message, executions: current.executions } : { kind: "error", message, executions: current.executions });
         return;
       }
@@ -94,7 +96,8 @@ function AiExecutionCard({ execution }: AiExecutionCardProps) {
 }
 
 function PayloadDetails({ label, value }: ObservabilityPayloadDetailsProps) {
-  return <details className="rounded-lg bg-slate-50 p-3"><summary className="cursor-pointer text-xs font-bold uppercase tracking-wide text-slate-600">{label}</summary><pre className="mt-3 overflow-x-auto whitespace-pre-wrap break-words rounded-lg bg-slate-950 p-3 text-xs text-slate-100">{safePayload(value)}</pre></details>;
+  const { t } = useTranslation();
+  return <details className="rounded-lg bg-slate-50 p-3"><summary className="cursor-pointer text-xs font-bold uppercase tracking-wide text-slate-600">{label}</summary><pre className="mt-3 overflow-x-auto whitespace-pre-wrap break-words rounded-lg bg-slate-950 p-3 text-xs text-slate-100">{safePayload(value, t("observability.notProvided"))}</pre></details>;
 }
 
 function ConnectionBadge({ state }: ConnectionBadgeProps) {
@@ -107,9 +110,9 @@ function ObservabilityMessage({ message, onRetry }: ObservabilityMessageProps) {
   return <div className="rounded-2xl border border-slate-200 bg-white p-6 text-center"><TriangleAlert aria-hidden="true" className="mx-auto size-6 text-slate-500" /><p className="mt-2 text-sm text-slate-600">{message}</p>{onRetry && <button className="mt-4 rounded-lg bg-teal-700 px-4 py-2 text-sm font-bold text-white" onClick={onRetry} type="button">{t("common.retry")}</button>}</div>;
 }
 
-function getApiMessage(value: unknown, fallback: string) { return isRecord(value) && typeof value.message === "string" ? value.message : fallback; }
+function getApiMessage(value: unknown, fallback: string, t: TFunction) { return getLocalizedApiError(isRecord(value) ? value : null, fallback, t); }
 function isRecord(value: unknown): value is ApiRecord { return Boolean(value) && typeof value === "object" && !Array.isArray(value); }
-function formatOption(value: string) { return value.replaceAll("_", " "); }
+function formatOption(value: string) { return value; }
 function formatDate(value: string | null | undefined, locale: string | undefined, emptyLabel: string) { if (!value) return emptyLabel; const date = new Date(value); return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat(locale, { dateStyle: "short", timeStyle: "medium" }).format(date); }
 function formatDuration(value: number | undefined, locale: string | undefined, emptyLabel: string) { if (typeof value !== "number") return emptyLabel; return value >= 1000 ? `${(value / 1000).toLocaleString(locale, { maximumFractionDigits: 2 })} s` : `${value.toLocaleString(locale)} ms`; }
 function isFailure(value: string | undefined) { return Boolean(value && /fail|error/i.test(value)); }

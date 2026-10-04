@@ -12,13 +12,13 @@ export async function GET(
 ) {
   const { processKey, formKey } = await context.params;
   if (!isTechnicalKey(processKey) || !isTechnicalKey(formKey)) {
-    return NextResponse.json({ message: "Template ou formulário inválido." }, { status: 400 });
+    return NextResponse.json({ code: "VALIDATION_ERROR", message: "Template ou formulário inválido." }, { status: 400 });
   }
 
   const cookieStore = await cookies();
   const accessToken = cookieStore.get("access_token")?.value;
   if (!accessToken) {
-    return NextResponse.json({ message: "Sessão não encontrada." }, { status: 401 });
+    return NextResponse.json({ code: "AUTH_REQUIRED", message: "Sessão não encontrada." }, { status: 401 });
   }
 
   const result = await getFormTemplate(accessToken, processKey, formKey);
@@ -35,18 +35,18 @@ export async function PUT(
 ) {
   const { processKey, formKey } = await context.params;
   if (!isTechnicalKey(processKey) || !isTechnicalKey(formKey)) {
-    return NextResponse.json({ message: "Template ou formulário inválido." }, { status: 400 });
+    return NextResponse.json({ code: "VALIDATION_ERROR", message: "Template ou formulário inválido." }, { status: 400 });
   }
 
   const cookieStore = await cookies();
   const accessToken = cookieStore.get("access_token")?.value;
   if (!accessToken) {
-    return NextResponse.json({ message: "Sessão não encontrada." }, { status: 401 });
+    return NextResponse.json({ code: "AUTH_REQUIRED", message: "Sessão não encontrada." }, { status: 401 });
   }
 
   const validation = validateFormDefinition(await request.json().catch(() => null));
   if (!validation.valid) {
-    return NextResponse.json({ message: validation.message }, { status: 400 });
+    return NextResponse.json({ code: "VALIDATION_ERROR", message: validation.message }, { status: 400 });
   }
 
   const result = await updateFormTemplate(

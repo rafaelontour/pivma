@@ -3,6 +3,8 @@ import "server-only";
 import { isAxiosError } from "axios";
 import { tryit } from "radash";
 import { apiOrigin, http } from "./Http";
+import { normalizeProcessInstance } from "./Processo";
+import { getTriageTimeline } from "./Triagem";
 import type { ProcessInstance } from "@/types/Processo";
 import type { CurrentSessionUser } from "@/types/Autenticacao";
 import type { ApiRecord, ServiceResult } from "@/types/Servico";
@@ -17,6 +19,9 @@ import type {
   SubmissionAttachmentUploadResult,
   SubmissionForm,
   SubmissionPreEvaluation,
+  SubmissionReturnReview,
+  SubmissionReturnReviewInput,
+  SubmissionReturnReviewResult,
   SubmissionTemplate,
   SubmitSubmissionResult,
 } from "@/types/Submissao";
@@ -24,6 +29,7 @@ import type {
 export const INITIAL_SUBMISSION_ACTIVITY_KEY = "proposal_submission";
 
 const PROCESS_PAGE_SIZE = 100;
+const SUBMISSION_FORM_LOOKUP_BATCH_SIZE = 8;
 
 export async function listSubmissionTemplates(
   accessToken: string,
@@ -38,11 +44,14 @@ export async function listSubmissionTemplates(
     return { ok: false, status: getStatus(error) };
   }
 
-  if (!Array.isArray(response.data) || !response.data.every(isTemplate)) {
+  const templates = isRecord(response.data) && Array.isArray(response.data.data)
+    ? response.data.data
+    : response.data;
+  if (!Array.isArray(templates) || !templates.every(isTemplate)) {
     return { ok: false };
   }
 
-  return { ok: true, data: response.data };
+  return { ok: true, data: templates };
 }
 
 export async function createSubmissionDraft(
@@ -69,72 +78,52 @@ export async function createSubmissionDraft(
     return { ok: false, status: getStatus(error) };
   }
 
-  if (!isProcessInstance(response.data)) {
+  const data = normalizeProcessInstance(response.data);
+  if (!data) {
     return { ok: false };
   }
 
-  return { ok: true, data: response.data };
+  return { ok: true, data };
+}
+
+export async function deleteSubmissionDraft(
+  accessToken: string,
+  processId: string,
+): Promise<ServiceResult<null>> {
+  const [error] = await tryit(() =>
+    http.delete<void>(`/processes/${processId}`, {
+      headers: {
+        Cookie: `access_token=${accessToken}`,
+        Origin: apiOrigin,
+      },
+    }),
+  )();
+
+  if (error) {
+    return { ok: false, status: getStatus(error) };
+  }
+
+  return { ok: true, data: null };
 }
 
 export async function listProponentSubmissionDrafts(
   accessToken: string,
   scopes: CurrentSessionUser["access"]["scopes"],
 ): Promise<ServiceResult<ProcessInstance[]>> {
-  const proponentProcessIds = new Set(
-    scopes
-      .filter((scope) => scope.roles.includes("proponent"))
-      .map((scope) => scope.process_id),
-  );
-
-  if (proponentProcessIds.size === 0) {
-    return { ok: true, data: [] };
-  }
-
-  const drafts: ProcessInstance[] = [];
-  let page = 1;
-  let visited = 0;
-  let total = 0;
-
-  do {
-    const [error, response] = await tryit(() =>
-      http.get<unknown>("/processes", {
-        headers: { Cookie: `access_token=${accessToken}` },
-        params: {
-          status: "SUBMISSION",
-          page,
-          size: PROCESS_PAGE_SIZE,
-        },
-      }),
-    )();
-
-    if (error) {
-      return { ok: false, status: getStatus(error) };
-    }
-
-    if (!isProcessList(response.data)) {
-      return { ok: false };
-    }
-
-    total = response.data.total;
-    visited += response.data.items.length;
-    drafts.push(
-      ...response.data.items.filter((process) =>
-        proponentProcessIds.has(process.id),
-      ),
-    );
-    page += 1;
-
-    if (response.data.items.length === 0) {
-      break;
-    }
-  } while (visited < total);
-
-  return { ok: true, data: drafts };
+  return listProponentProcessesBySubmissionState(accessToken, scopes, false);
 }
 
 export async function listProponentSubmittedProcesses(
   accessToken: string,
   scopes: CurrentSessionUser["access"]["scopes"],
+): Promise<ServiceResult<ProcessInstance[]>> {
+  return listProponentProcessesBySubmissionState(accessToken, scopes, true);
+}
+
+async function listProponentProcessesBySubmissionState(
+  accessToken: string,
+  scopes: CurrentSessionUser["access"]["scopes"],
+  isSubmitted: boolean,
 ): Promise<ServiceResult<ProcessInstance[]>> {
   const proponentProcessIds = new Set(
     scopes
@@ -146,7 +135,7 @@ export async function listProponentSubmittedProcesses(
     return { ok: true, data: [] };
   }
 
-  const submissions: ProcessInstance[] = [];
+  const processes: ProcessInstance[] = [];
   let page = 1;
   let visited = 0;
   let total = 0;
@@ -155,7 +144,7 @@ export async function listProponentSubmittedProcesses(
     const [error, response] = await tryit(() =>
       http.get<unknown>("/processes", {
         headers: { Cookie: `access_token=${accessToken}` },
-        params: { page, size: PROCESS_PAGE_SIZE },
+        params: { page, per_page: PROCESS_PAGE_SIZE },
       }),
     )();
 
@@ -163,27 +152,62 @@ export async function listProponentSubmittedProcesses(
       return { ok: false, status: getStatus(error) };
     }
 
-    if (!isProcessList(response.data)) {
+    const processList = normalizeProcessList(response.data);
+    if (!processList) {
       return { ok: false };
     }
 
-    total = response.data.total;
-    visited += response.data.items.length;
-    submissions.push(
-      ...response.data.items.filter(
-        (process) =>
-          process.status !== "SUBMISSION" &&
-          proponentProcessIds.has(process.id),
+    total = processList.total;
+    visited += processList.items.length;
+    processes.push(
+      ...processList.items.filter(
+        (process) => proponentProcessIds.has(process.id),
       ),
     );
     page += 1;
 
-    if (response.data.items.length === 0) {
+    if (processList.items.length === 0) {
       break;
     }
   } while (visited < total);
 
-  return { ok: true, data: submissions };
+  const matchingProcesses: ProcessInstance[] = [];
+  for (
+    let index = 0;
+    index < processes.length;
+    index += SUBMISSION_FORM_LOOKUP_BATCH_SIZE
+  ) {
+    const batch = processes.slice(
+      index,
+      index + SUBMISSION_FORM_LOOKUP_BATCH_SIZE,
+    );
+    const forms = await Promise.all(
+      batch.map((process) => getSubmissionForm(accessToken, process.id)),
+    );
+    const failedForm = forms.find((form) => !form.ok);
+    if (failedForm && !failedForm.ok) {
+      return { ok: false, status: failedForm.status };
+    }
+
+    const submissionHistory = await Promise.all(
+      batch.map(async (process, batchIndex) => {
+        const form = forms[batchIndex];
+        if (!form.ok || form.data.is_submitted) return false;
+        const timeline = await getTriageTimeline(accessToken, process.id);
+        if (!timeline.ok) return true;
+        return timeline.data.events.some((event) => event.event_type === "SUBMISSION_SUBMITTED");
+      }),
+    );
+
+    batch.forEach((process, batchIndex) => {
+      const form = forms[batchIndex];
+      if (form.ok && form.data.is_submitted === isSubmitted) {
+        matchingProcesses.push({ ...process, has_been_submitted: form.data.is_submitted || submissionHistory[batchIndex] });
+      }
+    });
+  }
+
+  return { ok: true, data: matchingProcesses };
 }
 
 export async function getSubmissionForm(
@@ -300,6 +324,36 @@ export async function requestSubmissionDirectReview(
     : { ok: false };
 }
 
+export async function getSubmissionReturnReview(
+  accessToken: string,
+  processId: string,
+): Promise<ServiceResult<SubmissionReturnReview>> {
+  const [error, response] = await tryit(() =>
+    http.get<unknown>(`/processes/${processId}/return-review`, {
+      headers: { Cookie: `access_token=${accessToken}` },
+    }),
+  )();
+  if (error) return { ok: false, status: getStatus(error) };
+  const data = normalizeReturnReview(response.data);
+  return data ? { ok: true, data } : { ok: false };
+}
+
+export async function decideSubmissionReturnReview(
+  accessToken: string,
+  processId: string,
+  input: SubmissionReturnReviewInput,
+): Promise<ServiceResult<SubmissionReturnReviewResult>> {
+  const [error, response] = await tryit(() =>
+    http.post<unknown>(`/processes/${processId}/return-review`, input, {
+      headers: { Cookie: `access_token=${accessToken}`, Origin: apiOrigin },
+    }),
+  )();
+  if (error) return { ok: false, status: getStatus(error) };
+  return isReturnReviewResult(response.data)
+    ? { ok: true, data: response.data }
+    : { ok: false };
+}
+
 export async function uploadSubmissionAttachment(
   accessToken: string,
   processId: string,
@@ -407,6 +461,41 @@ function isDirectReviewResult(value: unknown): value is DirectReviewResult {
   return isRecord(value) && typeof value.process_status === "string" && typeof value.direct_review_request_id === "string";
 }
 
+function normalizeReturnReview(value: unknown): SubmissionReturnReview | null {
+  if (!isRecord(value) || typeof value.run_number !== "number" || !isReturnReviewSource(value.source) || typeof value.opened_at !== "string" || !Array.isArray(value.available_choices) || !value.available_choices.every(isReturnReviewChoice)) return null;
+  if (value.due_date !== undefined && value.due_date !== null && typeof value.due_date !== "string") return null;
+  if (value.triage_decision !== undefined && value.triage_decision !== null && !isReturnReviewDecision(value.triage_decision)) return null;
+  const preEvaluation = value.ai_pre_evaluation === undefined || value.ai_pre_evaluation === null
+    ? null
+    : normalizePreEvaluation(value.ai_pre_evaluation);
+  if (value.ai_pre_evaluation !== undefined && value.ai_pre_evaluation !== null && !preEvaluation) return null;
+  return {
+    run_number: value.run_number,
+    source: value.source,
+    opened_at: value.opened_at,
+    due_date: optionalString(value.due_date),
+    available_choices: value.available_choices,
+    ai_pre_evaluation: preEvaluation,
+    triage_decision: value.triage_decision ?? null,
+  };
+}
+
+function isReturnReviewDecision(value: unknown): value is NonNullable<SubmissionReturnReview["triage_decision"]> {
+  return isRecord(value) && typeof value.outcome === "string" && typeof value.justification === "string" && typeof value.decided_at === "string";
+}
+
+function isReturnReviewResult(value: unknown): value is SubmissionReturnReviewResult {
+  return isRecord(value) && isReturnReviewChoice(value.choice) && typeof value.process_status === "string" && (value.submission_run === undefined || value.submission_run === null || typeof value.submission_run === "number");
+}
+
+function isReturnReviewChoice(value: unknown): value is SubmissionReturnReviewResult["choice"] {
+  return value === "REVISE" || value === "CONTEST_AI" || value === "WITHDRAW";
+}
+
+function isReturnReviewSource(value: unknown): value is SubmissionReturnReview["source"] {
+  return value === "AI_PRE_EVALUATION" || value === "TRIAGE";
+}
+
 function isAttachmentUpload(value: unknown): value is SubmissionAttachmentUploadResult {
   return isRecord(value) && typeof value.field_key === "string" && isAttachment(value.attachment) && typeof value.replaced_previous === "boolean";
 }
@@ -439,30 +528,27 @@ function isTemplate(value: unknown): value is SubmissionTemplate {
   );
 }
 
-function isProcessInstance(value: unknown): value is ProcessInstance {
-  if (!isRecord(value)) {
-    return false;
+function normalizeProcessList(value: unknown): { items: ProcessInstance[]; total: number } | null {
+  if (!isRecord(value)) return null;
+  const itemsValue = Array.isArray(value.items)
+    ? value.items
+    : Array.isArray(value.data)
+      ? value.data
+      : null;
+  const pagination = isRecord(value.pagination) ? value.pagination : null;
+  const items = itemsValue?.map(normalizeProcessInstance) ?? null;
+  if (
+    !items ||
+    items.some((item) => !item) ||
+    !pagination ||
+    typeof pagination.total_items !== "number"
+  ) {
+    return null;
   }
-
-  return (
-    typeof value.id === "string" &&
-    typeof value.code === "string" &&
-    typeof value.title === "string" &&
-    typeof value.status === "string" &&
-    typeof value.template_key === "string" &&
-    typeof value.version_number === "number"
-  );
-}
-
-function isProcessList(
-  value: unknown,
-): value is { items: ProcessInstance[]; total: number } {
-  return (
-    isRecord(value) &&
-    Array.isArray(value.items) &&
-    value.items.every(isProcessInstance) &&
-    typeof value.total === "number"
-  );
+  return {
+    items: items as ProcessInstance[],
+    total: pagination.total_items,
+  };
 }
 
 function isSubmissionForm(value: unknown): value is SubmissionForm {

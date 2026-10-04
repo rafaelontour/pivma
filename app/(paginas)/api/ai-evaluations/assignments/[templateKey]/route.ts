@@ -15,7 +15,7 @@ export async function GET(
 ) {
   const { templateKey } = await context.params;
   if (!isTechnicalKey(templateKey)) {
-    return NextResponse.json({ message: "Formulário inválido." }, { status: 400 });
+    return NextResponse.json({ code: "VALIDATION_ERROR", message: "Formulário inválido." }, { status: 400 });
   }
 
   const authorization = await authorizeInternalApi([
@@ -43,7 +43,7 @@ export async function PUT(
 ) {
   const { templateKey } = await context.params;
   if (!isTechnicalKey(templateKey)) {
-    return NextResponse.json({ message: "Formulário inválido." }, { status: 400 });
+    return NextResponse.json({ code: "VALIDATION_ERROR", message: "Formulário inválido." }, { status: 400 });
   }
 
   const authorization = await authorizeInternalApi(["ai_evaluations.manage"]);
@@ -52,7 +52,7 @@ export async function PUT(
     await request.json().catch(() => null),
   );
   if (!validation.valid) {
-    return NextResponse.json({ message: validation.message }, { status: 400 });
+    return NextResponse.json({ code: "VALIDATION_ERROR", message: validation.message }, { status: 400 });
   }
 
   const result = await replaceAiEvaluationAssignments(

@@ -13,14 +13,14 @@ export async function POST(
   const { definitionId, versionNumber: value } = await context.params;
   const versionNumber = Number(value);
   if (!isUuid(definitionId) || !Number.isInteger(versionNumber) || versionNumber < 1) {
-    return NextResponse.json({ message: "Avaliação ou versão inválida." }, { status: 400 });
+    return NextResponse.json({ code: "VALIDATION_ERROR", message: "Avaliação ou versão inválida." }, { status: 400 });
   }
 
   const authorization = await authorizeInternalApi(["ai_evaluations.manage"]);
   if (!authorization.ok) return authorization.response;
   const validation = validateAiEvaluationTest(await request.json().catch(() => null));
   if (!validation.valid) {
-    return NextResponse.json({ message: validation.message }, { status: 400 });
+    return NextResponse.json({ code: "VALIDATION_ERROR", message: validation.message }, { status: 400 });
   }
 
   const result = await testAiEvaluationVersion(

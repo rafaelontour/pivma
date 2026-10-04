@@ -5,6 +5,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Activity, AlertTriangle, LoaderCircle, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
+import { getLocalizedApiError } from "@/i18n/errors";
 import {
   isOperationalEvent,
   mergeOperationalEvents,
@@ -39,7 +41,7 @@ export function OperationalObservability() {
       const response = await fetch(`/api/observability/operational?${query}`, { cache: "no-store" });
       const payload = await response.json().catch(() => null);
       if (!response.ok || !Array.isArray(payload) || !payload.every(isOperationalEvent)) {
-        const message = getApiMessage(payload, t("observability.historyFailed"));
+        const message = getApiMessage(payload, t("observability.historyFailed"), t);
         setState((current) => response.status === 403 ? { kind: "denied", message, events: current.events } : { kind: "error", message, events: current.events });
         return;
       }
@@ -88,7 +90,7 @@ export function OperationalObservability() {
 
 function OperationalEventCard({ event }: OperationalEventCardProps) {
   const { i18n, t } = useTranslation();
-  return <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-sm font-bold text-slate-900">{formatOption(event.operation_type)}</p><p className="mt-1 break-all font-mono text-xs text-slate-500">{event.correlation_id}</p></div><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${event.error_summary ? "bg-rose-100 text-rose-800" : "bg-emerald-100 text-emerald-800"}`}>{event.status ?? t("observability.noStatus")}</span></div><dl className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-xs text-slate-600"><div><dt className="font-bold">{t("observability.instant")}</dt><dd>{formatDate(event.timestamp, i18n.resolvedLanguage, t("observability.notProvided"))}</dd></div><div><dt className="font-bold">{t("observability.duration")}</dt><dd>{formatDuration(event.total_duration_ms, i18n.resolvedLanguage)}</dd></div>{event.resource_id && <div><dt className="font-bold">{t("observability.resource")}</dt><dd className="break-all">{event.resource_id}</dd></div>}</dl>{event.error_summary && <p className="mt-3 rounded-lg bg-rose-50 p-3 text-sm text-rose-800">{event.error_summary}</p>}<details className="mt-3 rounded-lg border border-slate-200 p-3"><summary className="cursor-pointer text-sm font-semibold text-slate-700">{t("observability.authorizedMetadata")}</summary><pre className="mt-3 overflow-x-auto whitespace-pre-wrap break-words rounded-lg bg-slate-950 p-3 text-xs text-slate-100">{safePayload(event.metadata)}</pre></details></article>;
+  return <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-sm font-bold text-slate-900">{formatOption(event.operation_type)}</p><p className="mt-1 break-all font-mono text-xs text-slate-500">{event.correlation_id}</p></div><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${event.error_summary ? "bg-rose-100 text-rose-800" : "bg-emerald-100 text-emerald-800"}`}>{event.status ?? t("observability.noStatus")}</span></div><dl className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-xs text-slate-600"><div><dt className="font-bold">{t("observability.instant")}</dt><dd>{formatDate(event.timestamp, i18n.resolvedLanguage, t("observability.notProvided"))}</dd></div><div><dt className="font-bold">{t("observability.duration")}</dt><dd>{formatDuration(event.total_duration_ms, i18n.resolvedLanguage)}</dd></div>{event.resource_id && <div><dt className="font-bold">{t("observability.resource")}</dt><dd className="break-all">{event.resource_id}</dd></div>}</dl>{event.error_summary && <p className="mt-3 rounded-lg bg-rose-50 p-3 text-sm text-rose-800">{event.error_summary}</p>}<details className="mt-3 rounded-lg border border-slate-200 p-3"><summary className="cursor-pointer text-sm font-semibold text-slate-700">{t("observability.authorizedMetadata")}</summary><pre className="mt-3 overflow-x-auto whitespace-pre-wrap break-words rounded-lg bg-slate-950 p-3 text-xs text-slate-100">{safePayload(event.metadata, t("observability.notProvided"))}</pre></details></article>;
 }
 
 function ConnectionBadge({ state }: ConnectionBadgeProps) {
@@ -101,8 +103,8 @@ function ObservabilityMessage({ message, onRetry }: ObservabilityMessageProps) {
   return <div className="rounded-2xl border border-slate-200 bg-white p-6 text-center"><AlertTriangle aria-hidden="true" className="mx-auto size-6 text-slate-500" /><p className="mt-2 text-sm text-slate-600">{message}</p>{onRetry && <button className="mt-4 rounded-lg bg-teal-700 px-4 py-2 text-sm font-bold text-white" onClick={onRetry} type="button">{t("common.retry")}</button>}</div>;
 }
 
-function getApiMessage(value: unknown, fallback: string) { return isRecord(value) && typeof value.message === "string" ? value.message : fallback; }
+function getApiMessage(value: unknown, fallback: string, t: TFunction) { return getLocalizedApiError(isRecord(value) ? value : null, fallback, t); }
 function isRecord(value: unknown): value is ApiRecord { return Boolean(value) && typeof value === "object" && !Array.isArray(value); }
-function formatOption(value: string) { return value.replaceAll("_", " "); }
+function formatOption(value: string) { return value; }
 function formatDate(value: string | undefined, locale: string | undefined, emptyLabel: string) { if (!value) return emptyLabel; const date = new Date(value); return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat(locale, { dateStyle: "short", timeStyle: "medium" }).format(date); }
 function formatDuration(value: number, locale: string | undefined) { return value >= 1000 ? `${(value / 1000).toLocaleString(locale, { maximumFractionDigits: 2 })} s` : `${value.toLocaleString(locale)} ms`; }

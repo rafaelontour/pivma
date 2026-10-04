@@ -10,7 +10,7 @@ export const runtime = "nodejs";
 
 export async function GET(_request: Request, context: RouteContext<"/api/triage/[processId]">) {
   const { processId } = await context.params;
-  if (!isTriageUuid(processId)) return NextResponse.json({ message: "Processo inválido." }, { status: 400 });
+  if (!isTriageUuid(processId)) return NextResponse.json({ code: "VALIDATION_ERROR", message: "Processo inválido." }, { status: 400 });
   const authorization = await authorizeInternalApi(["triage.review"]);
   if (!authorization.ok) return authorization.response;
   const [process, form, preEvaluation, timeline] = await Promise.all([

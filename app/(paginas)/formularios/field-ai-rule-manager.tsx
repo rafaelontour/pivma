@@ -1,17 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   AlertCircle,
   Bot,
   Check,
   ChevronRight,
   Copy,
-  ExternalLink,
-  Layers,
   LoaderCircle,
   Plus,
-  RotateCcw,
   Search,
   ShieldAlert,
   ShieldCheck,
@@ -20,15 +17,14 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
+import { getLocalizedApiError } from "@/i18n/errors";
 import { useAccessibleDialog } from "@/components/accessible-dialog";
 import {
   AI_CHECK_TYPE_OPTIONS,
   AI_SCOPE_OPTIONS,
   AI_SEVERITY_OPTIONS,
-  mapCheckTypeToLabel,
-  mapScopeToLabel,
   mapScopeToTargetType,
-  mapSeverityToLabel,
   validateAiRuleDraft,
 } from "@/components/formulario";
 import type {
@@ -38,28 +34,22 @@ import type {
   FieldAiRuleModalProps,
   FieldAiRuleModalTab,
   FieldAiRuleOrchestratorState,
-  FieldAiRulePlaygroundProps,
-  FieldAiRulePreviewProps,
-  FieldAiRuleQuickCreateProps,
   FieldAiRuleQuickDraft,
   FieldAiRuleScope,
   FieldAiRuleSectionProps,
-  FieldAiRuleSelectExistingProps,
   FieldAiRuleSeverity,
   FieldAiRuleTestState,
   FormEvaluationAssignment,
-  FormTemplateField,
 } from "@/types/Formulario";
 import type {
   AiCriterionInput,
   AiEvaluationAssignmentInput,
   AiEvaluationDefinitionSummary,
-  AiEvaluationTestResult,
   AiEvaluationVersion,
+  SuggestedAiCriterion,
 } from "@/types/AvaliacaoIa";
 
 export function FieldAiRuleSection({
-  templateKey,
   field,
   allFields,
   assignment,
@@ -69,6 +59,7 @@ export function FieldAiRuleSection({
   onOpenRuleConfig,
   onUnlinkRule,
 }: FieldAiRuleSectionProps) {
+  const { t } = useTranslation();
   const [isUnlinkDialogOpen, setIsUnlinkDialogOpen] = useState(false);
   const activeAssignment = assignment[0] as FormEvaluationAssignment | undefined;
 
@@ -90,9 +81,9 @@ export function FieldAiRuleSection({
               <Bot aria-hidden="true" className="size-4" />
             </div>
             <div>
-              <p className="text-sm font-semibold text-slate-800">Avaliação por IA</p>
+              <p className="text-sm font-semibold text-slate-800">{t("fieldAiRules.title")}</p>
               <p className="text-xs text-slate-500">
-                Análise automatizada de conformidade durante a triagem.
+                {t("fieldAiRules.summary")}
               </p>
             </div>
           </div>
@@ -103,7 +94,7 @@ export function FieldAiRuleSection({
             type="button"
           >
             <span className="size-2 rounded-full bg-slate-400" />
-            <span>Desativada · Ativar</span>
+            <span>{t("fieldAiRules.inactiveEnable")}</span>
           </button>
         </div>
       </div>
@@ -121,13 +112,13 @@ export function FieldAiRuleSection({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <p className="text-sm font-bold text-violet-950">Avaliação por IA</p>
+                <p className="text-sm font-bold text-violet-950">{t("fieldAiRules.title")}</p>
                 <span className="inline-flex items-center rounded-full bg-violet-200/80 px-2 py-0.5 text-[0.65rem] font-bold text-violet-900">
-                  Ativada
+                  {t("fieldAiRules.enabled")}
                 </span>
               </div>
               <p className="mt-1 text-xs text-violet-800">
-                Nenhuma regra foi configurada para este campo.
+                {t("fieldAiRules.noRule")}
               </p>
             </div>
           </div>
@@ -140,16 +131,16 @@ export function FieldAiRuleSection({
               type="button"
             >
               <Sparkles aria-hidden="true" className="size-3.5" />
-              <span>Configurar avaliação</span>
+              <span>{t("fieldAiRules.configure")}</span>
             </button>
             <button
               className="inline-flex min-h-9 items-center rounded-lg border border-violet-300 bg-white px-2.5 text-xs font-semibold text-violet-700 outline-none hover:bg-violet-100 focus-visible:ring-2 focus-visible:ring-violet-500 disabled:opacity-50"
               disabled={disabled}
               onClick={() => onToggleAi(false)}
-              title="Desativar avaliação por IA neste campo"
+              title={t("fieldAiRules.disableTitle")}
               type="button"
             >
-              Desativar
+              {t("fieldAiRules.disable")}
             </button>
           </div>
         </div>
@@ -167,9 +158,9 @@ export function FieldAiRuleSection({
           </div>
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <p className="text-sm font-bold text-violet-950">Avaliação por IA</p>
+              <p className="text-sm font-bold text-violet-950">{t("fieldAiRules.title")}</p>
               <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[0.65rem] font-bold text-emerald-800">
-                Regra ativa
+                {t("fieldAiRules.activeRule")}
               </span>
             </div>
             <p className="mt-0.5 text-sm font-bold text-slate-900">
@@ -177,15 +168,15 @@ export function FieldAiRuleSection({
             </p>
             <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-600">
               <span className="rounded bg-white px-2 py-0.5 font-medium shadow-2xs">
-                Publicada · v{activeAssignment.effective_version_number ?? 1}
+                {t("fieldAiRules.publishedVersion", { version: activeAssignment.effective_version_number ?? 1 })}
               </span>
               <span className="text-slate-400">•</span>
               <span className="capitalize">
                 {activeAssignment.target_type === "form"
-                  ? "Avalia todo o formulário"
+                  ? t("fieldAiRules.scopeForm")
                   : activeAssignment.target_type === "field_set"
-                    ? "Análise cruzada de campos"
-                    : "Avalia este campo"}
+                    ? t("fieldAiRules.scopeCrossField")
+                    : t("fieldAiRules.scopeField")}
               </span>
             </div>
           </div>
@@ -199,25 +190,25 @@ export function FieldAiRuleSection({
               onClick={onOpenRuleConfig}
               type="button"
             >
-              <span>Alterar regra</span>
+              <span>{t("fieldAiRules.changeRule")}</span>
             </button>
           )}
           <button
             className="inline-flex min-h-9 items-center gap-1 rounded-lg border border-rose-200 bg-white px-2.5 text-xs font-semibold text-rose-700 shadow-2xs outline-none transition hover:bg-rose-50 focus-visible:ring-2 focus-visible:ring-rose-500 disabled:opacity-50"
             disabled={disabled}
             onClick={() => setIsUnlinkDialogOpen(true)}
-            title="Remover regra deste campo"
+            title={t("fieldAiRules.removeTitle")}
             type="button"
           >
             <Trash2 aria-hidden="true" className="size-3.5" />
-            <span>Remover</span>
+            <span>{t("common.remove")}</span>
           </button>
         </div>
       </div>
 
       {additionalFields.length > 0 && (
         <div className="mt-3 rounded-lg border border-violet-200 bg-white/90 p-2.5 text-xs text-violet-900">
-          <p className="font-semibold text-violet-950">Esta avaliação utiliza também:</p>
+          <p className="font-semibold text-violet-950">{t("fieldAiRules.alsoUses")}</p>
           <ul className="mt-1 list-inside list-disc space-y-0.5 text-slate-600">
             {additionalFields.map((otherField) => (
               <li key={otherField.field_key}>{otherField.label}</li>
@@ -245,6 +236,7 @@ export function FieldAiRuleConfirmUnlinkDialog({
   onCancel,
   onConfirm,
 }: FieldAiRuleConfirmUnlinkDialogProps) {
+  const { t } = useTranslation();
   const dialogRef = useAccessibleDialog(isOpen, false, onCancel);
   if (!isOpen) return null;
 
@@ -265,12 +257,11 @@ export function FieldAiRuleConfirmUnlinkDialog({
           <AlertCircle aria-hidden="true" className="size-6" />
         </div>
         <h2 className="mt-4 text-xl font-bold text-slate-900" id="unlink-rule-title">
-          Remover avaliação por IA?
+          {t("fieldAiRules.unlinkTitle")}
         </h2>
         <p className="mt-2 text-sm leading-6 text-slate-600">
-          A avaliação será desativada para este campo. A regra{" "}
-          <strong className="text-slate-900">“{ruleName}”</strong> permanecerá
-          disponível na biblioteca e poderá ser reutilizada em outros formulários.
+          {t("fieldAiRules.unlinkDescriptionBefore")} {" "}
+          <strong className="text-slate-900">“{ruleName}”</strong> {t("fieldAiRules.unlinkDescriptionAfter")}
         </p>
         <div className="mt-6 flex flex-wrap justify-end gap-3">
           <button
@@ -278,14 +269,14 @@ export function FieldAiRuleConfirmUnlinkDialog({
             onClick={onCancel}
             type="button"
           >
-            Cancelar
+            {t("common.cancel")}
           </button>
           <button
             className="min-h-11 rounded-xl bg-rose-600 px-4 text-sm font-semibold text-white outline-none transition hover:bg-rose-700 focus-visible:ring-2 focus-visible:ring-rose-500"
             onClick={onConfirm}
             type="button"
           >
-            Remover avaliação
+            {t("fieldAiRules.removeEvaluation")}
           </button>
         </div>
       </div>
@@ -302,6 +293,7 @@ export function FieldAiRuleModal({
   onClose,
   onRuleLinked,
 }: FieldAiRuleModalProps) {
+  const { t } = useTranslation();
   const dialogRef = useAccessibleDialog(isOpen, false, onClose);
   const [tab, setTab] = useState<FieldAiRuleModalTab>("select_existing");
 
@@ -319,7 +311,7 @@ export function FieldAiRuleModal({
 
   // Estados de criação rápida
   const [quickDraft, setQuickDraft] = useState<FieldAiRuleQuickDraft>({
-    name: `Validação de ${field.label}`,
+    name: t("fieldAiRules.defaultName", { field: field.label }),
     objective: "",
     scope: "field",
     selectedFieldKeys: [],
@@ -446,7 +438,7 @@ export function FieldAiRuleModal({
           ...otherAssignments.map((a) => ({
             definition_id: a.definition_id,
             pinned_version_id: a.pinned_version_id ?? null,
-            target_type: a.target_type as any,
+            target_type: a.target_type as AiEvaluationAssignmentInput["target_type"],
             field_keys: a.field_keys ?? [],
             enabled: a.enabled !== false,
           })),
@@ -466,33 +458,32 @@ export function FieldAiRuleModal({
       const putPayload = await putRes.json().catch(() => null);
       if (!putRes.ok || !putPayload || !Array.isArray(putPayload.assignments)) {
         toast.error(
-          putPayload?.message ||
-            "Não foi possível salvar o vínculo da avaliação.",
+          getLocalizedApiError(putPayload, t("fieldAiRules.linkSaveFailed"), t),
         );
         setOrchestratorState({
           step: "error",
-          errorMessage: "Falha ao vincular regra ao formulário.",
+          errorMessage: t("fieldAiRules.linkFailed"),
         });
         return;
       }
 
       setOrchestratorState({ step: "completed" });
-      toast.success(`Regra “${definition.name}” vinculada ao campo com sucesso!`);
+      toast.success(t("fieldAiRules.linked", { name: definition.name }));
       onRuleLinked(putPayload.assignments);
       onClose();
     } catch {
       setOrchestratorState({
         step: "error",
-        errorMessage: "Falha na conexão ao vincular a regra.",
+        errorMessage: t("fieldAiRules.linkConnectionFailed"),
       });
-      toast.error("Não foi possível conectar ao serviço de avaliações.");
+      toast.error(t("fieldAiRules.serviceConnectionFailed"));
     }
   }
 
   // Sugestão de critérios com IA no Modo Rápido
   async function handleGenerateSuggestions() {
     if (!quickDraft.objective.trim()) {
-      toast.error("Descreva o que a IA deve avaliar antes de gerar sugestões.");
+      toast.error(t("fieldAiRules.describeBeforeSuggest"));
       return;
     }
 
@@ -510,13 +501,13 @@ export function FieldAiRuleModal({
 
       if (!response.ok || !payload || !Array.isArray(payload.suggestions)) {
         toast.error(
-          payload?.message || "Não foi possível gerar sugestões de critérios.",
+          getLocalizedApiError(payload, t("fieldAiRules.suggestFailed"), t),
         );
         return;
       }
 
-      const generated: FieldAiRuleDraftCriterion[] = payload.suggestions.map(
-        (item: any, index: number) => ({
+      const generated: FieldAiRuleDraftCriterion[] = (payload.suggestions as SuggestedAiCriterion[]).map(
+        (item, index) => ({
           id: `crit_${Date.now()}_${index}`,
           statement: item.statement || "",
           check_type: (item.check_type || "quality") as FieldAiRuleCheckType,
@@ -529,9 +520,9 @@ export function FieldAiRuleModal({
         ...current,
         criteria: generated,
       }));
-      toast.success(`${generated.length} critérios sugeridos pela IA.`);
+      toast.success(t("fieldAiRules.suggestedCount", { count: generated.length }));
     } catch {
-      toast.error("Não foi possível conectar ao assistente de critérios.");
+      toast.error(t("fieldAiRules.suggestConnectionFailed"));
     } finally {
       setIsGeneratingSuggestions(false);
     }
@@ -551,20 +542,20 @@ export function FieldAiRuleModal({
     }));
 
     setQuickDraft({
-      name: `${previewDefinition.name} (Cópia)`,
+      name: t("fieldAiRules.copyName", { name: previewDefinition.name }),
       objective: previewVersionDetail.objective,
       scope: "field",
       selectedFieldKeys: [],
       criteria: copiedCriteria,
     });
     setTab("quick_create");
-    toast.info("Regra duplicada. Você pode editar os critérios e salvá-la.");
+    toast.info(t("fieldAiRules.duplicated"));
   }
 
   // Executar teste simulado no Playground
   async function handleRunTest() {
     if (!testState.sampleContent.trim()) {
-      toast.error("Cole ou digite uma resposta de exemplo para testar.");
+      toast.error(t("fieldAiRules.sampleRequired"));
       return;
     }
 
@@ -586,12 +577,10 @@ export function FieldAiRuleModal({
           severity: criterion.severity,
           conclusion: isMet ? "compliant" : "non_compliant",
           is_alert: !isMet && (criterion.severity === "high" || criterion.severity === "critical"),
-          evidence_excerpt: isMet
-            ? `Trecho correspondente encontrado na amostra de teste.`
-            : null,
+          evidence_excerpt: isMet ? t("fieldAiRules.simulation.evidence") : null,
           justification: isMet
-            ? "A resposta de teste atende plenamente ao critério estipulado."
-            : "A amostra analisada não contém os elementos exigidos para este critério.",
+            ? t("fieldAiRules.simulation.met")
+            : t("fieldAiRules.simulation.notMet"),
         };
       });
 
@@ -610,14 +599,14 @@ export function FieldAiRuleModal({
       setTestState((curr) => ({
         ...curr,
         status: "error",
-        errorMessage: "Falha ao executar o teste no playground.",
+        errorMessage: t("fieldAiRules.playgroundFailed"),
       }));
     }
   }
 
   // Orquestrador completo: Criar -> Salvar critérios -> Publicar -> Vincular ao campo
   async function handleSaveAndLinkQuickDraft() {
-    const validation = validateAiRuleDraft(quickDraft);
+    const validation = validateAiRuleDraft(quickDraft, t);
     if (!validation.valid) {
       toast.error(validation.errors[0]);
       return;
@@ -634,17 +623,17 @@ export function FieldAiRuleModal({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             name: quickDraft.name.trim(),
-            description: `Criada no editor de formulários para o campo ${field.label}`,
+            description: t("fieldAiRules.createdDescription", { field: field.label }),
             objective: quickDraft.objective.trim(),
             mode: "simple",
           }),
         });
         const createPayload = await createRes.json().catch(() => null);
         if (!createRes.ok || typeof createPayload?.id !== "string") {
-          toast.error(createPayload?.message || "Falha ao criar definição da regra.");
+          toast.error(getLocalizedApiError(createPayload, t("fieldAiRules.createDefinitionFailed"), t));
           setOrchestratorState({
             step: "error",
-            errorMessage: "Falha ao registrar regra na biblioteca.",
+            errorMessage: t("fieldAiRules.registerFailed"),
           });
           return;
         }
@@ -681,11 +670,11 @@ export function FieldAiRuleModal({
       );
       const patchPayload = await patchRes.json().catch(() => null);
       if (!patchRes.ok) {
-        toast.error(patchPayload?.message || "Falha ao salvar critérios da regra.");
+        toast.error(getLocalizedApiError(patchPayload, t("fieldAiRules.saveCriteriaFailed"), t));
         setOrchestratorState((curr) => ({
           ...curr,
           step: "error",
-          errorMessage: "Falha ao salvar critérios.",
+          errorMessage: t("fieldAiRules.saveCriteriaShortFailed"),
         }));
         return;
       }
@@ -700,11 +689,11 @@ export function FieldAiRuleModal({
       );
       const pubPayload = await pubRes.json().catch(() => null);
       if (!pubRes.ok) {
-        toast.error(pubPayload?.message || "Falha ao publicar versão da regra.");
+        toast.error(getLocalizedApiError(pubPayload, t("fieldAiRules.publishFailed"), t));
         setOrchestratorState((curr) => ({
           ...curr,
           step: "error",
-          errorMessage: "Falha ao publicar a regra.",
+          errorMessage: t("fieldAiRules.publishShortFailed"),
         }));
         return;
       }
@@ -725,9 +714,9 @@ export function FieldAiRuleModal({
       setOrchestratorState((curr) => ({
         ...curr,
         step: "error",
-        errorMessage: "Falha inesperada durante a configuração.",
+        errorMessage: t("fieldAiRules.unexpectedConfigurationFailed"),
       }));
-      toast.error("Ocorreu um erro ao salvar e vincular a regra.");
+      toast.error(t("fieldAiRules.saveAndLinkFailed"));
     }
   }
 
@@ -752,26 +741,26 @@ export function FieldAiRuleModal({
             <div className="flex items-center gap-2">
               <span className="inline-flex items-center gap-1 rounded-md bg-violet-100 px-2 py-0.5 text-xs font-bold text-violet-800">
                 <Bot aria-hidden="true" className="size-3.5" />
-                Configurar avaliação por IA
+                {t("fieldAiRules.configure")}
               </span>
               <span className="text-xs text-slate-400">•</span>
               <span className="text-xs font-semibold text-slate-600">
-                Campo: {field.label}
+                {t("fieldAiRules.fieldLabel", { field: field.label })}
               </span>
             </div>
             <h2
               className="mt-1 text-lg font-bold text-slate-900 sm:text-xl"
               id="ai-rule-modal-title"
             >
-              {tab === "select_existing" && "Escolher regra de avaliação"}
-              {tab === "preview" && (previewDefinition?.name || "Prévia da regra")}
-              {tab === "quick_create" && "Criar nova regra com IA"}
-              {tab === "test_playground" && "Testar regra antes de publicar"}
+              {tab === "select_existing" && t("fieldAiRules.chooseRule")}
+              {tab === "preview" && (previewDefinition?.name || t("fieldAiRules.rulePreview"))}
+              {tab === "quick_create" && t("fieldAiRules.createWithAi")}
+              {tab === "test_playground" && t("fieldAiRules.testBeforePublish")}
             </h2>
           </div>
 
           <button
-            aria-label="Fechar"
+            aria-label={t("common.close")}
             className="grid size-9 place-items-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-800 focus-visible:ring-2 focus-visible:ring-teal-500"
             disabled={orchestratorState.step !== "idle" && orchestratorState.step !== "error"}
             onClick={onClose}
@@ -794,17 +783,17 @@ export function FieldAiRuleModal({
               )}
               <span>
                 {orchestratorState.step === "creating_definition" &&
-                  "Criando regra na biblioteca de IA…"}
+                  t("fieldAiRules.steps.creating")}
                 {orchestratorState.step === "saving_criteria" &&
-                  "Salvando critérios da regra…"}
+                  t("fieldAiRules.steps.saving")}
                 {orchestratorState.step === "publishing" &&
-                  "Publicando versão imutável…"}
+                  t("fieldAiRules.steps.publishing")}
                 {orchestratorState.step === "binding" &&
-                  "Vinculando avaliação ao campo do formulário…"}
+                  t("fieldAiRules.steps.binding")}
                 {orchestratorState.step === "completed" &&
-                  "Configuração concluída com sucesso!"}
+                  t("fieldAiRules.steps.completed")}
                 {orchestratorState.step === "error" &&
-                  (orchestratorState.errorMessage || "Erro na operação.")}
+                  (orchestratorState.errorMessage || t("fieldAiRules.steps.error"))}
               </span>
             </div>
           </div>
@@ -824,7 +813,7 @@ export function FieldAiRuleModal({
                   <input
                     className="min-h-10 w-full rounded-xl border border-slate-300 bg-white pl-9 pr-3 text-sm outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20"
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Pesquisar regra por nome ou objetivo…"
+                    placeholder={t("fieldAiRules.searchPlaceholder")}
                     value={searchQuery}
                   />
                 </div>
@@ -833,7 +822,7 @@ export function FieldAiRuleModal({
                   className="inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-violet-700 px-4 text-xs font-bold text-white shadow-sm outline-none transition hover:bg-violet-800 focus-visible:ring-2 focus-visible:ring-violet-500"
                   onClick={() => {
                     setQuickDraft({
-                      name: `Validação de ${field.label}`,
+                      name: t("fieldAiRules.defaultName", { field: field.label }),
                       objective: "",
                       scope: "field",
                       selectedFieldKeys: [],
@@ -844,7 +833,7 @@ export function FieldAiRuleModal({
                   type="button"
                 >
                   <Plus aria-hidden="true" className="size-4" />
-                  <span>Criar nova regra</span>
+                  <span>{t("fieldAiRules.createNew")}</span>
                 </button>
               </div>
 
@@ -853,16 +842,16 @@ export function FieldAiRuleModal({
                 {isLoadingDefinitions ? (
                   <div className="flex min-h-48 items-center justify-center gap-2.5 text-sm text-slate-500">
                     <LoaderCircle aria-hidden="true" className="size-5 animate-spin text-violet-700" />
-                    Consultando biblioteca de avaliações…
+                    {t("fieldAiRules.loadingLibrary")}
                   </div>
                 ) : definitions.length === 0 ? (
                   <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center">
                     <Bot aria-hidden="true" className="mx-auto size-8 text-slate-400" />
                     <p className="mt-2 font-semibold text-slate-800">
-                      Nenhuma regra de avaliação encontrada
+                      {t("fieldAiRules.noneFound")}
                     </p>
                     <p className="mt-1 text-xs text-slate-500">
-                      Crie uma regra nova em linguagem natural para começar.
+                      {t("fieldAiRules.noneDescription")}
                     </p>
                     <button
                       className="mt-4 inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-violet-700 px-3 text-xs font-semibold text-white outline-none hover:bg-violet-800 focus-visible:ring-2 focus-visible:ring-violet-500"
@@ -870,7 +859,7 @@ export function FieldAiRuleModal({
                       type="button"
                     >
                       <Plus aria-hidden="true" className="size-3.5" />
-                      <span>Criar regra agora</span>
+                      <span>{t("fieldAiRules.createNow")}</span>
                     </button>
                   </div>
                 ) : (
@@ -883,17 +872,17 @@ export function FieldAiRuleModal({
                         <div className="flex flex-wrap items-center gap-2">
                           <h3 className="text-sm font-bold text-slate-900">{item.name}</h3>
                           <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[0.7rem] font-semibold text-slate-700">
-                            v{item.latest_version?.version_number ?? 1} publicada
+                            {t("fieldAiRules.versionPublished", { version: item.latest_version?.version_number ?? 1 })}
                           </span>
                           {item.latest_version?.criteria_count !== undefined && (
                             <span className="text-xs text-slate-500">
-                              {item.latest_version.criteria_count} critérios
+                              {t("fieldAiRules.criteriaCount", { count: item.latest_version.criteria_count })}
                             </span>
                           )}
                         </div>
                         {item.slug && (
                           <p className="mt-0.5 text-xs text-slate-500">
-                            Regra reutilizável na plataforma
+                            {t("fieldAiRules.reusable")}
                           </p>
                         )}
                       </div>
@@ -907,7 +896,7 @@ export function FieldAiRuleModal({
                           }}
                           type="button"
                         >
-                          Ver detalhes
+                          {t("fieldAiRules.viewDetails")}
                         </button>
                         <button
                           className="min-h-8 rounded-lg bg-violet-700 px-3 text-xs font-semibold text-white outline-none transition hover:bg-violet-800 focus-visible:ring-2 focus-visible:ring-violet-500"
@@ -915,7 +904,7 @@ export function FieldAiRuleModal({
                           onClick={() => void handleLinkExisting(item)}
                           type="button"
                         >
-                          Selecionar
+                          {t("fieldAiRules.select")}
                         </button>
                       </div>
                     </article>
@@ -932,19 +921,19 @@ export function FieldAiRuleModal({
                 onClick={() => setTab("select_existing")}
                 type="button"
               >
-                ← Voltar para a lista de regras
+                {t("fieldAiRules.backToRules")}
               </button>
 
               {isLoadingPreview || !previewVersionDetail ? (
                 <div className="flex min-h-48 items-center justify-center gap-2 text-sm text-slate-500">
                   <LoaderCircle aria-hidden="true" className="size-5 animate-spin text-violet-700" />
-                  Carregando detalhes da regra…
+                  {t("fieldAiRules.loadingDetails")}
                 </div>
               ) : (
                 <div className="space-y-4">
                   <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                     <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
-                      O que esta regra avalia (Objetivo)
+                      {t("fieldAiRules.ruleObjective")}
                     </p>
                     <p className="mt-1 text-sm leading-6 text-slate-800">
                       {previewVersionDetail.objective}
@@ -953,7 +942,7 @@ export function FieldAiRuleModal({
 
                   <div>
                     <h4 className="text-xs font-bold uppercase tracking-wide text-slate-700">
-                      Critérios configurados ({previewVersionDetail.criteria?.length ?? 0})
+                      {t("fieldAiRules.configuredCriteria", { count: previewVersionDetail.criteria?.length ?? 0 })}
                     </h4>
                     <div className="mt-2 grid gap-2.5">
                       {(previewVersionDetail.criteria ?? []).map((c, idx) => (
@@ -967,10 +956,10 @@ export function FieldAiRuleModal({
                             </span>
                             <div className="flex items-center gap-1.5">
                               <span className="rounded bg-violet-50 px-2 py-0.5 font-medium text-violet-800">
-                                {mapCheckTypeToLabel(c.check_type)}
+                                {t(`aiEvaluations.options.${c.check_type}`, { defaultValue: c.check_type })}
                               </span>
                               <span className="rounded bg-slate-100 px-2 py-0.5 font-medium text-slate-700">
-                                {mapSeverityToLabel(c.severity)}
+                                {t(`aiEvaluations.options.${c.severity}`, { defaultValue: c.severity })}
                               </span>
                             </div>
                           </div>
@@ -986,7 +975,7 @@ export function FieldAiRuleModal({
                       type="button"
                     >
                       <Copy aria-hidden="true" className="size-3.5" />
-                      <span>Duplicar e editar</span>
+                      <span>{t("fieldAiRules.duplicateAndEdit")}</span>
                     </button>
                     {previewDefinition && (
                       <button
@@ -996,7 +985,7 @@ export function FieldAiRuleModal({
                         type="button"
                       >
                         <Check aria-hidden="true" className="size-3.5" />
-                        <span>Usar esta regra</span>
+                        <span>{t("fieldAiRules.useRule")}</span>
                       </button>
                     )}
                   </div>
@@ -1008,22 +997,21 @@ export function FieldAiRuleModal({
           {tab === "quick_create" && (
             <div className="space-y-4">
               <div className="rounded-xl border border-violet-100 bg-violet-50/50 p-3.5 text-xs text-violet-900">
-                <p className="font-semibold">Modo Rápido de Criação</p>
+                <p className="font-semibold">{t("fieldAiRules.quickMode")}</p>
                 <p className="mt-0.5 text-slate-600">
-                  Descreva o que a IA deve verificar na resposta. O assistente sugerirá os
-                  critérios objetivos automaticamente.
+                  {t("fieldAiRules.quickModeDescription")}
                 </p>
               </div>
 
               {/* Nome da Regra */}
               <label className="block text-xs font-bold uppercase tracking-wide text-slate-700">
-                Nome da regra
+                {t("fieldAiRules.ruleName")}
                 <input
                   className="mt-1.5 min-h-10 w-full rounded-xl border border-slate-300 px-3 text-sm font-normal text-slate-900 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20"
                   onChange={(e) =>
                     setQuickDraft((curr) => ({ ...curr, name: e.target.value }))
                   }
-                  placeholder="Ex: Qualidade e Clareza da Justificativa"
+                  placeholder={t("fieldAiRules.ruleNamePlaceholder")}
                   value={quickDraft.name}
                 />
               </label>
@@ -1031,22 +1019,22 @@ export function FieldAiRuleModal({
               {/* Objetivo com Exemplos */}
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wide text-slate-700">
-                  O que você quer que a IA avalie?
+                  {t("fieldAiRules.whatToEvaluate")}
                   <textarea
                     className="mt-1.5 min-h-24 w-full rounded-xl border border-slate-300 p-3 text-sm font-normal text-slate-900 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20"
                     onChange={(e) =>
                       setQuickDraft((curr) => ({ ...curr, objective: e.target.value }))
                     }
-                    placeholder="Descreva em linguagem natural o que deve ser conferido..."
+                    placeholder={t("fieldAiRules.objectivePlaceholder")}
                     value={quickDraft.objective}
                   />
                 </label>
                 <div className="mt-1.5 rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-[0.72rem] text-slate-600">
-                  <span className="font-bold text-slate-800">Exemplos práticos:</span>
+                  <span className="font-bold text-slate-800">{t("fieldAiRules.examples")}</span>
                   <ul className="mt-1 list-inside list-disc space-y-0.5">
-                    <li>Verificar se o texto contém metodologia, linhagem celular e controles.</li>
-                    <li>Avaliar se a justificativa para o método alternativo é clara e fundamentada.</li>
-                    <li>Confrontar se os dados deste campo são consistentes com outros campos.</li>
+                    <li>{t("fieldAiRules.exampleMethodology")}</li>
+                    <li>{t("fieldAiRules.exampleJustification")}</li>
+                    <li>{t("fieldAiRules.exampleConsistency")}</li>
                   </ul>
                 </div>
               </div>
@@ -1054,7 +1042,7 @@ export function FieldAiRuleModal({
               {/* Escopo da Avaliação */}
               <div>
                 <p className="text-xs font-bold uppercase tracking-wide text-slate-700">
-                  O que a IA deve analisar?
+                  {t("fieldAiRules.scopeQuestion")}
                 </p>
                 <div className="mt-2 grid gap-2 sm:grid-cols-3">
                   {AI_SCOPE_OPTIONS.map((scopeOption) => (
@@ -1079,10 +1067,10 @@ export function FieldAiRuleModal({
                           }
                           type="radio"
                         />
-                        <span>{scopeOption.label}</span>
+                        <span>{t(`fieldAiRules.scopes.${scopeOption.value}.label`, { defaultValue: scopeOption.value })}</span>
                       </div>
                       <span className="mt-1 text-[0.7rem] font-normal leading-4 text-slate-500">
-                        {scopeOption.description}
+                        {t(`fieldAiRules.scopes.${scopeOption.value}.description`, { defaultValue: scopeOption.value })}
                       </span>
                     </label>
                   ))}
@@ -1092,7 +1080,7 @@ export function FieldAiRuleModal({
                 {quickDraft.scope === "cross_field" && (
                   <div className="mt-3 rounded-xl border border-violet-200 bg-violet-50/40 p-3">
                     <p className="text-xs font-bold text-violet-950">
-                      Selecione os outros campos a serem considerados na análise cruzada:
+                      {t("fieldAiRules.selectCrossFields")}
                     </p>
                     <div className="mt-2 grid max-h-36 gap-1.5 overflow-y-auto sm:grid-cols-2">
                       {allFields
@@ -1145,8 +1133,8 @@ export function FieldAiRuleModal({
                   )}
                   <span>
                     {isGeneratingSuggestions
-                      ? "Gerando critérios com IA…"
-                      : "Sugerir critérios com IA"}
+                      ? t("fieldAiRules.generatingCriteria")
+                      : t("fieldAiRules.suggestCriteria")}
                   </span>
                 </button>
 
@@ -1171,7 +1159,7 @@ export function FieldAiRuleModal({
                     type="button"
                   >
                     <Plus aria-hidden="true" className="size-3.5" />
-                    <span>Adicionar critério</span>
+                    <span>{t("fieldAiRules.addCriterion")}</span>
                   </button>
                 )}
               </div>
@@ -1180,7 +1168,7 @@ export function FieldAiRuleModal({
               {quickDraft.criteria.length > 0 && (
                 <div className="mt-4 space-y-2.5">
                   <p className="text-xs font-bold uppercase tracking-wide text-slate-700">
-                    Critérios ({quickDraft.criteria.filter((c) => c.enabled).length} ativos)
+                    {t("fieldAiRules.activeCriteria", { count: quickDraft.criteria.filter((c) => c.enabled).length })}
                   </p>
                   {quickDraft.criteria.map((criterion, index) => (
                     <div
@@ -1203,7 +1191,7 @@ export function FieldAiRuleModal({
                               ),
                             }));
                           }}
-                          title="Ativar/desativar este critério"
+                          title={t("fieldAiRules.toggleCriterion")}
                           type="checkbox"
                         />
                         <div className="flex-1">
@@ -1217,12 +1205,12 @@ export function FieldAiRuleModal({
                                 ),
                               }));
                             }}
-                            placeholder="Descreva o critério de validação..."
+                            placeholder={t("fieldAiRules.criterionPlaceholder")}
                             value={criterion.statement}
                           />
                           <div className="mt-2 flex flex-wrap items-center gap-3">
                             <label className="flex items-center gap-1.5 text-slate-600">
-                              <span>Severidade:</span>
+                              <span>{t("aiEvaluations.severity")}:</span>
                               <select
                                 className="rounded border border-slate-200 bg-white px-2 py-1 text-xs outline-none focus:border-violet-500"
                                 onChange={(e) => {
@@ -1242,14 +1230,14 @@ export function FieldAiRuleModal({
                               >
                                 {AI_SEVERITY_OPTIONS.map((opt) => (
                                   <option key={opt.value} value={opt.value}>
-                                    {opt.label}
+                                    {t(`aiEvaluations.options.${opt.value}`, { defaultValue: opt.value })}
                                   </option>
                                 ))}
                               </select>
                             </label>
 
                             <label className="flex items-center gap-1.5 text-slate-600">
-                              <span>Verificação:</span>
+                              <span>{t("aiEvaluations.check")}:</span>
                               <select
                                 className="rounded border border-slate-200 bg-white px-2 py-1 text-xs outline-none focus:border-violet-500"
                                 onChange={(e) => {
@@ -1270,7 +1258,7 @@ export function FieldAiRuleModal({
                               >
                                 {AI_CHECK_TYPE_OPTIONS.map((opt) => (
                                   <option key={opt.value} value={opt.value}>
-                                    {opt.label}
+                                    {t(`aiEvaluations.options.${opt.value}`, { defaultValue: opt.value })}
                                   </option>
                                 ))}
                               </select>
@@ -1279,7 +1267,7 @@ export function FieldAiRuleModal({
                         </div>
 
                         <button
-                          aria-label="Excluir critério"
+                          aria-label={t("fieldAiRules.deleteCriterion")}
                           className="grid size-8 shrink-0 place-items-center rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600 focus-visible:ring-2 focus-visible:ring-rose-500"
                           onClick={() => {
                             setQuickDraft((curr) => ({
@@ -1304,7 +1292,7 @@ export function FieldAiRuleModal({
                   onClick={() => setTab("select_existing")}
                   type="button"
                 >
-                  Voltar para seleção
+                  {t("fieldAiRules.backToSelection")}
                 </button>
 
                 <div className="flex items-center gap-2">
@@ -1315,13 +1303,13 @@ export function FieldAiRuleModal({
                       setTestState({
                         status: "idle",
                         sampleContent:
-                          "O protocolo experimental avaliou o ensaio citotóxico utilizando linhagem celular HepG2 com controle positivo (Triton X-100 a 0.1%) e negativo (meio de cultura DMEM). O valor de IC50 calculado foi de 42.5 µg/mL.",
+                          t("fieldAiRules.simulation.sample"),
                       });
                       setTab("test_playground");
                     }}
                     type="button"
                   >
-                    <span>Testar no Playground</span>
+                    <span>{t("fieldAiRules.testInPlayground")}</span>
                     <ChevronRight aria-hidden="true" className="size-3.5" />
                   </button>
 
@@ -1332,7 +1320,7 @@ export function FieldAiRuleModal({
                     type="button"
                   >
                     <Check aria-hidden="true" className="size-4" />
-                    <span>Salvar e vincular ao campo</span>
+                    <span>{t("fieldAiRules.saveAndLink")}</span>
                   </button>
                 </div>
               </div>
@@ -1342,15 +1330,15 @@ export function FieldAiRuleModal({
           {tab === "test_playground" && (
             <div className="space-y-4">
               <div className="rounded-xl border border-teal-100 bg-teal-50/60 p-3.5 text-xs text-teal-950">
-                <p className="font-bold">Playground de Teste</p>
+                <p className="font-bold">{t("fieldAiRules.playgroundTitle")}</p>
                 <p className="mt-0.5 text-slate-600">
-                  Veja como a IA avaliaria uma resposta simulada antes de publicar a regra.
+                  {t("fieldAiRules.playgroundDescription")}
                 </p>
               </div>
 
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wide text-slate-700">
-                  Resposta de exemplo (Amostra para teste)
+                  {t("fieldAiRules.sampleResponse")}
                   <textarea
                     className="mt-1.5 min-h-24 w-full rounded-xl border border-slate-300 p-3 text-xs font-normal text-slate-900 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20"
                     onChange={(e) =>
@@ -1359,7 +1347,7 @@ export function FieldAiRuleModal({
                         sampleContent: e.target.value,
                       }))
                     }
-                    placeholder="Cole aqui o texto de uma resposta simulada..."
+                    placeholder={t("fieldAiRules.samplePlaceholder")}
                     value={testState.sampleContent}
                   />
                 </label>
@@ -1379,8 +1367,8 @@ export function FieldAiRuleModal({
                   )}
                   <span>
                     {testState.status === "running"
-                      ? "Executando teste…"
-                      : "Executar avaliação de teste"}
+                      ? t("fieldAiRules.runningTest")
+                      : t("fieldAiRules.runTest")}
                   </span>
                 </button>
               </div>
@@ -1389,7 +1377,7 @@ export function FieldAiRuleModal({
                 <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
                   <div className="flex items-center justify-between gap-2 border-b border-slate-200 pb-3">
                     <span className="text-xs font-bold uppercase text-slate-700">
-                      Resultado do Teste
+                      {t("fieldAiRules.testResult")}
                     </span>
                     <span
                       className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold ${
@@ -1401,12 +1389,12 @@ export function FieldAiRuleModal({
                       {testState.result.consolidated_result === "positive" ? (
                         <>
                           <ShieldCheck aria-hidden="true" className="size-3.5" />
-                          <span>Critérios Atendidos</span>
+                          <span>{t("fieldAiRules.criteriaMet")}</span>
                         </>
                       ) : (
                         <>
                           <ShieldAlert aria-hidden="true" className="size-3.5" />
-                          <span>Atenção aos Critérios</span>
+                          <span>{t("fieldAiRules.criteriaAttention")}</span>
                         </>
                       )}
                     </span>
@@ -1429,7 +1417,7 @@ export function FieldAiRuleModal({
                                 : "bg-rose-50 text-rose-700"
                             }`}
                           >
-                            {r.conclusion === "compliant" ? "Atendido" : "Não atendido"}
+                            {r.conclusion === "compliant" ? t("fieldAiRules.met") : t("fieldAiRules.notMet")}
                           </span>
                         </div>
                         {r.justification && (
@@ -1449,7 +1437,7 @@ export function FieldAiRuleModal({
                   onClick={() => setTab("quick_create")}
                   type="button"
                 >
-                  ← Voltar para edição dos critérios
+                  {t("fieldAiRules.backToCriteria")}
                 </button>
 
                 <button
@@ -1459,7 +1447,7 @@ export function FieldAiRuleModal({
                   type="button"
                 >
                   <Check aria-hidden="true" className="size-4" />
-                  <span>Salvar e vincular ao campo</span>
+                  <span>{t("fieldAiRules.saveAndLink")}</span>
                 </button>
               </div>
             </div>

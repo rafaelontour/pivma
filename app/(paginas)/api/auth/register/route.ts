@@ -18,10 +18,7 @@ export async function POST(request: Request) {
   const password = typeof payload?.password === "string" ? payload.password : "";
 
   if (!isValidRegistration({ fullName, username, email, password })) {
-    return NextResponse.json(
-      { message: "Revise os dados informados para criar sua conta." },
-      { status: 400 },
-    );
+    return NextResponse.json({ code: "VALIDATION_ERROR", message: "Revise os dados informados para criar sua conta." }, { status: 400 });
   }
 
   const result = await createUser({

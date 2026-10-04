@@ -112,8 +112,8 @@ export function mergeAiExecutions(
     .slice(0, MAX_AI_EXECUTIONS);
 }
 
-export function safePayload(value: unknown) {
-  if (value === undefined || value === null) return "Conteúdo não disponibilizado.";
+export function safePayload(value: unknown, emptyLabel: string) {
+  if (value === undefined || value === null) return emptyLabel;
   try {
     return JSON.stringify(value, null, 2);
   } catch {

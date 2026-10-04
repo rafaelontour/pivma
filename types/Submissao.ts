@@ -122,6 +122,40 @@ export type DirectReviewResult = {
   direct_review_request_id: string;
 };
 
+export type SubmissionReturnReviewChoice = "REVISE" | "CONTEST_AI" | "WITHDRAW";
+
+export type SubmissionReturnReviewDecision = {
+  outcome: string;
+  justification: string;
+  decided_at: string;
+};
+
+export type SubmissionReturnReview = {
+  run_number: number;
+  source: "AI_PRE_EVALUATION" | "TRIAGE";
+  opened_at: string;
+  due_date?: string | null;
+  available_choices: SubmissionReturnReviewChoice[];
+  ai_pre_evaluation?: SubmissionPreEvaluation | null;
+  triage_decision?: SubmissionReturnReviewDecision | null;
+};
+
+export type SubmissionReturnReviewInput = {
+  choice: SubmissionReturnReviewChoice;
+  justification?: string | null;
+};
+
+export type SubmissionReturnReviewResult = {
+  choice: SubmissionReturnReviewChoice;
+  process_status: string;
+  submission_run?: number | null;
+};
+
+export type SubmissionReturnReviewSnapshot = {
+  returnReview: SubmissionReturnReview;
+  reviews: Record<string, DynamicFormReview>;
+};
+
 export type DynamicFormReview = {
   status: string;
   comments?: string | null;
@@ -163,7 +197,9 @@ export type SubmitSubmissionResult = {
   artifact_id?: string | null;
 };
 
-export type SubmissionFormOperation = "idle" | "saving" | "submitting";
+export type SubmissionFormOperation = "idle" | "saving" | "submitting" | "responding";
+
+export type SubmissionDialogIntent = "edit" | "return-review";
 
 export type SubmissionCatalogState =
   | { kind: "loading" }
@@ -174,6 +210,12 @@ export type SubmissionDraftsState =
   | { kind: "loading" }
   | { kind: "error"; message: string }
   | { kind: "ready"; drafts: ProcessInstance[] };
+
+export type SubmissionDraftDeletionState =
+  | { kind: "closed" }
+  | { kind: "confirming"; draft: ProcessInstance }
+  | { kind: "deleting"; draft: ProcessInstance }
+  | { kind: "error"; draft: ProcessInstance; message: string };
 
 export type SubmittedSubmissionsState =
   | { kind: "loading" }
@@ -188,13 +230,16 @@ export type SubmissionDialogState =
       kind: "error";
       template: SubmissionTemplate;
       process: ProcessInstance;
+      intent: SubmissionDialogIntent;
       message: string;
     }
   | {
       kind: "ready";
       template: SubmissionTemplate;
       process: ProcessInstance;
+      intent: SubmissionDialogIntent;
       form: SubmissionForm;
+      returnReview?: SubmissionReturnReview | null;
     };
 
 export type SubmissionFieldInputValue = string | boolean;
@@ -232,7 +277,8 @@ export type SubmissionFormDialogProps = {
   onClose: () => void;
   onRetry: () => void;
   onSaved: () => void;
-  onSubmitted: () => void;
+  onSubmitted: (process: ProcessInstance) => void;
+  onReturnResolved: (choice: SubmissionReturnReviewChoice) => void;
 };
 
 export type SubmissionDraftCardProps = {
@@ -241,6 +287,13 @@ export type SubmissionDraftCardProps = {
   isOpening: boolean;
   isOpeningLocked: boolean;
   onOpen: (draft: ProcessInstance) => void;
+  onDelete: (draft: ProcessInstance) => void;
+};
+
+export type SubmissionDraftDeletionDialogProps = {
+  state: Exclude<SubmissionDraftDeletionState, { kind: "closed" }>;
+  onClose: () => void;
+  onConfirm: () => void;
 };
 
 export type SubmittedSubmissionCardProps = {
@@ -282,18 +335,27 @@ export type SubmissionDialogContentProps = {
   form: SubmissionForm;
   inputs: SubmissionFieldInputs;
   operation: SubmissionFormOperation;
+  returnReview?: SubmissionReturnReview | null;
+  returnChoice: SubmissionReturnReviewChoice;
+  returnJustification: string;
+  activeSectionIndex: number;
   onFieldChange: (
     fieldKey: string,
     value: SubmissionFieldInputValue,
   ) => void;
+  onSectionChange: (sectionIndex: number) => void;
   onSave: () => void;
   onSubmit: () => void;
+  onReturnChoiceChange: (choice: SubmissionReturnReviewChoice) => void;
+  onReturnJustificationChange: (justification: string) => void;
+  onReturnResponse: () => void;
 };
 
 export type SubmissionTrackingCardProps = {
   submission: ProcessInstance;
   templateName: string;
   onProcessChanged: () => void;
+  onOpenReturnReview: (submission: ProcessInstance) => void;
 };
 
 export type SubmissionPreEvaluationPanelProps = {

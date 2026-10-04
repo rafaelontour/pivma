@@ -13,6 +13,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
+import { getLocalizedApiError } from "@/i18n/errors";
 import type {
   AccessPanelProps,
   AccessPanelState,
@@ -147,7 +149,7 @@ export function UserDirectory() {
       const payload = await response.json().catch(() => null);
 
       if (!response.ok || !isUserList(payload)) {
-        toast.error(getApiMessage(payload, t("users.loadMoreFailed")));
+        toast.error(getApiMessage(payload, t("users.loadMoreFailed"), t));
         return;
       }
 
@@ -175,12 +177,12 @@ export function UserDirectory() {
       ]);
 
       if (!profilesResponse.ok || !isPermissionProfileList(profilesPayload)) {
-        throw new Error(getApiMessage(profilesPayload, t("users.profilesFailed")));
+        throw new Error(getApiMessage(profilesPayload, t("users.profilesFailed"), t));
       }
 
       if (!permissionsResponse.ok || !isPermissionDefinitionList(permissionsPayload)) {
         throw new Error(
-          getApiMessage(permissionsPayload, t("users.permissionsFailed")),
+          getApiMessage(permissionsPayload, t("users.permissionsFailed"), t),
         );
       }
 
@@ -205,7 +207,7 @@ export function UserDirectory() {
         setAccessPanel({
           kind: "error",
           user,
-          message: getApiMessage(accessPayload, t("users.accessFailed")),
+          message: getApiMessage(accessPayload, t("users.accessFailed"), t),
         });
         return;
       }
@@ -257,7 +259,7 @@ export function UserDirectory() {
 
       if (!response.ok || !isUserPublic(payload)) {
         setEditState({ ...editState, isSaving: false });
-        toast.error(getApiMessage(payload, t("users.nameUpdateFailed")));
+        toast.error(getApiMessage(payload, t("users.nameUpdateFailed"), t));
         return;
       }
 
@@ -302,7 +304,7 @@ export function UserDirectory() {
 
       if (!response.ok || !isPermissionProfile(payload)) {
         setProfileState({ ...profileState, isSaving: false });
-        toast.error(getApiMessage(payload, t("users.profileCreateFailed")));
+        toast.error(getApiMessage(payload, t("users.profileCreateFailed"), t));
         return;
       }
 
@@ -333,7 +335,7 @@ export function UserDirectory() {
 
       if (!response.ok) {
         setAccessPanel({ ...panel, isSaving: false });
-        toast.error(getApiMessage(payload, t("users.profileGrantFailed")));
+        toast.error(getApiMessage(payload, t("users.profileGrantFailed"), t));
         return;
       }
 
@@ -368,7 +370,7 @@ export function UserDirectory() {
 
       if (!response.ok) {
         setAccessPanel({ ...panel, isRemovingProfileId: null });
-        toast.error(getApiMessage(payload, t("users.profileRemoveFailed")));
+        toast.error(getApiMessage(payload, t("users.profileRemoveFailed"), t));
         return;
       }
 
@@ -722,7 +724,7 @@ function isUserAccess(value: unknown): value is UserAccess {
 }
 function isAssignedProfile(value: unknown) { return valueHasStrings(value, "id", "name") && typeof (value as ApiRecord).active === "boolean"; }
 function valueHasStrings(value: unknown, ...keys: string[]) { return Boolean(value && typeof value === "object" && keys.every((key) => typeof (value as ApiRecord)[key] === "string")); }
-function getApiMessage(value: unknown, fallback: string) { return value && typeof value === "object" && "message" in value && typeof value.message === "string" ? value.message : fallback; }
+function getApiMessage(value: unknown, fallback: string, t: TFunction) { return getLocalizedApiError(value && typeof value === "object" ? value : null, fallback, t); }
 
 const inputClassName = "mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-teal-600 focus:ring-3 focus:ring-teal-600/15 disabled:opacity-60";
 const primaryButtonClassName = "inline-flex items-center justify-center gap-2 rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-teal-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 disabled:cursor-not-allowed disabled:opacity-50";

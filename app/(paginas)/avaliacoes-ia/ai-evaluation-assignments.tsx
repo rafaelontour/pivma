@@ -4,6 +4,9 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AlertTriangle, Link2, LoaderCircle, Save } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
+import { getLocalizedApiError } from "@/i18n/errors";
 import type {
   AiEvaluationAssignment,
   AiEvaluationAssignmentInput,
@@ -21,6 +24,7 @@ import type { ApiRecord } from "@/types/Servico";
 const TARGET_TYPES: AiEvaluationTargetType[] = ["field", "field_set", "document", "form", "process"];
 
 export function AiEvaluationAssignmentManager({ context }: AiEvaluationAssignmentManagerProps) {
+  const { t } = useTranslation();
   const [state, setState] = useState<AiEvaluationAssignmentManagerState>({ kind: "loading" });
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -41,7 +45,7 @@ export function AiEvaluationAssignmentManager({ context }: AiEvaluationAssignmen
         ]);
         if (controller.signal.aborted) return;
         if (!assignmentsResponse.ok || !isAssignments(assignmentsPayload) || !definitionsResponse.ok || !isDefinitionPage(definitionsPayload) || !fieldsResponse.ok || !isEvaluableFields(fieldsPayload)) {
-          setState({ kind: "error", message: getApiMessage(!assignmentsResponse.ok ? assignmentsPayload : !definitionsResponse.ok ? definitionsPayload : fieldsPayload, "Não foi possível carregar as associações deste formulário.") });
+          setState({ kind: "error", message: getApiMessage(!assignmentsResponse.ok ? assignmentsPayload : !definitionsResponse.ok ? definitionsPayload : fieldsPayload, t("aiEvaluations.assignments.loadFailed"), t) });
           return;
         }
         const fieldKeys = fieldsPayload.fields.map((field) => field.field_key);
@@ -57,12 +61,12 @@ export function AiEvaluationAssignmentManager({ context }: AiEvaluationAssignmen
           isSaving: false,
         });
       } catch {
-        if (!controller.signal.aborted) setState({ kind: "error", message: "Não foi possível conectar ao serviço de associações." });
+        if (!controller.signal.aborted) setState({ kind: "error", message: t("aiEvaluations.assignments.connectionFailed") });
       }
     }
     void load();
     return () => controller.abort();
-  }, [context.fieldKey, context.templateKey, reloadKey]);
+  }, [context.fieldKey, context.templateKey, reloadKey, t]);
 
   function toggleDefinition(definitionId: string) {
     setState((current) => {
@@ -81,12 +85,12 @@ export function AiEvaluationAssignmentManager({ context }: AiEvaluationAssignmen
   async function save() {
     if (state.kind !== "ready" || state.isSaving) return;
     if (state.orphanAssignmentIds.length > 0 && state.orphanResolution === "") {
-      toast.error("Escolha explicitamente se as referências órfãs devem ser preservadas ou removidas.");
+      toast.error(t("aiEvaluations.assignments.orphanChoice"));
       return;
     }
     const selectedDefinitions = state.definitions.filter((definition) => state.selectedDefinitionIds.includes(definition.id));
     if (selectedDefinitions.some((definition) => (definition.published_versions ?? 0) < 1)) {
-      toast.error("Publique a avaliação antes de associá-la a uma submissão.");
+      toast.error(t("aiEvaluations.assignments.publishFirst"));
       return;
     }
     const assignments = buildAssignmentInput(
@@ -97,7 +101,7 @@ export function AiEvaluationAssignmentManager({ context }: AiEvaluationAssignmen
       state.orphanResolution,
     );
     if (!assignments) {
-      toast.error("A API retornou uma associação com alvo inválido. Remova a referência órfã para continuar.");
+      toast.error(t("aiEvaluations.assignments.invalidTarget"));
       return;
     }
     setState((current) => current.kind === "ready" ? { ...current, isSaving: true } : current);
@@ -109,7 +113,7 @@ export function AiEvaluationAssignmentManager({ context }: AiEvaluationAssignmen
       });
       const payload = await response.json().catch(() => null);
       if (!response.ok || !isAssignments(payload)) {
-        toast.error(getApiMessage(payload, "Não foi possível salvar as associações."));
+        toast.error(getApiMessage(payload, t("aiEvaluations.assignments.saveFailed"), t));
         return;
       }
       const confirmed = payload.assignments ?? [];
@@ -122,9 +126,9 @@ export function AiEvaluationAssignmentManager({ context }: AiEvaluationAssignmen
         orphanResolution: "",
         isSaving: false,
       } : current);
-      toast.success("Associações salvas com as versões efetivas confirmadas pela API.");
+      toast.success(t("aiEvaluations.assignments.saved"));
     } catch {
-      toast.error("Não foi possível conectar ao serviço de associações.");
+      toast.error(t("aiEvaluations.assignments.connectionFailed"));
     } finally {
       setState((current) => current.kind === "ready" ? { ...current, isSaving: false } : current);
     }
@@ -137,23 +141,23 @@ export function AiEvaluationAssignmentManager({ context }: AiEvaluationAssignmen
   return (
     <section className="mb-5 rounded-2xl border border-violet-200 bg-white p-5 shadow-sm sm:p-6" aria-labelledby="assignment-title">
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div><div className="flex items-center gap-2 text-violet-700"><Link2 aria-hidden="true" className="size-5" /><p className="text-xs font-bold uppercase tracking-[0.14em]">Associações do formulário</p></div><h2 className="mt-2 text-xl font-bold text-slate-900" id="assignment-title">Campo {context.fieldKey}</h2><p className="mt-1 font-mono text-xs text-slate-500">Template {context.templateKey}</p></div>
-        <Link className="inline-flex min-h-10 items-center rounded-lg border border-slate-300 px-3 text-sm font-semibold text-slate-700 outline-none hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-teal-500" href="/formularios">Voltar aos formulários</Link>
+        <div><div className="flex items-center gap-2 text-violet-700"><Link2 aria-hidden="true" className="size-5" /><p className="text-xs font-bold uppercase tracking-[0.14em]">{t("aiEvaluations.assignments.title")}</p></div><h2 className="mt-2 text-xl font-bold text-slate-900" id="assignment-title">{t("aiEvaluations.assignments.field", { field: context.fieldKey })}</h2><p className="mt-1 font-mono text-xs text-slate-500">{t("aiEvaluations.assignments.template", { template: context.templateKey })}</p></div>
+        <Link className="inline-flex min-h-10 items-center rounded-lg border border-slate-300 px-3 text-sm font-semibold text-slate-700 outline-none hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-teal-500" href="/formularios">{t("aiEvaluations.assignments.back")}</Link>
       </div>
 
-      {state.kind === "loading" ? <div className="mt-5 flex min-h-28 items-center justify-center gap-2 text-sm text-slate-600"><LoaderCircle aria-hidden="true" className="size-5 animate-spin" />Carregando associações…</div>
-        : state.kind === "error" ? <div className="mt-5 rounded-xl border border-rose-200 bg-rose-50 p-4"><p className="text-sm font-semibold text-rose-900">{state.message}</p><button className="mt-3 min-h-10 rounded-lg bg-rose-700 px-3 text-sm font-bold text-white outline-none focus-visible:ring-2 focus-visible:ring-rose-500" onClick={() => setReloadKey((value) => value + 1)} type="button">Tentar novamente</button></div>
+      {state.kind === "loading" ? <div className="mt-5 flex min-h-28 items-center justify-center gap-2 text-sm text-slate-600"><LoaderCircle aria-hidden="true" className="size-5 animate-spin" />{t("aiEvaluations.assignments.loading")}</div>
+        : state.kind === "error" ? <div className="mt-5 rounded-xl border border-rose-200 bg-rose-50 p-4"><p className="text-sm font-semibold text-rose-900">{state.message}</p><button className="mt-3 min-h-10 rounded-lg bg-rose-700 px-3 text-sm font-bold text-white outline-none focus-visible:ring-2 focus-visible:ring-rose-500" onClick={() => setReloadKey((value) => value + 1)} type="button">{t("common.retry")}</button></div>
         : <div className="mt-5 grid gap-4">
-          <p className="text-sm leading-6 text-slate-600">Somente avaliações que já possuem versão publicada podem ser vinculadas. A API confirma automaticamente a versão efetiva usada.</p>
-          {publishedDefinitions.length === 0 ? <p className="rounded-xl border border-dashed border-slate-300 p-4 text-sm text-slate-500">Nenhuma avaliação publicada está disponível. Publique uma versão na biblioteca antes de criar o vínculo.</p>
+          <p className="text-sm leading-6 text-slate-600">{t("aiEvaluations.assignments.description")}</p>
+          {publishedDefinitions.length === 0 ? <p className="rounded-xl border border-dashed border-slate-300 p-4 text-sm text-slate-500">{t("aiEvaluations.assignments.nonePublished")}</p>
             : <div className="grid gap-2 sm:grid-cols-2">{publishedDefinitions.map((definition) => {
               const currentAssignment = state.assignments.find((assignment) => assignment.definition_id === definition.id && assignment.target_type === "field" && (assignment.field_keys ?? []).includes(context.fieldKey));
-              return <label className="flex cursor-pointer gap-3 rounded-xl border border-slate-200 p-4 hover:border-violet-300" key={definition.id}><input checked={state.selectedDefinitionIds.includes(definition.id)} className="mt-1 size-4 accent-violet-700" disabled={state.isSaving} onChange={() => toggleDefinition(definition.id)} type="checkbox" /><span><span className="block text-sm font-bold text-slate-900">{definition.name}</span><span className="mt-1 block text-xs text-slate-500">{currentAssignment?.effective_version_number ? `Vínculo atual na versão ${currentAssignment.effective_version_number}` : `${definition.published_versions} versão(ões) publicada(s)`}</span></span></label>;
+              return <label className="flex cursor-pointer gap-3 rounded-xl border border-slate-200 p-4 hover:border-violet-300" key={definition.id}><input checked={state.selectedDefinitionIds.includes(definition.id)} className="mt-1 size-4 accent-violet-700" disabled={state.isSaving} onChange={() => toggleDefinition(definition.id)} type="checkbox" /><span><span className="block text-sm font-bold text-slate-900">{definition.name}</span><span className="mt-1 block text-xs text-slate-500">{currentAssignment?.effective_version_number ? t("aiEvaluations.assignments.currentVersion", { version: currentAssignment.effective_version_number }) : t("aiEvaluations.assignments.publishedVersions", { count: definition.published_versions })}</span></span></label>;
             })}</div>}
 
-          {state.orphanAssignmentIds.length > 0 && <fieldset className="rounded-xl border border-amber-300 bg-amber-50 p-4"><legend className="px-1 text-sm font-bold text-amber-950">Referências órfãs encontradas</legend><div className="mt-1 flex gap-2 text-sm leading-6 text-amber-900"><AlertTriangle aria-hidden="true" className="mt-0.5 size-5 shrink-0" /><p>{state.orphanAssignmentIds.length} associação(ões) apontam para campo ou avaliação ausente. Escolha como tratá-las nesta substituição em lote.</p></div><div className="mt-3 grid gap-2"><label className="flex items-center gap-2 text-sm font-semibold text-amber-950"><input checked={state.orphanResolution === "preserve"} disabled={state.isSaving} name="orphan-resolution" onChange={() => setOrphanResolution("preserve")} type="radio" />Preservar referências órfãs</label><label className="flex items-center gap-2 text-sm font-semibold text-amber-950"><input checked={state.orphanResolution === "remove"} disabled={state.isSaving} name="orphan-resolution" onChange={() => setOrphanResolution("remove")} type="radio" />Remover referências órfãs desta atualização</label></div></fieldset>}
+          {state.orphanAssignmentIds.length > 0 && <fieldset className="rounded-xl border border-amber-300 bg-amber-50 p-4"><legend className="px-1 text-sm font-bold text-amber-950">{t("aiEvaluations.assignments.orphanTitle")}</legend><div className="mt-1 flex gap-2 text-sm leading-6 text-amber-900"><AlertTriangle aria-hidden="true" className="mt-0.5 size-5 shrink-0" /><p>{t("aiEvaluations.assignments.orphanDescription", { count: state.orphanAssignmentIds.length })}</p></div><div className="mt-3 grid gap-2"><label className="flex items-center gap-2 text-sm font-semibold text-amber-950"><input checked={state.orphanResolution === "preserve"} disabled={state.isSaving} name="orphan-resolution" onChange={() => setOrphanResolution("preserve")} type="radio" />{t("aiEvaluations.assignments.preserve")}</label><label className="flex items-center gap-2 text-sm font-semibold text-amber-950"><input checked={state.orphanResolution === "remove"} disabled={state.isSaving} name="orphan-resolution" onChange={() => setOrphanResolution("remove")} type="radio" />{t("aiEvaluations.assignments.remove")}</label></div></fieldset>}
 
-          <button className="inline-flex min-h-11 w-fit items-center gap-2 rounded-xl bg-violet-700 px-4 text-sm font-bold text-white outline-none hover:bg-violet-800 focus-visible:ring-2 focus-visible:ring-violet-500 disabled:opacity-60" disabled={state.isSaving} onClick={() => void save()} type="button">{state.isSaving ? <LoaderCircle aria-hidden="true" className="size-4 animate-spin" /> : <Save aria-hidden="true" className="size-4" />}Salvar associações</button>
+          <button className="inline-flex min-h-11 w-fit items-center gap-2 rounded-xl bg-violet-700 px-4 text-sm font-bold text-white outline-none hover:bg-violet-800 focus-visible:ring-2 focus-visible:ring-violet-500 disabled:opacity-60" disabled={state.isSaving} onClick={() => void save()} type="button">{state.isSaving ? <LoaderCircle aria-hidden="true" className="size-4 animate-spin" /> : <Save aria-hidden="true" className="size-4" />}{t("aiEvaluations.assignments.save")}</button>
         </div>}
     </section>
   );
@@ -210,4 +214,4 @@ function isEvaluableFields(value: unknown): value is EvaluableFieldsResponse {
 
 function isTargetType(value: string): value is AiEvaluationTargetType { return TARGET_TYPES.includes(value as AiEvaluationTargetType); }
 function isRecord(value: unknown): value is ApiRecord { return Boolean(value) && typeof value === "object" && !Array.isArray(value); }
-function getApiMessage(value: unknown, fallback: string) { return isRecord(value) && typeof value.message === "string" ? value.message : fallback; }
+function getApiMessage(value: unknown, fallback: string, t: TFunction) { return getLocalizedApiError(isRecord(value) ? value : null, fallback, t); }

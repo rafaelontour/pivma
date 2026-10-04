@@ -25,7 +25,8 @@ export async function listPermissionProfiles(
     return { ok: false, status: getStatus(error) };
   }
 
-  return { ok: true, data: response.data };
+  const data = unwrapCollection<PermissionProfile>(response.data);
+  return data ? { ok: true, data } : { ok: false };
 }
 
 export async function createPermissionProfile(
@@ -78,7 +79,8 @@ export async function listPermissionDefinitions(
     return { ok: false, status: getStatus(error) };
   }
 
-  return { ok: true, data: response.data };
+  const data = unwrapCollection<PermissionDefinition>(response.data);
+  return data ? { ok: true, data } : { ok: false };
 }
 
 export async function grantUserProfile(
@@ -150,4 +152,12 @@ export async function updatePermissionProfile(
 
 function getStatus(error: Error) {
   return isAxiosError(error) ? error.response?.status : undefined;
+}
+
+function unwrapCollection<T>(value: unknown): T[] | null {
+  if (Array.isArray(value)) return value as T[];
+  if (value && typeof value === "object" && Array.isArray((value as { data?: unknown }).data)) {
+    return (value as { data: T[] }).data;
+  }
+  return null;
 }

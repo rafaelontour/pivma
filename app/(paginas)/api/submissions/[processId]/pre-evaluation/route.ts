@@ -10,10 +10,10 @@ export async function GET(
   context: RouteContext<"/api/submissions/[processId]/pre-evaluation">,
 ) {
   const { processId } = await context.params;
-  if (!isUuid(processId)) return NextResponse.json({ message: "Submissão inválida." }, { status: 400 });
+  if (!isUuid(processId)) return NextResponse.json({ code: "VALIDATION_ERROR", message: "Submissão inválida." }, { status: 400 });
   const cookieStore = await cookies();
   const accessToken = cookieStore.get("access_token")?.value;
-  if (!accessToken) return NextResponse.json({ message: "Sessão não encontrada." }, { status: 401 });
+  if (!accessToken) return NextResponse.json({ code: "AUTH_REQUIRED", message: "Sessão não encontrada." }, { status: 401 });
   const result = await getSubmissionPreEvaluation(accessToken, processId);
   if (!result.ok) return internalApiErrorResponse(result.status, {
     cookieStore,

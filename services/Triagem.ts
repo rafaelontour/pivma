@@ -17,9 +17,10 @@ import type {
 } from "@/types/Triagem";
 
 export async function listTriageProcesses(accessToken: string, page: number, size: number): Promise<ServiceResult<ProcessList>> {
-  const [error, response] = await tryit(() => http.get<unknown>("/processes", { headers: authHeaders(accessToken), params: { status: "TRIAGE", page, size } }))();
+  const [error, response] = await tryit(() => http.get<unknown>("/processes", { headers: authHeaders(accessToken), params: { page, per_page: size } }))();
   if (error) return { ok: false, status: getStatus(error) };
-  return isProcessList(response.data) ? { ok: true, data: response.data } : { ok: false };
+  const data = normalizeProcessList(response.data);
+  return data ? { ok: true, data } : { ok: false };
 }
 
 export async function saveTriageFieldReviews(accessToken: string, processId: string, input: SaveTriageFieldReviewsInput): Promise<ServiceResult<SaveTriageFieldReviewsResult>> {
@@ -43,19 +44,43 @@ export async function submitTriageDecision(accessToken: string, processId: strin
 export async function getTriageTimeline(accessToken: string, processId: string): Promise<ServiceResult<TriageTimeline>> {
   const [error, response] = await tryit(() => http.get<unknown>(`/processes/${processId}/timeline`, { headers: authHeaders(accessToken) }))();
   if (error) return { ok: false, status: getStatus(error) };
-  return isTimeline(response.data) ? { ok: true, data: { ...response.data, events: response.data.events.slice().sort((first, second) => new Date(second.occurred_at).getTime() - new Date(first.occurred_at).getTime()) } } : { ok: false };
+  const data = normalizeTimeline(response.data, processId);
+  return data ? { ok: true, data } : { ok: false };
 }
 
-function isProcessList(value: unknown): value is ProcessList {
-  return isRecord(value) && Array.isArray(value.items) && value.items.every((item) => isRecord(item) && typeof item.id === "string" && typeof item.code === "string" && typeof item.title === "string" && typeof item.status === "string" && typeof item.template_key === "string" && typeof item.version_number === "number") && typeof value.total === "number" && typeof value.page === "number" && typeof value.size === "number";
+function normalizeProcessList(value: unknown): ProcessList | null {
+  if (!isRecord(value) || !Array.isArray(value.data) || !isRecord(value.pagination)) return null;
+  const items = value.data.map((item) => {
+    if (!isRecord(item) || !isRecord(item.template)) return null;
+    const template = item.template;
+    if (typeof template.key !== "string" || typeof template.version !== "number") return null;
+    const normalized = { ...item, template_key: template.key, version_number: template.version } as ApiRecord;
+    return typeof normalized.id === "string" && typeof normalized.code === "string" && typeof normalized.title === "string" && typeof normalized.status === "string" && typeof normalized.template_key === "string" && typeof normalized.version_number === "number" ? normalized : null;
+  });
+  if (items.some((item) => !item) || typeof value.pagination.page !== "number" || typeof value.pagination.per_page !== "number" || typeof value.pagination.total_items !== "number") return null;
+  return { items: items as ProcessList["items"], total: value.pagination.total_items, page: value.pagination.page, size: value.pagination.per_page };
 }
 
 function isDecision(value: unknown): value is TriageDecisionResult {
-  return isRecord(value) && typeof value.process_id === "string" && typeof value.new_process_status === "string" && typeof value.decision_id === "string" && typeof value.outcome === "string";
+  return isRecord(value) && typeof value.process_id === "string" && typeof value.process_status === "string" && typeof value.decision_id === "string" && isDecisionOutcome(value.outcome) && (value.return_review_run === undefined || value.return_review_run === null || typeof value.return_review_run === "number");
+}
+
+function isDecisionOutcome(value: unknown): value is TriageDecisionResult["outcome"] {
+  return value === "APPROVED" || value === "NEEDS_REVISION" || value === "REJECTED";
 }
 
 function isTimeline(value: unknown): value is TriageTimeline {
   return isRecord(value) && typeof value.process_id === "string" && typeof value.code === "string" && Array.isArray(value.events) && value.events.every(isTimelineEvent);
+}
+
+function normalizeTimeline(value: unknown, processId: string): TriageTimeline | null {
+  if (isTimeline(value)) return { ...value, events: value.events.slice().sort(sortTimelineEvents) };
+  if (!isRecord(value) || !Array.isArray(value.data) || !value.data.every(isTimelineEvent)) return null;
+  return { process_id: processId, code: "", events: value.data.slice().sort(sortTimelineEvents) };
+}
+
+function sortTimelineEvents(first: TriageTimelineEvent, second: TriageTimelineEvent) {
+  return new Date(second.occurred_at).getTime() - new Date(first.occurred_at).getTime();
 }
 
 function isTimelineEvent(value: unknown): value is TriageTimelineEvent {

@@ -12,6 +12,7 @@ import {
   serializeDynamicFormOption,
   validateDynamicFormFile,
 } from "@/components/formulario";
+import { getLocalizedApiError } from "@/i18n/errors";
 import type {
   DynamicFormField,
   DynamicFormFieldControlProps,
@@ -58,7 +59,7 @@ export function DynamicFormFieldControl({
       );
       const payload = await response.json().catch(() => null);
       if (!response.ok || !isAttachmentUpload(payload)) {
-        setFileError(getApiMessage(payload, t("dynamicForm.uploadFailed")));
+        setFileError(getLocalizedApiError(isRecord(payload) ? payload : null, t("dynamicForm.uploadFailed"), t));
         return;
       }
       setAttachment(payload.attachment);
@@ -82,7 +83,7 @@ export function DynamicFormFieldControl({
       );
       const payload = await response.json().catch(() => null);
       if (!response.ok || !isAttachmentRemoved(payload) || !payload.removed) {
-        setFileError(getApiMessage(payload, t("dynamicForm.removeFailed")));
+        setFileError(getLocalizedApiError(isRecord(payload) ? payload : null, t("dynamicForm.removeFailed"), t));
         return;
       }
       setAttachment(null);
@@ -119,7 +120,7 @@ export function DynamicFormFieldControl({
               return;
             }
 
-            const error = validateDynamicFormFile(file, field);
+            const error = validateDynamicFormFile(file, field, t);
             if (error) {
               event.currentTarget.value = "";
               setFileError(error);
@@ -375,5 +376,4 @@ function isAttachment(value: unknown): value is SubmissionAttachment {
 }
 
 function isRecord(value: unknown): value is ApiRecord { return Boolean(value) && typeof value === "object" && !Array.isArray(value); }
-function getApiMessage(value: unknown, fallback: string) { return isRecord(value) && typeof value.message === "string" ? value.message : fallback; }
 function formatFileSize(bytes: number, locale: string | undefined) { return bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / (1024 * 1024)).toLocaleString(locale, { maximumFractionDigits: 1 })} MB`; }

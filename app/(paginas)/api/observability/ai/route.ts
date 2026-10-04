@@ -13,7 +13,7 @@ export async function GET(request: Request) {
   const limit = readLimit(query.get("limit"), 50, 200);
   const correlationId = query.get("correlation_id")?.trim() ?? "";
   if (limit === null || correlationId.length > 128) {
-    return NextResponse.json({ message: "Filtros de execuções de IA inválidos." }, { status: 400 });
+    return NextResponse.json({ code: "VALIDATION_ERROR", message: "Filtros de execuções de IA inválidos." }, { status: 400 });
   }
 
   const result = await getAiHistory(authorization.accessToken, {

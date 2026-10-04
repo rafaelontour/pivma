@@ -34,9 +34,7 @@ export type AuthenticatedShellProps = {
 
 export type SidebarProps = {
   activePage: AuthenticatedPage;
-  canViewSubmissions: boolean;
   canViewProcesses: boolean;
-  canViewTriage: boolean;
   canViewObservability: boolean;
   canViewSettings: boolean;
   expanded: boolean;

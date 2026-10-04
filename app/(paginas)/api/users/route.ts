@@ -12,7 +12,7 @@ export async function GET(request: Request) {
   const accessToken = cookieStore.get("access_token")?.value;
 
   if (!accessToken) {
-    return NextResponse.json({ message: "Sessão não encontrada." }, { status: 401 });
+    return NextResponse.json({ code: "AUTH_REQUIRED", message: "Sessão não encontrada." }, { status: 401 });
   }
 
   const { searchParams } = new URL(request.url);
@@ -22,10 +22,7 @@ export async function GET(request: Request) {
   const activeValue = searchParams.get("active") ?? "true";
 
   if (activeValue !== "true" && activeValue !== "false") {
-    return NextResponse.json(
-      { message: "O filtro de situação deve ser ativo ou inativo." },
-      { status: 400 },
-    );
+    return NextResponse.json({ code: "VALIDATION_ERROR", message: "O filtro de situação deve ser ativo ou inativo." }, { status: 400 });
   }
 
   const result = await listUsers(accessToken, {

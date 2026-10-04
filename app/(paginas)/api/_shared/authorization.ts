@@ -16,7 +16,7 @@ export async function authorizeInternalApi(
     return {
       ok: false,
       response: NextResponse.json(
-        { message: "Sessão não encontrada." },
+        { code: "AUTH_REQUIRED", message: "Sessão não encontrada." },
         { status: 401 },
       ),
     };
@@ -41,7 +41,7 @@ export async function authorizeInternalApi(
     return {
       ok: false,
       response: NextResponse.json(
-        { message: "Você não tem permissão para realizar esta operação." },
+        { code: "FORBIDDEN", message: "Você não tem permissão para realizar esta operação." },
         { status: 403 },
       ),
     };
@@ -58,7 +58,7 @@ export async function authorizeAdministratorApi(): Promise<InternalApiAuthorizat
     return {
       ok: false,
       response: NextResponse.json(
-        { message: "Sessão não encontrada." },
+        { code: "AUTH_REQUIRED", message: "Sessão não encontrada." },
         { status: 401 },
       ),
     };
@@ -85,7 +85,7 @@ export async function authorizeAdministratorApi(): Promise<InternalApiAuthorizat
     return {
       ok: false,
       response: NextResponse.json(
-        { message: "Você não tem permissão para acessar a observabilidade." },
+        { code: "FORBIDDEN", message: "Você não tem permissão para acessar a observabilidade." },
         { status: 403 },
       ),
     };

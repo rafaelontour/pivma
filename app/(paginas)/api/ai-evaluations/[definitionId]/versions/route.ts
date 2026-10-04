@@ -12,7 +12,7 @@ export async function POST(
 ) {
   const { definitionId } = await context.params;
   if (!isUuid(definitionId)) {
-    return NextResponse.json({ message: "Avaliação inválida." }, { status: 400 });
+    return NextResponse.json({ code: "VALIDATION_ERROR", message: "Avaliação inválida." }, { status: 400 });
   }
 
   const authorization = await authorizeInternalApi(["ai_evaluations.manage"]);

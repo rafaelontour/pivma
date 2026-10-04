@@ -11,7 +11,7 @@ export async function GET(request: Request) {
   const query = new URL(request.url).searchParams;
   const page = Number(query.get("page") ?? 1);
   const size = Number(query.get("size") ?? 100);
-  if (!Number.isInteger(page) || page < 1 || !Number.isInteger(size) || size < 1 || size > 100) return NextResponse.json({ message: "Paginação inválida." }, { status: 400 });
+  if (!Number.isInteger(page) || page < 1 || !Number.isInteger(size) || size < 1 || size > 100) return NextResponse.json({ code: "VALIDATION_ERROR", message: "Paginação inválida." }, { status: 400 });
   const result = await listTriageProcesses(authorization.accessToken, page, size);
   if (!result.ok) return triageErrorResponse(result.status, authorization.cookieStore, "Não foi possível carregar a fila de triagem.");
   return NextResponse.json(result.data);

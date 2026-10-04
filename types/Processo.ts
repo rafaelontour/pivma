@@ -12,7 +12,11 @@ export type ProcessInstance = {
   started_at?: string | null;
   closed_at?: string | null;
   closure_reason?: string | null;
+  available_actions?: ProcessAvailableAction[];
+  has_been_submitted?: boolean;
 };
+
+export type ProcessAvailableAction = "DELETE" | "ARCHIVE";
 
 export type ProcessList = {
   items: ProcessInstance[];

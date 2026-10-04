@@ -13,14 +13,14 @@ export async function GET(
   const { processId } = await context.params;
 
   if (!isUuid(processId)) {
-    return NextResponse.json({ message: "Processo inválido." }, { status: 400 });
+    return NextResponse.json({ code: "VALIDATION_ERROR", message: "Processo inválido." }, { status: 400 });
   }
 
   const cookieStore = await cookies();
   const accessToken = cookieStore.get("access_token")?.value;
 
   if (!accessToken) {
-    return NextResponse.json({ message: "Sessão não encontrada." }, { status: 401 });
+    return NextResponse.json({ code: "AUTH_REQUIRED", message: "Sessão não encontrada." }, { status: 401 });
   }
 
   const currentUser = await getCurrentUser(accessToken);
@@ -30,10 +30,7 @@ export async function GET(
   }
 
   if (!canReadProcessKanban(currentUser.data.access.global_permissions)) {
-    return NextResponse.json(
-      { message: "Você não tem permissão para consultar este processo." },
-      { status: 403 },
-    );
+    return NextResponse.json({ code: "FORBIDDEN", message: "Você não tem permissão para consultar este processo." }, { status: 403 });
   }
 
   const result = await getProcess(accessToken, processId);

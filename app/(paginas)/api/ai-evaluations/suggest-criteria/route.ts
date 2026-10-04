@@ -14,7 +14,7 @@ export async function POST(request: Request) {
     await request.json().catch(() => null),
   );
   if (!validation.valid) {
-    return NextResponse.json({ message: validation.message }, { status: 400 });
+    return NextResponse.json({ code: "VALIDATION_ERROR", message: validation.message }, { status: 400 });
   }
 
   const result = await suggestAiCriteria(

@@ -27,7 +27,7 @@ export async function GET(request: Request) {
     limit < 1 ||
     limit > 100
   ) {
-    return NextResponse.json({ message: "Paginação inválida." }, { status: 400 });
+    return NextResponse.json({ code: "VALIDATION_ERROR", message: "Paginação inválida." }, { status: 400 });
   }
 
   const result = await listAiEvaluations(authorization.accessToken, {
@@ -53,7 +53,7 @@ export async function POST(request: Request) {
     await request.json().catch(() => null),
   );
   if (!validation.valid) {
-    return NextResponse.json({ message: validation.message }, { status: 400 });
+    return NextResponse.json({ code: "VALIDATION_ERROR", message: validation.message }, { status: 400 });
   }
 
   const result = await createAiEvaluation(

@@ -29,12 +29,15 @@ export async function listFormTemplateCatalog(
     return { ok: false, status: getStatus(templatesError) };
   }
 
-  if (!Array.isArray(templatesResponse.data) || !templatesResponse.data.every(isProcessTemplateSummary)) {
+  const templates = isRecord(templatesResponse.data) && Array.isArray(templatesResponse.data.data)
+    ? templatesResponse.data.data
+    : templatesResponse.data;
+  if (!Array.isArray(templates) || !templates.every(isProcessTemplateSummary)) {
     return { ok: false };
   }
 
   const details = await Promise.all(
-    templatesResponse.data.map((template) => getProcessTemplate(accessToken, template.key)),
+    templates.map((template) => getProcessTemplate(accessToken, template.key)),
   );
   const failedDetail = details.find((detail) => !detail.ok);
 

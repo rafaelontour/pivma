@@ -6,6 +6,7 @@ import { apiOrigin, http } from "./Http";
 import type { ServiceResult } from "@/types/Servico";
 import type {
   CreateUserInput,
+  ExternalUserListResponse,
   UserList,
   UserListOptions,
   UserPublic,
@@ -32,10 +33,13 @@ export async function listUsers(
 ): Promise<ServiceResult<UserList>> {
   const { profileId, ...params } = options;
   const [error, response] = await tryit(() =>
-    http.get<UserList>("/users", {
+    http.get<ExternalUserListResponse>("/users", {
       headers: { Cookie: `access_token=${accessToken}` },
       params: {
-        ...params,
+        search: params.search,
+        active: params.active,
+        page: Math.floor(params.offset / params.limit) + 1,
+        per_page: params.limit,
         profile_id: profileId,
       },
     }),
@@ -45,7 +49,8 @@ export async function listUsers(
     return { ok: false, status: getStatus(error) };
   }
 
-  return { ok: true, data: response.data };
+  const data = normalizeUserList(response.data);
+  return data ? { ok: true, data } : { ok: false };
 }
 
 export async function updateUser(
@@ -71,4 +76,23 @@ export async function updateUser(
 
 function getStatus(error: Error) {
   return isAxiosError(error) ? error.response?.status : undefined;
+}
+
+function normalizeUserList(value: ExternalUserListResponse): UserList | null {
+  if (
+    !value ||
+    !Array.isArray(value.data) ||
+    !value.pagination ||
+    typeof value.pagination.page !== "number" ||
+    typeof value.pagination.per_page !== "number" ||
+    typeof value.pagination.has_next !== "boolean"
+  ) {
+    return null;
+  }
+
+  return {
+    offset: (value.pagination.page - 1) * value.pagination.per_page,
+    limit: value.pagination.per_page,
+    items: value.data,
+  };
 }

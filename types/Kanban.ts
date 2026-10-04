@@ -1,20 +1,43 @@
 import type { ProcessInstance } from "./Processo";
+import type { ProcessTask } from "./Tarefa";
 
-export type ProcessStatusPresentation = {
-  key: string;
-  label: string;
-  description: string;
-  statusValues: string[];
+export type ProcessOperationalStage =
+  | "new"
+  | "review"
+  | "ongoing"
+  | "closed";
+
+export type ProcessReviewState =
+  | "awaiting-triage"
+  | "ready-for-analysis"
+  | "bracvam-review"
+  | "awaiting-proponent"
+  | "correction-received"
+  | "in-progress"
+  | "closed";
+
+export type ProcessStagePresentation = {
+  key: ProcessOperationalStage;
   tone: "teal" | "amber" | "blue" | "violet" | "slate";
 };
 
+export type ProcessKanbanItem = {
+  process: ProcessInstance;
+  tasks: ProcessTask[];
+  stage: ProcessOperationalStage;
+  reviewState: ProcessReviewState;
+  currentTask: ProcessTask | null;
+  currentPhase: ProcessTask["phase"] | null;
+  canAnalyze: boolean;
+};
+
 export type ProcessKanbanColumn = {
-  key: string;
+  key: ProcessOperationalStage;
   label: string;
   description: string;
-  processes: ProcessInstance[];
-  tone: ProcessStatusPresentation["tone"];
-  unknown: boolean;
+  items: ProcessKanbanItem[];
+  total: number;
+  tone: ProcessStagePresentation["tone"];
 };
 
 export type ProcessKanbanState =
@@ -24,14 +47,22 @@ export type ProcessKanbanState =
   | {
       kind: "ready";
       processes: ProcessInstance[];
+      tasks: ProcessTask[];
       updatedAt: string;
       isRefreshing: boolean;
       isStale: boolean;
     };
 
 export type ProcessCardProps = {
-  process: ProcessInstance;
+  item: ProcessKanbanItem;
+  onAnalyze: (process: ProcessInstance) => void;
   onViewDetails: (process: ProcessInstance) => void;
+};
+
+export type ProcessAnalysisDialogProps = {
+  process: ProcessInstance;
+  onClose: () => void;
+  onCompleted: () => void;
 };
 
 export type ProcessDetailsState =

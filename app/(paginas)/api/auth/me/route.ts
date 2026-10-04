@@ -11,10 +11,7 @@ export async function GET() {
   const accessToken = cookieStore.get("access_token")?.value;
 
   if (!accessToken) {
-    return NextResponse.json(
-      { code: "AUTH_REQUIRED", message: "Sessão não encontrada." },
-      { status: 401 },
-    );
+    return NextResponse.json({ code: "AUTH_REQUIRED", message: "Sessão não encontrada." }, { status: 401 });
   }
 
   const result = await getCurrentUser(accessToken);

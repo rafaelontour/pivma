@@ -4,6 +4,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
+import { useAccessibleDialog } from "@/components/accessible-dialog";
+import { getLocalizedApiError } from "@/i18n/errors";
+import { TriageWorkspace } from "@/app/(paginas)/triagem/triage-workspace";
 import {
   AlertTriangle,
   Eye,
@@ -14,63 +17,39 @@ import {
 } from "lucide-react";
 import type {
   KanbanMessageProps,
+  ProcessAnalysisDialogProps,
   ProcessCardProps,
   ProcessDetailsDialogProps,
   ProcessDetailsState,
   ProcessDetailItemProps,
   ProcessKanbanColumn,
+  ProcessKanbanItem,
   ProcessKanbanState,
-  ProcessStatusPresentation,
+  ProcessStagePresentation,
 } from "@/types/Kanban";
 import type { ProcessInstance, ProcessList } from "@/types/Processo";
+import type { ProcessTask, ProcessTaskList } from "@/types/Tarefa";
 import type { ApiRecord } from "@/types/Servico";
 
 const PROCESS_PAGE_SIZE = 100;
 const PAGE_BATCH_SIZE = 4;
 const REVALIDATION_INTERVAL_MS = 30_000;
 
-const STATUS_PRESENTATIONS: readonly ProcessStatusPresentation[] = [
-  {
-    key: "submission",
-    label: "",
-    description: "",
-    statusValues: ["SUBMISSION"],
-    tone: "teal",
-  },
-  {
-    key: "ai-pre-evaluation",
-    label: "",
-    description: "",
-    statusValues: ["AI_PRE_EVALUATION"],
-    tone: "blue",
-  },
-  {
-    key: "triage",
-    label: "",
-    description: "",
-    statusValues: ["TRIAGE"],
-    tone: "amber",
-  },
-  {
-    key: "planning",
-    label: "",
-    description: "",
-    statusValues: ["PLANNING"],
-    tone: "violet",
-  },
-  {
-    key: "closed",
-    label: "",
-    description: "",
-    statusValues: ["CLOSED"],
-    tone: "slate",
-  },
+const STAGE_PRESENTATIONS: readonly ProcessStagePresentation[] = [
+  { key: "new", tone: "teal" },
+  { key: "review", tone: "amber" },
+  { key: "ongoing", tone: "violet" },
+  { key: "closed", tone: "slate" },
 ];
+
+const TERMINAL_PROCESS_STATUSES = new Set(["CLOSED", "CANCELLED", "ARCHIVED"]);
 
 export function ProcessKanban() {
   const { i18n, t } = useTranslation();
   const [state, setState] = useState<ProcessKanbanState>({ kind: "loading" });
   const [details, setDetails] = useState<ProcessDetailsState>({ kind: "closed" });
+  const [analysisProcess, setAnalysisProcess] = useState<ProcessInstance | null>(null);
+  const [phaseFilter, setPhaseFilter] = useState("all");
   const [headerActionsTarget, setHeaderActionsTarget] =
     useState<HTMLElement | null>(null);
   const isRefreshingRef = useRef(false);
@@ -104,16 +83,26 @@ export function ProcessKanban() {
     );
 
     try {
-      const processes = await loadAllProcesses(
-        controller.signal,
-        t("processes.deniedTitle"),
-        t("processes.allFailed"),
-      );
+      const [processes, tasks] = await Promise.all([
+        loadAllProcesses(
+          controller.signal,
+          t("processes.deniedTitle"),
+          t("processes.allFailed"),
+          t,
+        ),
+        loadAllTasks(
+          controller.signal,
+          t("processes.deniedTitle"),
+          t("processes.tasksFailed"),
+          t,
+        ),
+      ]);
 
       if (!controller.signal.aborted) {
         setState({
           kind: "ready",
           processes,
+          tasks,
           updatedAt: new Date().toISOString(),
           isRefreshing: false,
           isStale: false,
@@ -214,6 +203,7 @@ export function ProcessKanban() {
           message: getApiMessage(
             payload,
             t("processes.detailsFailed"),
+            t,
           ),
         });
         return;
@@ -267,7 +257,9 @@ export function ProcessKanban() {
   }
 
   const locale = i18n.resolvedLanguage;
-  const columns = buildColumns(state.processes, t, locale);
+  const items = buildKanbanItems(state.processes, state.tasks);
+  const phaseOptions = buildPhaseOptions(items);
+  const columns = buildColumns(items, phaseFilter, t, locale);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col py-6">
@@ -314,14 +306,9 @@ export function ProcessKanban() {
 
       <section
         aria-label={t("processes.boardLabel")}
-        className="min-h-0 min-w-0 flex-1 overflow-x-auto overflow-y-hidden pb-4"
+        className="min-h-0 min-w-0 flex-1 pb-4"
       >
-        <div
-          className="grid h-full w-max min-w-full grid-flow-col auto-cols-[minmax(15rem,1fr)] items-stretch gap-3"
-          style={{
-            gridTemplateColumns: `repeat(${columns.length}, minmax(15rem, 1fr))`,
-          }}
-        >
+        <div className="grid h-full min-w-0 grid-cols-4 items-stretch gap-3">
           {columns.map((column) => (
             <section
               aria-labelledby={`column-${column.key}`}
@@ -342,27 +329,50 @@ export function ProcessKanban() {
                     </p>
                   </div>
                   <span
-                    aria-label={t("processes.count", { count: column.processes.length })}
+                    aria-label={t("processes.count", { count: column.total })}
                     className={`grid min-w-7 place-items-center rounded-full px-2 py-1 text-xs font-bold ${getBadgeTone(column.tone)}`}
                   >
-                    {column.processes.length}
+                    {column.key === "ongoing" && column.items.length !== column.total
+                      ? `${column.items.length}/${column.total}`
+                      : column.total}
                   </span>
                 </div>
+                {column.key === "ongoing" && phaseOptions.length > 0 && (
+                  <label className="mt-3 block text-xs font-semibold text-slate-700">
+                    <span className="sr-only">{t("processes.phaseFilter")}</span>
+                    <select
+                      aria-label={t("processes.phaseFilter")}
+                      className="min-h-9 w-full rounded-lg border border-slate-300 bg-white px-2.5 text-xs text-slate-700 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20"
+                      onChange={(event) => setPhaseFilter(event.target.value)}
+                      value={phaseFilter}
+                    >
+                      <option value="all">{t("processes.allPhases")}</option>
+                      {phaseOptions.map((phase) => (
+                        <option key={phase.key} value={phase.key}>
+                          {t("processes.phaseNumber", { number: phase.order })}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
               </header>
 
               <div className="min-h-32 flex-1 space-y-3 overflow-y-auto p-3">
-                {column.processes.length === 0 ? (
+                {column.items.length === 0 ? (
                   <p className="rounded-xl border border-dashed border-slate-300 bg-white/50 px-4 py-6 text-center text-xs text-slate-500">
-                    {t("processes.emptyColumn")}
+                    {column.key === "ongoing" && phaseFilter !== "all"
+                      ? t("processes.emptyPhase")
+                      : t("processes.emptyColumn")}
                   </p>
                 ) : (
-                  column.processes.map((process) => (
+                  column.items.map((item) => (
                     <ProcessCard
-                      key={process.id}
+                      item={item}
+                      key={item.process.id}
+                      onAnalyze={setAnalysisProcess}
                       onViewDetails={(selectedProcess) =>
                         void openDetails(selectedProcess)
                       }
-                      process={process}
                     />
                   ))
                 )}
@@ -379,12 +389,24 @@ export function ProcessKanban() {
           state={details}
         />
       )}
+
+      {analysisProcess && (
+        <ProcessAnalysisDialog
+          onClose={() => setAnalysisProcess(null)}
+          onCompleted={() => {
+            setAnalysisProcess(null);
+            void refreshSnapshot(true);
+          }}
+          process={analysisProcess}
+        />
+      )}
     </div>
   );
 }
 
-function ProcessCard({ process, onViewDetails }: ProcessCardProps) {
+function ProcessCard({ item, onAnalyze, onViewDetails }: ProcessCardProps) {
   const { t } = useTranslation();
+  const { process } = item;
 
   return (
     <article className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white p-3 shadow-sm shadow-slate-300/30 xl:p-4">
@@ -392,22 +414,59 @@ function ProcessCard({ process, onViewDetails }: ProcessCardProps) {
         <span className="min-w-0 break-all font-mono text-[11px] font-bold uppercase tracking-wide text-teal-700">
           {process.code}
         </span>
-        <span className="max-w-full break-all rounded-md bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-600">
-          {process.status}
+        <span className={`max-w-full rounded-md px-2 py-1 text-[10px] font-semibold ${getReviewStateTone(item.reviewState)}`}>
+          {t(`processes.reviewStates.${item.reviewState}`)}
         </span>
       </div>
       <h3 className="mt-3 min-w-0 break-words text-sm font-bold leading-5 text-slate-900">
         {process.title}
       </h3>
-      <button
-        aria-label={t("processes.viewDetailsLabel", { code: process.code, title: process.title })}
-        className="mt-4 inline-flex items-center gap-2 rounded-lg text-xs font-semibold text-teal-700 outline-none transition hover:text-teal-900 focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2"
-        onClick={() => onViewDetails(process)}
-        type="button"
-      >
-        <Eye aria-hidden="true" className="size-4" />
-        {t("processes.viewDetails")}
-      </button>
+      <dl className="mt-3 space-y-1 text-xs text-slate-600">
+        {item.currentPhase && (
+          <div className="flex gap-1.5">
+            <dt className="font-semibold">{t("processes.phase")}:</dt>
+            <dd>{t("processes.phaseNumber", { number: item.currentPhase.order })}</dd>
+          </div>
+        )}
+        {item.currentTask && (
+          <div>
+            <dt className="font-semibold">{t("processes.currentActivity")}:</dt>
+            <dd className="mt-0.5 break-words">{item.currentTask.title}</dd>
+          </div>
+        )}
+      </dl>
+      <div className="mt-4 grid grid-cols-2 gap-2">
+        <button
+          aria-label={t("processes.viewDetailsLabel", { code: process.code, title: process.title })}
+          className="inline-flex min-h-9 w-full items-center justify-center gap-1.5 rounded-lg border border-teal-700/25 bg-teal-50 px-2.5 py-2 text-xs font-bold text-teal-800 shadow-sm outline-none transition hover:border-teal-600 hover:bg-teal-100 hover:text-teal-950 focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2"
+          onClick={() => onViewDetails(process)}
+          type="button"
+        >
+          <Eye aria-hidden="true" className="size-4" />
+          {t("processes.viewDetails")}
+        </button>
+        {(item.stage === "new" || item.stage === "review") && (
+          item.canAnalyze ? (
+            <button
+              aria-label={t("processes.analyzeLabel", { code: process.code, title: process.title })}
+              className="min-h-9 w-full rounded-lg bg-amber-600 px-2.5 py-2 text-xs font-bold text-white shadow-sm outline-none transition hover:bg-amber-700 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2"
+              onClick={() => onAnalyze(process)}
+              type="button"
+            >
+              {t("processes.analyze")}
+            </button>
+          ) : (
+            <button
+              className="min-h-9 w-full cursor-not-allowed rounded-lg bg-slate-200 px-2.5 py-2 text-xs font-bold text-slate-500"
+              disabled
+              title={t("processes.analysisUnavailable")}
+              type="button"
+            >
+              {t("processes.analyze")}
+            </button>
+          )
+        )}
+      </div>
     </article>
   );
 }
@@ -419,6 +478,7 @@ function ProcessDetailsDialog({
 }: ProcessDetailsDialogProps) {
   const { i18n, t } = useTranslation();
   const locale = i18n.resolvedLanguage;
+  const isTerminal = isTerminalProcessStatus(state.process.status);
 
   return (
     <div
@@ -471,7 +531,6 @@ function ProcessDetailsDialog({
 
           {state.kind === "ready" && (
             <dl className="grid gap-4 sm:grid-cols-2">
-              <DetailItem label={t("processes.status")} value={state.process.status} />
               <DetailItem label={t("processes.template")} value={state.process.template_key} />
               <DetailItem
                 label={t("processes.flowVersion")}
@@ -481,23 +540,84 @@ function ProcessDetailsDialog({
                 label={t("processes.start")}
                 value={formatOptionalDateTime(state.process.started_at, locale, t("dynamicForm.notProvided"))}
               />
-              <DetailItem
-                label={t("processes.end")}
-                value={formatOptionalDateTime(state.process.closed_at, locale, t("dynamicForm.notProvided"))}
-              />
-              <div className="sm:col-span-2">
-                <dt className="text-xs font-bold uppercase tracking-wide text-slate-500">
-                  {t("processes.closureReason")}
-                </dt>
-                <dd className="mt-1 text-sm leading-6 text-slate-800">
-                  {state.process.closure_reason || t("dynamicForm.notProvided")}
-                </dd>
-              </div>
+              {isTerminal && (
+                <DetailItem
+                  label={t("processes.end")}
+                  value={formatOptionalDateTime(state.process.closed_at, locale, t("dynamicForm.notProvided"))}
+                />
+              )}
+              {isTerminal && (
+                <div className="sm:col-span-2">
+                  <dt className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                    {t("processes.closureReason")}
+                  </dt>
+                  <dd className="mt-1 text-sm leading-6 text-slate-800">
+                    {state.process.closure_reason || t("dynamicForm.notProvided")}
+                  </dd>
+                </div>
+              )}
             </dl>
           )}
         </div>
       </div>
     </div>
+  );
+}
+
+function ProcessAnalysisDialog({
+  process,
+  onClose,
+  onCompleted,
+}: ProcessAnalysisDialogProps) {
+  const { t } = useTranslation();
+  const dialogRef = useAccessibleDialog(true, false, onClose);
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[60] grid place-items-center bg-slate-950/55 backdrop-blur-[2px]"
+      role="presentation"
+    >
+      <div
+        aria-describedby="process-analysis-description"
+        aria-labelledby="process-analysis-title"
+        aria-modal="true"
+        className="flex min-h-0 max-w-none flex-col overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 shadow-2xl"
+        ref={dialogRef}
+        role="dialog"
+        style={{ height: "85dvh", width: "85vw" }}
+        tabIndex={-1}
+      >
+        <header className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200 bg-white px-5 py-4">
+          <div className="min-w-0">
+            <p className="font-mono text-xs font-bold uppercase tracking-wide text-teal-700">
+              {process.code}
+            </p>
+            <h2 className="mt-1 truncate text-xl font-bold text-slate-900" id="process-analysis-title">
+              {t("processes.analysisTitle", { title: process.title })}
+            </h2>
+            <p className="mt-1 text-sm text-slate-500" id="process-analysis-description">
+              {t("processes.analysisDescription")}
+            </p>
+          </div>
+          <button
+            aria-label={t("processes.closeAnalysis")}
+            className="grid size-10 shrink-0 place-items-center rounded-lg text-slate-500 outline-none transition hover:bg-slate-100 hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-teal-500"
+            onClick={onClose}
+            type="button"
+          >
+            <X aria-hidden="true" className="size-5" />
+          </button>
+        </header>
+        <div className="min-h-0 flex-1 overflow-hidden">
+          <TriageWorkspace
+            embedded
+            initialProcess={process}
+            onCompleted={onCompleted}
+          />
+        </div>
+      </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -541,58 +661,169 @@ function KanbanMessage({
   );
 }
 
-function buildColumns(
+export function buildKanbanItems(
   processes: ProcessInstance[],
+  tasks: ProcessTask[],
+): ProcessKanbanItem[] {
+  const tasksByProcess = new Map<string, ProcessTask[]>();
+  for (const task of tasks) {
+    const processTasks = tasksByProcess.get(task.process.id) ?? [];
+    processTasks.push(task);
+    tasksByProcess.set(task.process.id, processTasks);
+  }
+
+  return processes.flatMap((process) => {
+    const processTasks = tasksByProcess.get(process.id) ?? [];
+    return hasSubmissionEvidence(process, processTasks)
+      ? [projectKanbanItem(process, processTasks)]
+      : [];
+  });
+}
+
+function hasSubmissionEvidence(
+  process: ProcessInstance,
+  tasks: ProcessTask[],
+) {
+  if (TERMINAL_PROCESS_STATUSES.has(process.status.trim().toUpperCase())) {
+    return true;
+  }
+
+  return tasks.some(
+    (task) =>
+      task.status !== "CANCELLED" &&
+      (task.activity_key !== "proposal_submission" ||
+        task.status === "COMPLETED" ||
+        task.activity_run_number > 1),
+  );
+}
+
+export function projectKanbanItem(
+  process: ProcessInstance,
+  tasks: ProcessTask[],
+): ProcessKanbanItem {
+  const relevantTasks = tasks
+    .filter((task) => task.status !== "CANCELLED")
+    .slice()
+    .sort(compareTasksByWorkflowPosition);
+  const currentTask = relevantTasks.at(-1) ?? null;
+  const currentPhase = currentTask?.phase ?? null;
+  const normalizedStatus = process.status.trim().toUpperCase();
+  const isClosed = TERMINAL_PROCESS_STATUSES.has(normalizedStatus);
+  const awaitingProponent = relevantTasks.some(
+    (task) =>
+      task.status === "READY" &&
+      task.assigned_role === "proponent" &&
+      (task.activity_key === "submission_return_review" ||
+        (task.activity_key === "proposal_submission" &&
+          task.activity_run_number > 1)),
+  );
+  const correctionReceived = relevantTasks.some(
+    (task) =>
+      task.activity_run_number > 1 &&
+      ((task.activity_key === "proposal_submission" &&
+        task.status === "COMPLETED") ||
+        (task.activity_key === "triage_evaluation" &&
+          task.status === "READY")),
+  );
+  const triageTask = relevantTasks
+    .filter((task) => task.activity_key === "triage_evaluation")
+    .at(-1);
+  const hasReviewHistory = relevantTasks.some(
+    (task) =>
+      task.activity_key === "submission_return_review" ||
+      (task.phase.order === 1 && task.activity_run_number > 1),
+  );
+
+  let stage: ProcessKanbanItem["stage"] = "new";
+  let reviewState: ProcessKanbanItem["reviewState"] = "awaiting-triage";
+
+  if (isClosed) {
+    stage = "closed";
+    reviewState = "closed";
+  } else if ((currentPhase?.order ?? 1) > 1) {
+    stage = "ongoing";
+    reviewState = "in-progress";
+  } else if (awaitingProponent) {
+    stage = "review";
+    reviewState = "awaiting-proponent";
+  } else if (correctionReceived) {
+    stage = "review";
+    reviewState = "correction-received";
+  } else if (hasReviewHistory || triageTask?.status === "COMPLETED") {
+    stage = "review";
+    reviewState = "bracvam-review";
+  } else if (triageTask?.status === "READY") {
+    reviewState = "ready-for-analysis";
+  }
+
+  return {
+    process,
+    tasks: relevantTasks,
+    stage,
+    reviewState,
+    currentTask,
+    currentPhase,
+    canAnalyze:
+      !isClosed &&
+      !awaitingProponent &&
+      (stage === "new" ||
+        (triageTask?.status === "READY" && triageTask.can_act)),
+  };
+}
+
+function buildColumns(
+  items: ProcessKanbanItem[],
+  phaseFilter: string,
   t: TFunction,
   locale: string | undefined,
 ): ProcessKanbanColumn[] {
-  const configuredColumns = STATUS_PRESENTATIONS.map((presentation) => ({
+  return STAGE_PRESENTATIONS.map((presentation) => {
+    const allItems = items
+      .filter((item) => item.stage === presentation.key)
+      .sort((first, second) =>
+        compareProcesses(first.process, second.process, locale),
+      );
+    const visibleItems =
+      presentation.key === "ongoing" && phaseFilter !== "all"
+        ? allItems.filter((item) => item.currentPhase?.key === phaseFilter)
+        : allItems;
+
+    return {
     key: presentation.key,
     label: t(`processes.columns.${presentation.key}.label`),
     description: t(`processes.columns.${presentation.key}.description`),
-    processes: [] as ProcessInstance[],
+    items: visibleItems,
+    total: allItems.length,
     tone: presentation.tone,
-    unknown: false,
-  }));
-  const unknownProcesses: ProcessInstance[] = [];
+    };
+  });
+}
 
-  for (const process of processes) {
-    const normalizedStatus = process.status.trim().toUpperCase();
-    const columnIndex = STATUS_PRESENTATIONS.findIndex((presentation) =>
-      presentation.statusValues.includes(normalizedStatus),
-    );
-
-    if (columnIndex === -1) {
-      unknownProcesses.push(process);
-    } else {
-      configuredColumns[columnIndex].processes.push(process);
+function buildPhaseOptions(items: ProcessKanbanItem[]) {
+  const phases = new Map<string, NonNullable<ProcessKanbanItem["currentPhase"]>>();
+  for (const item of items) {
+    if (item.stage === "ongoing" && item.currentPhase) {
+      phases.set(item.currentPhase.key, item.currentPhase);
     }
   }
+  return Array.from(phases.values()).sort((first, second) => first.order - second.order);
+}
 
-  for (const column of configuredColumns) {
-    column.processes.sort((first, second) => compareProcesses(first, second, locale));
-  }
-
-  if (unknownProcesses.length > 0) {
-    configuredColumns.push({
-      key: "unknown",
-      label: t("processes.columns.unknown.label"),
-      description: t("processes.columns.unknown.description"),
-      processes: unknownProcesses.sort((first, second) => compareProcesses(first, second, locale)),
-      tone: "slate",
-      unknown: true,
-    });
-  }
-
-  return configuredColumns;
+function compareTasksByWorkflowPosition(first: ProcessTask, second: ProcessTask) {
+  return (
+    first.phase.order - second.phase.order ||
+    first.activity_run_number - second.activity_run_number ||
+    Number(first.status === "READY") - Number(second.status === "READY")
+  );
 }
 
 async function loadAllProcesses(
   signal: AbortSignal,
   deniedMessage: string,
   fallbackMessage: string,
+  t: TFunction,
 ) {
-  const firstPage = await loadProcessPage(1, signal, deniedMessage, fallbackMessage);
+  const firstPage = await loadProcessPage(1, signal, deniedMessage, fallbackMessage, t);
   const pageCount = Math.ceil(firstPage.total / firstPage.size);
 
   if (pageCount <= 1) {
@@ -608,7 +839,7 @@ async function loadAllProcesses(
   for (let index = 0; index < remainingPages.length; index += PAGE_BATCH_SIZE) {
     const batch = remainingPages.slice(index, index + PAGE_BATCH_SIZE);
     const pages = await Promise.all(
-      batch.map((page) => loadProcessPage(page, signal, deniedMessage, fallbackMessage)),
+      batch.map((page) => loadProcessPage(page, signal, deniedMessage, fallbackMessage, t)),
     );
 
     for (const page of pages) {
@@ -624,6 +855,7 @@ async function loadProcessPage(
   signal: AbortSignal,
   deniedMessage: string,
   fallbackMessage: string,
+  t: TFunction,
 ) {
   const response = await fetch(
     `/api/processes?page=${page}&size=${PROCESS_PAGE_SIZE}`,
@@ -639,10 +871,62 @@ async function loadProcessPage(
 
   if (!response.ok || !isProcessList(payload)) {
     throw new Error(
-      getApiMessage(payload, fallbackMessage),
+      getApiMessage(payload, fallbackMessage, t),
     );
   }
 
+  return payload;
+}
+
+async function loadAllTasks(
+  signal: AbortSignal,
+  deniedMessage: string,
+  fallbackMessage: string,
+  t: TFunction,
+) {
+  const firstPage = await loadTaskPage(1, signal, deniedMessage, fallbackMessage, t);
+  const pageCount = Math.ceil(firstPage.total / firstPage.size);
+  if (pageCount <= 1) return firstPage.items;
+
+  const remainingPages = Array.from(
+    { length: pageCount - 1 },
+    (_, index) => index + 2,
+  );
+  const items = [...firstPage.items];
+  for (let index = 0; index < remainingPages.length; index += PAGE_BATCH_SIZE) {
+    const batch = remainingPages.slice(index, index + PAGE_BATCH_SIZE);
+    const pages = await Promise.all(
+      batch.map((page) =>
+        loadTaskPage(page, signal, deniedMessage, fallbackMessage, t),
+      ),
+    );
+    for (const page of pages) items.push(...page.items);
+  }
+
+  return Array.from(new Map(items.map((task) => [task.id, task])).values());
+}
+
+async function loadTaskPage(
+  page: number,
+  signal: AbortSignal,
+  deniedMessage: string,
+  fallbackMessage: string,
+  t: TFunction,
+) {
+  const response = await fetch(
+    `/api/tasks?page=${page}&size=${PROCESS_PAGE_SIZE}`,
+    { cache: "no-store", signal },
+  );
+  const payload = (await response.json().catch(() => null)) as unknown;
+
+  if (response.status === 403) {
+    const error = new Error(deniedMessage);
+    error.name = "ProcessAccessDenied";
+    throw error;
+  }
+  if (!response.ok || !isTaskList(payload)) {
+    throw new Error(getApiMessage(payload, fallbackMessage, t));
+  }
   return payload;
 }
 
@@ -677,13 +961,45 @@ function isProcessInstance(value: unknown): value is ProcessInstance {
   );
 }
 
-function getApiMessage(value: unknown, fallback: string) {
-  return value &&
-    typeof value === "object" &&
-    "message" in value &&
-    typeof value.message === "string"
-    ? value.message
-    : fallback;
+function isTaskList(value: unknown): value is ProcessTaskList {
+  if (!value || typeof value !== "object") return false;
+  const list = value as ApiRecord;
+  return (
+    Array.isArray(list.items) &&
+    list.items.every(isProcessTask) &&
+    typeof list.total === "number" &&
+    typeof list.page === "number" &&
+    typeof list.size === "number"
+  );
+}
+
+function isProcessTask(value: unknown): value is ProcessTask {
+  if (!value || typeof value !== "object") return false;
+  const task = value as ApiRecord;
+  const process = task.process as ApiRecord | undefined;
+  const phase = task.phase as ApiRecord | undefined;
+  return (
+    typeof task.id === "string" &&
+    Boolean(process) &&
+    typeof process?.id === "string" &&
+    typeof task.activity_key === "string" &&
+    typeof task.activity_run_number === "number" &&
+    Boolean(phase) &&
+    typeof phase?.key === "string" &&
+    typeof phase?.order === "number" &&
+    typeof task.title === "string" &&
+    (task.assigned_role === null || typeof task.assigned_role === "string") &&
+    (task.status === "READY" || task.status === "COMPLETED" || task.status === "CANCELLED") &&
+    typeof task.can_act === "boolean"
+  );
+}
+
+function getApiMessage(value: unknown, fallback: string, t: TFunction) {
+  return getLocalizedApiError(
+    value && typeof value === "object" ? value : null,
+    fallback,
+    t,
+  );
 }
 
 function compareProcesses(first: ProcessInstance, second: ProcessInstance, locale: string | undefined) {
@@ -722,4 +1038,17 @@ function getBadgeTone(tone: ProcessKanbanColumn["tone"]) {
   if (tone === "blue") return "bg-blue-100 text-blue-800";
   if (tone === "violet") return "bg-violet-100 text-violet-800";
   return "bg-slate-200 text-slate-700";
+}
+
+function getReviewStateTone(state: ProcessKanbanItem["reviewState"]) {
+  if (state === "awaiting-proponent") return "bg-amber-100 text-amber-900";
+  if (state === "correction-received") return "bg-emerald-100 text-emerald-800";
+  if (state === "ready-for-analysis") return "bg-teal-100 text-teal-800";
+  if (state === "bracvam-review") return "bg-blue-100 text-blue-800";
+  if (state === "in-progress") return "bg-violet-100 text-violet-800";
+  return "bg-slate-100 text-slate-700";
+}
+
+function isTerminalProcessStatus(status: string) {
+  return TERMINAL_PROCESS_STATUSES.has(status.trim().toUpperCase());
 }

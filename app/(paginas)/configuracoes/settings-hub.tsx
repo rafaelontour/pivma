@@ -81,13 +81,7 @@ export function SettingsHub({ initialCapabilities }: SettingsHubProps) {
   };
 
   const hasAccess = hasAnySettingsAccess(effectiveCapabilities);
-  const modules = getSettingsModules(effectiveCapabilities).map((module) => ({
-    ...module,
-    title: t(`settings.modules.${module.id}.title`),
-    description: t(`settings.modules.${module.id}.description`),
-    badge: t(`settings.modules.${module.id}.badge`),
-    deniedReason: t(`settings.modules.${module.id}.denied`),
-  }));
+  const modules = getSettingsModules(effectiveCapabilities, t);
 
   return (
     <section aria-label={t("settings.ariaLabel")} className="flex-1 py-6 sm:py-8">

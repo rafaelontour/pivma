@@ -12,10 +12,10 @@ export async function POST(
   const { processId } = await context.params;
   const payload = await request.json().catch(() => null);
   const justification = isRecord(payload) && typeof payload.justification === "string" ? payload.justification.trim() : null;
-  if (!isUuid(processId) || (justification?.length ?? 0) > 2000) return NextResponse.json({ message: "Solicitação de revisão inválida." }, { status: 400 });
+  if (!isUuid(processId) || (justification?.length ?? 0) > 2000) return NextResponse.json({ code: "VALIDATION_ERROR", message: "Solicitação de revisão inválida." }, { status: 400 });
   const cookieStore = await cookies();
   const accessToken = cookieStore.get("access_token")?.value;
-  if (!accessToken) return NextResponse.json({ message: "Sessão não encontrada." }, { status: 401 });
+  if (!accessToken) return NextResponse.json({ code: "AUTH_REQUIRED", message: "Sessão não encontrada." }, { status: 401 });
   const result = await requestSubmissionDirectReview(accessToken, processId, { justification });
   if (!result.ok) return internalApiErrorResponse(result.status, {
     cookieStore,

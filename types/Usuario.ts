@@ -38,6 +38,15 @@ export type UserList = {
   items: UserListItem[];
 };
 
+export type ExternalUserListResponse = {
+  data: UserListItem[];
+  pagination: {
+    page: number;
+    per_page: number;
+    has_next: boolean;
+  };
+};
+
 export type UserListOptions = {
   offset: number;
   limit: number;

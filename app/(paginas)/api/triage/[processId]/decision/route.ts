@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 export async function POST(request: Request, context: RouteContext<"/api/triage/[processId]/decision">) {
   const { processId } = await context.params;
   const validation = validateTriageDecision(await request.json().catch(() => null));
-  if (!isTriageUuid(processId) || !validation.valid) return NextResponse.json({ message: validation.valid ? "Processo inválido." : validation.message }, { status: 400 });
+  if (!isTriageUuid(processId) || !validation.valid) return NextResponse.json({ code: "VALIDATION_ERROR", message: validation.valid ? "Processo inválido." : validation.message }, { status: 400 });
   const authorization = await authorizeInternalApi(["triage.review"]);
   if (!authorization.ok) return authorization.response;
   const result = await submitTriageDecision(authorization.accessToken, processId, validation.input);

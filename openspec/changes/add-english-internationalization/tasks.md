@@ -23,10 +23,10 @@
 
 ## 4. Mensagens, formatos e componentes compartilhados
 
-- [ ] 4.1 Migrar componentes compartilhados, diálogos, toaster, mensagens genéricas, estados de carregamento/vazio e nomes acessíveis para chaves de tradução.
-- [ ] 4.2 Criar utilitários dependentes do locale para datas, horas, números, moedas, custos, durações e ordenação textual, removendo locales de apresentação fixos em `pt-BR`.
-- [ ] 4.3 Substituir tabelas de rótulos de enums e estados por resolução localizada, preservando os identificadores técnicos usados em payloads e filtros.
-- [ ] 4.4 Adicionar códigos estáveis às respostas de erro das Route Handlers internas e resolver no cliente mensagens seguras localizadas, mantendo texto em português apenas como fallback temporário de compatibilidade.
+- [x] 4.1 Migrar componentes compartilhados, diálogos, toaster, mensagens genéricas, estados de carregamento/vazio e nomes acessíveis para chaves de tradução.
+- [x] 4.2 Criar utilitários dependentes do locale para datas, horas, números, moedas, custos, durações e ordenação textual, removendo locales de apresentação fixos em `pt-BR`.
+- [x] 4.3 Substituir tabelas de rótulos de enums e estados por resolução localizada, preservando os identificadores técnicos usados em payloads e filtros.
+- [x] 4.4 Adicionar códigos estáveis às respostas de erro das Route Handlers internas e resolver no cliente mensagens seguras localizadas, mantendo texto em português apenas como fallback temporário de compatibilidade.
 
 ## 5. Autenticação e navegação
 
@@ -37,22 +37,22 @@
 ## 6. Módulos administrativos
 
 - [x] 6.1 Migrar diretório de usuários, gestão individual, perfis e permissões, incluindo filtros, diálogos, validações e toasts.
-- [ ] 6.2 Migrar catálogo e editor de formulários, campos dinâmicos e regras de IA, preservando textos configuráveis recebidos do backend.
-- [ ] 6.3 Migrar biblioteca de avaliações por IA, critérios, versões, testes, publicação e associações, mantendo payloads e identificadores inalterados.
-- [ ] 6.4 Migrar central de configurações e verificar permissões, estados vazios, falhas e fluxos de edição dos três módulos em português e inglês.
+- [x] 6.2 Migrar catálogo e editor de formulários, campos dinâmicos e regras de IA, preservando textos configuráveis recebidos do backend.
+- [x] 6.3 Migrar biblioteca de avaliações por IA, critérios, versões, testes, publicação e associações, mantendo payloads e identificadores inalterados.
+- [x] 6.4 Migrar central de configurações e verificar permissões, estados vazios, falhas e fluxos de edição dos três módulos em português e inglês.
 
 ## 7. Fluxos operacionais
 
-- [ ] 7.1 Migrar catálogo, rascunhos, formulário, anexos, acompanhamento e pré-avaliação de submissões, preservando valores e arquivos ao trocar o idioma.
+- [x] 7.1 Migrar catálogo, rascunhos, formulário, anexos, acompanhamento e pré-avaliação de submissões, preservando valores e arquivos ao trocar o idioma.
 - [x] 7.2 Migrar Kanban, detalhes e sincronização de processos, localizando rótulos conhecidos e mantendo estados desconhecidos no valor original.
 - [x] 7.3 Migrar fila, proposta, pareceres, feedbacks, decisão e timeline de triagem sem traduzir conteúdo científico ou texto fornecido por pessoas.
 - [x] 7.4 Migrar observabilidade operacional e de IA, incluindo filtros, conexão, eventos, etapas e formatos numéricos, sem traduzir payloads técnicos inspecionados.
 
 ## 8. Tradução inglesa e qualidade
 
-- [ ] 8.1 Gerar uma primeira versão dos valores de `en.json` com ferramenta gratuita de IA, enviando somente o dicionário controlado e exigindo preservação exata de chaves, placeholders e estrutura.
-- [ ] 8.2 Revisar humanamente o inglês com o glossário institucional e técnico, corrigindo terminologia, voz, acessibilidade e textos que dependam de contexto.
-- [ ] 8.3 Auditar literais restantes em `app/` e `components/`, documentar somente exceções legítimas na allowlist e confirmar que nenhuma chave de tradução aparece na interface.
+- [x] 8.1 Gerar uma primeira versão dos valores de `en.json` com ferramenta gratuita de IA, enviando somente o dicionário controlado e exigindo preservação exata de chaves, placeholders e estrutura.
+- [x] 8.2 Revisar humanamente o inglês com o glossário institucional e técnico, corrigindo terminologia, voz, acessibilidade e textos que dependam de contexto.
+- [x] 8.3 Auditar literais restantes em `app/` e `components/`, documentar somente exceções legítimas na allowlist e confirmar que nenhuma chave de tradução aparece na interface.
 - [x] 8.4 Executar a verificação de dicionários, `pnpm lint`, `pnpm exec tsc --noEmit`, `git diff --check`, `pnpm build` e `openspec validate add-english-internationalization --strict`, registrando separadamente limitações ambientais ou falhas preexistentes.
 - [ ] 8.5 Executar roteiros responsivos, por teclado e com tecnologia assistiva em login, cadastro, shell, formulários, diálogos, submissões, Kanban, triagem e observabilidade nos dois idiomas.
 - [ ] 8.6 Confirmar por inspeção de rede que a troca de idioma não chama serviços de tradução, não envia conteúdo da sessão a terceiros e mantém o navegador restrito às rotas internas já previstas.

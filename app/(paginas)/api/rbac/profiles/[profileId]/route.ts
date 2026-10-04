@@ -14,17 +14,14 @@ export async function PATCH(
   const payload = (await request.json().catch(() => null)) as UpdatePermissionProfileInput | null;
 
   if (!isUuid(profileId) || !isValidPermissionCodes(payload?.permissionCodes)) {
-    return NextResponse.json(
-      { message: "Informe um perfil e códigos de permissão válidos." },
-      { status: 400 },
-    );
+    return NextResponse.json({ code: "VALIDATION_ERROR", message: "Informe um perfil e códigos de permissão válidos." }, { status: 400 });
   }
 
   const cookieStore = await cookies();
   const accessToken = cookieStore.get("access_token")?.value;
 
   if (!accessToken) {
-    return NextResponse.json({ message: "Sessão não encontrada." }, { status: 401 });
+    return NextResponse.json({ code: "AUTH_REQUIRED", message: "Sessão não encontrada." }, { status: 401 });
   }
 
   const result = await updatePermissionProfile(accessToken, profileId, payload);
