@@ -3,6 +3,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        API_PIVMA: https://api.pivma.acerola.dev.br
     image: pivma-web:local
     init: true
     ports:
