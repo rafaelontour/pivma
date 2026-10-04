@@ -2,7 +2,7 @@ import "server-only";
 
 import { isAxiosError } from "axios";
 import { tryit } from "radash";
-import { apiOrigin, http } from "./Http";
+import { getApiOrigin, http } from "./Http";
 import { normalizeProcessInstance } from "./Processo";
 import { getTriageTimeline } from "./Triagem";
 import type { ProcessInstance } from "@/types/Processo";
@@ -68,7 +68,7 @@ export async function createSubmissionDraft(
       {
         headers: {
           Cookie: `access_token=${accessToken}`,
-          Origin: apiOrigin,
+          Origin: getApiOrigin(),
         },
       },
     ),
@@ -94,7 +94,7 @@ export async function deleteSubmissionDraft(
     http.delete<void>(`/processes/${processId}`, {
       headers: {
         Cookie: `access_token=${accessToken}`,
-        Origin: apiOrigin,
+        Origin: getApiOrigin(),
       },
     }),
   )();
@@ -244,7 +244,7 @@ export async function saveSubmissionDraft(
       {
         headers: {
           Cookie: `access_token=${accessToken}`,
-          Origin: apiOrigin,
+          Origin: getApiOrigin(),
         },
       },
     ),
@@ -273,7 +273,7 @@ export async function submitSubmission(
       {
         headers: {
           Cookie: `access_token=${accessToken}`,
-          Origin: apiOrigin,
+          Origin: getApiOrigin(),
         },
       },
     ),
@@ -315,7 +315,7 @@ export async function requestSubmissionDirectReview(
     http.post<unknown>(
       `/processes/${processId}/submission/direct-review`,
       input,
-      { headers: { Cookie: `access_token=${accessToken}`, Origin: apiOrigin } },
+      { headers: { Cookie: `access_token=${accessToken}`, Origin: getApiOrigin() } },
     ),
   )();
   if (error) return { ok: false, status: getStatus(error) };
@@ -345,7 +345,7 @@ export async function decideSubmissionReturnReview(
 ): Promise<ServiceResult<SubmissionReturnReviewResult>> {
   const [error, response] = await tryit(() =>
     http.post<unknown>(`/processes/${processId}/return-review`, input, {
-      headers: { Cookie: `access_token=${accessToken}`, Origin: apiOrigin },
+      headers: { Cookie: `access_token=${accessToken}`, Origin: getApiOrigin() },
     }),
   )();
   if (error) return { ok: false, status: getStatus(error) };
@@ -364,7 +364,7 @@ export async function uploadSubmissionAttachment(
   body.append("file", file, file.name);
   const [error, response] = await tryit(() =>
     http.post<unknown>(attachmentPath(processId, fieldKey), body, {
-      headers: { Cookie: `access_token=${accessToken}`, Origin: apiOrigin },
+      headers: { Cookie: `access_token=${accessToken}`, Origin: getApiOrigin() },
     }),
   )();
   if (error) return { ok: false, status: getStatus(error) };
@@ -380,7 +380,7 @@ export async function removeSubmissionAttachment(
 ): Promise<ServiceResult<SubmissionAttachmentRemovedResult>> {
   const [error, response] = await tryit(() =>
     http.delete<unknown>(attachmentPath(processId, fieldKey), {
-      headers: { Cookie: `access_token=${accessToken}`, Origin: apiOrigin },
+      headers: { Cookie: `access_token=${accessToken}`, Origin: getApiOrigin() },
     }),
   )();
   if (error) return { ok: false, status: getStatus(error) };

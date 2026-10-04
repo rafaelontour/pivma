@@ -3,7 +3,7 @@ import "server-only";
 import { isAxiosError } from "axios";
 import type { AxiosResponse } from "axios";
 import { tryit } from "radash";
-import { apiOrigin, http } from "./Http";
+import { getApiOrigin, http } from "./Http";
 import type {
   AiCriterion,
   AiCriterionTestResult,
@@ -487,7 +487,7 @@ function authHeaders(accessToken: string) {
 }
 
 function mutationHeaders(accessToken: string) {
-  return { ...authHeaders(accessToken), Origin: apiOrigin };
+  return { ...authHeaders(accessToken), Origin: getApiOrigin() };
 }
 
 function optionalString(value: unknown) {

@@ -2,7 +2,7 @@ import "server-only";
 
 import { isAxiosError } from "axios";
 import { tryit } from "radash";
-import { apiOrigin, http } from "./Http";
+import { getApiOrigin, http } from "./Http";
 import type { ProcessList } from "@/types/Processo";
 import type { ApiRecord, ServiceResult } from "@/types/Servico";
 import type {
@@ -88,6 +88,6 @@ function isTimelineEvent(value: unknown): value is TriageTimelineEvent {
 }
 
 function authHeaders(accessToken: string) { return { Cookie: `access_token=${accessToken}` }; }
-function mutationHeaders(accessToken: string) { return { ...authHeaders(accessToken), Origin: apiOrigin }; }
+function mutationHeaders(accessToken: string) { return { ...authHeaders(accessToken), Origin: getApiOrigin() }; }
 function isRecord(value: unknown): value is ApiRecord { return Boolean(value) && typeof value === "object" && !Array.isArray(value); }
 function getStatus(error: Error) { return isAxiosError(error) ? error.response?.status : undefined; }

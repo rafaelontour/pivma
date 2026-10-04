@@ -2,7 +2,7 @@ import "server-only";
 
 import { isAxiosError } from "axios";
 import { tryit } from "radash";
-import { apiOrigin, http } from "./Http";
+import { getApiOrigin, http } from "./Http";
 import type {
   EvaluableFieldsResponse,
   FormEvaluationAssignment,
@@ -84,7 +84,7 @@ export async function updateFormTemplate(
       {
         headers: {
           Cookie: `access_token=${accessToken}`,
-          Origin: apiOrigin,
+          Origin: getApiOrigin(),
         },
       },
     ),

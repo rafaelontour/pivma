@@ -2,7 +2,7 @@ import "server-only";
 
 import { isAxiosError } from "axios";
 import { tryit } from "radash";
-import { apiOrigin, http } from "./Http";
+import { getApiOrigin, http } from "./Http";
 import type { ServiceResult } from "@/types/Servico";
 import type {
   CreateUserInput,
@@ -62,7 +62,7 @@ export async function updateUser(
     http.patch<UserPublic>(`/users/${userId}`, input, {
       headers: {
         Cookie: `access_token=${accessToken}`,
-        Origin: apiOrigin,
+        Origin: getApiOrigin(),
       },
     }),
   )();

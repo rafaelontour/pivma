@@ -2,7 +2,7 @@ import "server-only";
 
 import { isAxiosError } from "axios";
 import { tryit } from "radash";
-import { apiOrigin, http } from "./Http";
+import { getApiOrigin, http } from "./Http";
 import type {
   CreatePermissionProfileInput,
   PermissionDefinition,
@@ -37,7 +37,7 @@ export async function createPermissionProfile(
     http.post<PermissionProfile>("/rbac/profiles", input, {
       headers: {
         Cookie: `access_token=${accessToken}`,
-        Origin: apiOrigin,
+        Origin: getApiOrigin(),
       },
     }),
   )();
@@ -92,7 +92,7 @@ export async function grantUserProfile(
     http.post(`/rbac/users/${userId}/profiles/${profileId}`, undefined, {
       headers: {
         Cookie: `access_token=${accessToken}`,
-        Origin: apiOrigin,
+        Origin: getApiOrigin(),
       },
     }),
   )();
@@ -113,7 +113,7 @@ export async function revokeUserProfile(
     http.delete(`/rbac/users/${userId}/profiles/${profileId}`, {
       headers: {
         Cookie: `access_token=${accessToken}`,
-        Origin: apiOrigin,
+        Origin: getApiOrigin(),
       },
     }),
   )();
@@ -137,7 +137,7 @@ export async function updatePermissionProfile(
       {
         headers: {
           Cookie: `access_token=${accessToken}`,
-          Origin: apiOrigin,
+          Origin: getApiOrigin(),
         },
       },
     ),
