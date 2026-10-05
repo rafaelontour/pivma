@@ -53,7 +53,6 @@ import type {
   SubmissionReturnReview,
   SubmissionReturnReviewChoice,
   SubmissionReturnReviewResult,
-  SubmissionReturnReviewSnapshot,
   SubmittedSubmissionsState,
   SubmitSubmissionResult,
 } from "@/types/Submissao";
@@ -189,7 +188,11 @@ export function SubmissionCatalog() {
     ) ?? buildFallbackTemplate(draft);
 
     try {
-      await loadForm(template, draft);
+      await loadForm(
+        template,
+        draft,
+        draft.has_been_submitted ? "return-review" : "edit",
+      );
     } finally {
       isOpeningRef.current = false;
       setOpeningDraftId(null);
@@ -292,7 +295,10 @@ export function SubmissionCatalog() {
       let returnReview: SubmissionReturnReview | null = null;
       if (returnReviewResponse) {
         const returnPayload = await returnReviewResponse.json().catch(() => null) as unknown;
-        if (!returnReviewResponse.ok || !isReturnReview(returnPayload)) {
+        const completedReturnReview =
+          !payload.is_submitted &&
+          (returnReviewResponse.status === 404 || returnReviewResponse.status === 409);
+        if (!completedReturnReview && (!returnReviewResponse.ok || !isReturnReview(returnPayload))) {
           setDialog({
             kind: "error",
             template,
@@ -302,13 +308,8 @@ export function SubmissionCatalog() {
           });
           return;
         }
-        returnReview = returnPayload;
-        storeReturnReviewSnapshot(process.id, { returnReview, reviews: payload.reviews });
-      } else if (!payload.is_submitted) {
-        const snapshot = readReturnReviewSnapshot(process.id);
-        if (snapshot) {
-          returnReview = snapshot.returnReview;
-          payload.reviews = snapshot.reviews;
+        if (!completedReturnReview && isReturnReview(returnPayload)) {
+          returnReview = returnPayload;
         }
       }
 
@@ -1077,7 +1078,6 @@ function SubmissionFormDialog({
       }
 
       toast.success(t("submissions.submitted"));
-      removeReturnReviewSnapshot(state.process.id);
       onSubmitted(state.process);
     } catch {
       toast.error(t("submissions.connectionFailed"));
@@ -1108,7 +1108,6 @@ function SubmissionFormDialog({
         return;
       }
 
-      storeReturnReviewSnapshot(state.process.id, { returnReview, reviews: form.reviews });
       toast.success(t("submissions.returnRevisionOpened"));
       onReturnResolved(payload.choice);
     } catch {
@@ -1216,6 +1215,8 @@ function SubmissionDialogContent({
   const sections = getSubmissionFormSections(orderedFields, defaultSection);
   const hasSectionTabs = sections.length > 1;
   const awaitingReturnResponse = Boolean(returnReview && form.is_submitted);
+  const isCorrectionMode = !form.is_submitted && Object.values(form.reviews).some(isCorrectableReview);
+  const hasCorrectionContext = Boolean(returnReview || isCorrectionMode);
 
   function handleSectionTabKeyDown(
     event: ReactKeyboardEvent<HTMLButtonElement>,
@@ -1248,8 +1249,8 @@ function SubmissionDialogContent({
 
   return (
     <>
-      <div className={returnReview ? "grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)] lg:grid-cols-[22rem_minmax(0,1fr)] lg:grid-rows-1 xl:grid-cols-[26rem_minmax(0,1fr)]" : "flex min-h-0 flex-1 flex-col"}>
-        {returnReview && (
+      <div className={hasCorrectionContext ? "grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)] lg:grid-cols-[22rem_minmax(0,1fr)] lg:grid-rows-1 xl:grid-cols-[26rem_minmax(0,1fr)]" : "flex min-h-0 flex-1 flex-col"}>
+        {hasCorrectionContext && (
           <aside className="max-h-[40dvh] overflow-y-auto border-b border-amber-200 bg-amber-50/50 p-4 sm:p-5 lg:max-h-none lg:border-b-0 lg:border-r lg:p-6">
           <section className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-950" aria-labelledby="return-review-summary-title">
             <div className="flex items-start gap-3">
@@ -1257,14 +1258,14 @@ function SubmissionDialogContent({
               <div className="min-w-0">
                 <h3 className="text-sm font-bold" id="return-review-summary-title">{t(awaitingReturnResponse ? "submissions.returnReviewTitle" : "submissions.correctionModeTitle")}</h3>
                 <p className="mt-1 text-sm leading-6">{awaitingReturnResponse ? t("submissions.returnReviewDescription") : t("submissions.correctionModeDescription")}</p>
-                {returnReview.triage_decision?.justification && <div className="mt-3 rounded-lg border border-amber-200 bg-white/75 p-3"><p className="text-xs font-bold uppercase tracking-wide text-amber-800">{t("submissions.bracvamJustification")}</p><p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-slate-800">{returnReview.triage_decision.justification}</p></div>}
-                <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-amber-900">
+                {returnReview?.triage_decision?.justification && <div className="mt-3 rounded-lg border border-amber-200 bg-white/75 p-3"><p className="text-xs font-bold uppercase tracking-wide text-amber-800">{t("submissions.bracvamJustification")}</p><p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-slate-800">{returnReview.triage_decision.justification}</p></div>}
+                {returnReview && <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-amber-900">
                   <span>{t("submissions.returnOpenedAt", { date: formatSubmissionDate(returnReview.opened_at, i18n.resolvedLanguage) })}</span>
                   {returnReview.due_date && <span>{t("submissions.returnDueDate", { date: formatSubmissionDate(returnReview.due_date, i18n.resolvedLanguage) })}</span>}
-                </div>
+                </div>}
               </div>
             </div>
-            {awaitingReturnResponse && <div className="mt-4 grid gap-3 border-t border-amber-200 pt-4"><label className="grid gap-1.5 text-sm font-bold">{t("submissions.returnChoiceLabel")}<select className="min-h-11 rounded-xl border border-amber-300 bg-white px-3 font-normal text-slate-900" disabled={operation !== "idle"} onChange={(event) => onReturnChoiceChange(event.target.value as SubmissionReturnReviewChoice)} value={returnChoice}>{returnReview.available_choices.map((choice) => <option key={choice} value={choice}>{t(`submissions.returnChoices.${choice}`)}</option>)}</select></label><label className="grid gap-1.5 text-sm font-bold">{t("submissions.returnJustificationLabel")}<textarea className="min-h-20 rounded-xl border border-amber-300 bg-white p-3 font-normal text-slate-900" disabled={operation !== "idle"} maxLength={4000} onChange={(event) => onReturnJustificationChange(event.target.value)} placeholder={t("submissions.returnJustificationPlaceholder")} value={returnJustification} /></label><button className="inline-flex min-h-11 w-fit items-center gap-2 rounded-xl bg-amber-800 px-4 text-sm font-bold text-white disabled:opacity-60" disabled={operation !== "idle"} onClick={onReturnResponse} type="button">{operation === "responding" && <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />}{operation === "responding" ? t("submissions.respondingToReturn") : t("submissions.confirmReturnChoice")}</button></div>}
+            {returnReview && awaitingReturnResponse && <div className="mt-4 grid gap-3 border-t border-amber-200 pt-4"><label className="grid gap-1.5 text-sm font-bold">{t("submissions.returnChoiceLabel")}<select className="min-h-11 rounded-xl border border-amber-300 bg-white px-3 font-normal text-slate-900" disabled={operation !== "idle"} onChange={(event) => onReturnChoiceChange(event.target.value as SubmissionReturnReviewChoice)} value={returnChoice}>{returnReview.available_choices.map((choice) => <option key={choice} value={choice}>{t(`submissions.returnChoices.${choice}`)}</option>)}</select></label><label className="grid gap-1.5 text-sm font-bold">{t("submissions.returnJustificationLabel")}<textarea className="min-h-20 rounded-xl border border-amber-300 bg-white p-3 font-normal text-slate-900" disabled={operation !== "idle"} maxLength={4000} onChange={(event) => onReturnJustificationChange(event.target.value)} placeholder={t("submissions.returnJustificationPlaceholder")} value={returnJustification} /></label><button className="inline-flex min-h-11 w-fit items-center gap-2 rounded-xl bg-amber-800 px-4 text-sm font-bold text-white disabled:opacity-60" disabled={operation !== "idle"} onClick={onReturnResponse} type="button">{operation === "responding" && <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />}{operation === "responding" ? t("submissions.respondingToReturn") : t("submissions.confirmReturnChoice")}</button></div>}
           </section>
           </aside>
         )}
@@ -1342,7 +1343,7 @@ function SubmissionDialogContent({
                     const review = form.reviews[field.field_key];
                     const isCorrectionField = isCorrectableReview(review);
                     const isLockedDuringCorrection = Boolean(
-                      returnReview && !form.is_submitted && !isCorrectionField,
+                      isCorrectionMode && !isCorrectionField,
                     );
 
                     return <div className={isCorrectionField ? "rounded-xl border-2 border-amber-400 bg-amber-50/60 p-4" : undefined} key={field.field_key}>
@@ -1365,7 +1366,7 @@ function SubmissionDialogContent({
       </div>
 
       <footer className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:px-6">
-        <p className="text-xs leading-5 text-slate-500">{t(returnReview ? form.is_submitted ? "submissions.returnReviewFooterNotice" : "submissions.correctionSaveNotice" : "submissions.saveNotice")}</p>
+        <p className="text-xs leading-5 text-slate-500">{t(hasCorrectionContext ? form.is_submitted ? "submissions.returnReviewFooterNotice" : "submissions.correctionSaveNotice" : "submissions.saveNotice")}</p>
         {!form.is_submitted && (
           <div className="flex flex-wrap justify-end gap-2">
             <button
@@ -1564,45 +1565,6 @@ function isReturnReviewResult(value: unknown): value is SubmissionReturnReviewRe
 
 function isReturnReviewChoice(value: unknown): value is SubmissionReturnReviewChoice {
   return value === "REVISE" || value === "CONTEST_AI" || value === "WITHDRAW";
-}
-
-function returnReviewStorageKey(processId: string) {
-  return `pivma:return-review:${processId}`;
-}
-
-function storeReturnReviewSnapshot(processId: string, snapshot: SubmissionReturnReviewSnapshot) {
-  try {
-    window.sessionStorage.setItem(returnReviewStorageKey(processId), JSON.stringify(snapshot));
-  } catch {
-    // The API remains authoritative; storage only preserves comments across a same-tab reload.
-  }
-}
-
-function readReturnReviewSnapshot(processId: string): SubmissionReturnReviewSnapshot | null {
-  try {
-    const raw = window.sessionStorage.getItem(returnReviewStorageKey(processId));
-    if (!raw) return null;
-    const value = JSON.parse(raw) as unknown;
-    return isRecord(value) && isReturnReview(value.returnReview) && isDynamicFormReviews(value.reviews)
-      ? { returnReview: value.returnReview, reviews: value.reviews }
-      : null;
-  } catch {
-    return null;
-  }
-}
-
-function removeReturnReviewSnapshot(processId: string) {
-  try {
-    window.sessionStorage.removeItem(returnReviewStorageKey(processId));
-  } catch {
-    // Ignore unavailable browser storage.
-  }
-}
-
-function isDynamicFormReviews(value: unknown): value is Record<string, DynamicFormReview> {
-  return isRecord(value) && Object.values(value).every(
-    (review) => isRecord(review) && typeof review.status === "string" && (review.comments === undefined || review.comments === null || typeof review.comments === "string") && (review.reviewed_at === undefined || review.reviewed_at === null || typeof review.reviewed_at === "string"),
-  );
 }
 
 function isRecord(value: unknown): value is ApiRecord {

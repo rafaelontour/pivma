@@ -64,6 +64,7 @@
 - [x] 5.11 Implementar revisão humana direta com confirmação acessível, justificativa opcional, proteção contra duplicidade e reconsulta até `TRIAGE`
 - [ ] 5.12 Verificar criação concorrente, anexos, salvamento explícito, envio, transições, polling, retorno para correção, reenvio e revisão direta contra a API atual
   - Lint, build, rotas internas e recusas sem sessão foram verificados; o ciclo positivo completo aguarda uma sessão de proponente e dados elegíveis na API publicada.
+- [x] 5.13 Corrigir a retomada de processos devolvidos para consultar o retorno e os pareceres persistidos, liberar os campos indicados após `REVISE` e não depender de estado temporário do navegador
 
 ## 6. Triagem BraCVAM
 
@@ -72,13 +73,14 @@
 - [x] 6.3 Implementar `/triagem` com fila filtrável de processos `TRIAGE`, estados vazio/erro e seleção da proposta
 - [x] 6.4 Apresentar seções e valores submetidos somente para leitura, com fallback legível para tipos ainda não especializados
 - [x] 6.5 Apresentar relatório da IA por execução, versão, campo e critério e distinguir ausência de IA, resultado negativo e falha técnica
-- [x] 6.6 Implementar gravação granular de `APPROVED`, `NEEDS_REVISION` e `REJECTED` por campo com comentário aplicável
+- [x] 6.6 Implementar seleção de `APPROVED`, `NEEDS_REVISION` e `REJECTED` por campo com comentário aplicável
 - [x] 6.7 Implementar feedback concordante, discordante ou inconclusivo por critério sem modificar a evidência automática
 - [x] 6.8 Implementar decisão final confirmada e reconsulta das transições para `PLANNING`, `SUBMISSION` ou `CLOSED`
 - [x] 6.9 Implementar linha do tempo ordenada com transições, execuções, revisões, feedbacks e decisão conforme autorização
   - Contratos confrontados com o OpenAPI publicado em 11/09/2026; lint, build e recusa `401` nas cinco rotas internas foram verificados.
 - [ ] 6.10 Verificar triagem parcial, retomada, três decisões finais, conflito concorrente, timeline e negação para sessão sem `triage.review`
   - A negação `401`, validações de entrada e a integração controlada foram verificadas; pareceres, conflito e os três desfechos aguardam uma sessão com `triage.review` e processos reais em `TRIAGE`.
+- [x] 6.11 Exigir decisão explícita para todos os campos e para o resultado final, remover o salvamento separado de pareceres e persistir o conjunto completo antes de solicitar a transição
 
 ## 7. Kanban e navegação
 

@@ -142,27 +142,6 @@ export function TriageWorkspace({
     setWorkspace((current) => current.kind === "ready" ? update(current) : current);
   }
 
-  async function saveReviews() {
-    if (workspace.kind !== "ready" || workspace.isSavingReviews) return;
-    const reviews = Object.values(workspace.reviews);
-    if (reviews.length === 0) { toast.error(t("triage.reviewRequired")); return; }
-    const incompleteReview = reviews.find((review) => review.status !== "APPROVED" && !review.comments?.trim());
-    if (incompleteReview) { toast.error(t("triage.reviewCommentRequired")); return; }
-    updateReady((current) => ({ ...current, isSavingReviews: true }));
-    try {
-      const response = await fetch(`/api/triage/${workspace.snapshot.process.id}/reviews`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ reviews }) });
-      const payload = await response.json().catch(() => null);
-      if (!response.ok) {
-        toast.error(getApiMessage(payload, t("triage.reviewsSaveFailed"), t));
-        if (response.status === 409) await selectProcess(workspace.snapshot.process, true);
-        return;
-      }
-      toast.success(t("triage.reviewsSaved"));
-      await selectProcess(workspace.snapshot.process);
-    } catch { toast.error(t("triage.connectionFailed")); }
-    finally { updateReady((current) => ({ ...current, isSavingReviews: false })); }
-  }
-
   async function saveFeedback() {
     if (workspace.kind !== "ready" || workspace.isSavingFeedback || !workspace.snapshot.preEvaluation) return;
     const items = Object.values(workspace.feedback);
@@ -186,8 +165,30 @@ export function TriageWorkspace({
 
   async function decide(input: TriageDecisionInput) {
     if (workspace.kind !== "ready" || workspace.isDeciding) return false;
-    updateReady((current) => ({ ...current, isDeciding: true }));
+    const reviews = workspace.snapshot.form.fields.map((field) => workspace.reviews[field.field_key]);
+    if (reviews.some((review) => !review)) {
+      toast.error(t("triage.allFieldsReviewRequired"));
+      return false;
+    }
+    const completedReviews = reviews.filter((review): review is NonNullable<typeof review> => Boolean(review));
+    if (completedReviews.some((review) => review.status !== "APPROVED" && !review.comments?.trim())) {
+      toast.error(t("triage.reviewCommentRequired"));
+      return false;
+    }
+    if (input.outcome === "NEEDS_REVISION" && !completedReviews.some((review) => review.status === "NEEDS_REVISION" || review.status === "REJECTED")) {
+      toast.error(t("triage.correctionFieldRequired"));
+      return false;
+    }
+    updateReady((current) => ({ ...current, isSavingReviews: true, isDeciding: true }));
     try {
+      const reviewsResponse = await fetch(`/api/triage/${workspace.snapshot.process.id}/reviews`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ reviews: completedReviews }) });
+      const reviewsPayload = await reviewsResponse.json().catch(() => null);
+      if (!reviewsResponse.ok) {
+        toast.error(getApiMessage(reviewsPayload, t("triage.reviewsSaveFailed"), t));
+        if (reviewsResponse.status === 409) await selectProcess(workspace.snapshot.process, true);
+        return false;
+      }
+
       const response = await fetch(`/api/triage/${workspace.snapshot.process.id}/decision`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
       const payload = await response.json().catch(() => null);
       if (!response.ok || !isRecord(payload) || typeof payload.process_status !== "string") {
@@ -201,7 +202,7 @@ export function TriageWorkspace({
       onCompleted?.();
       return true;
     } catch { toast.error(t("triage.connectionFailed")); return false; }
-    finally { updateReady((current) => ({ ...current, isDeciding: false })); }
+    finally { updateReady((current) => ({ ...current, isSavingReviews: false, isDeciding: false })); }
   }
 
   const normalizedSearch = search.trim().toLocaleLowerCase(i18n.resolvedLanguage);
@@ -214,7 +215,7 @@ export function TriageWorkspace({
         <form className="flex gap-2" onSubmit={(event: FormEvent) => event.preventDefault()} role="search"><label className="min-w-0 flex-1"><span className="sr-only">{t("triage.filter")}</span><input className="min-h-11 w-full rounded-xl border border-slate-300 px-3 text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20" onChange={(event) => setSearch(event.target.value)} placeholder={t("triage.filterPlaceholder")} value={search} /></label><button aria-label={t("triage.refreshQueue")} className="grid size-11 place-items-center rounded-xl bg-teal-700 text-white" onClick={() => setReloadKey((value) => value + 1)} type="button"><RefreshCw aria-hidden="true" className="size-4" /></button></form>
         <div className="mt-4 grid gap-3">{queue.kind === "loading" ? <Loading label={t("triage.loadingQueue")} /> : queue.kind === "error" || queue.kind === "denied" ? <Message action={queue.kind === "error" ? () => setReloadKey((value) => value + 1) : undefined} message={queue.message} /> : visibleProcesses.length === 0 ? <Message message={normalizedSearch ? t("triage.noFilterResults") : t("triage.emptyQueue")} /> : visibleProcesses.map((process) => <TriageQueueCard key={process.id} onSelect={(selected) => void selectProcess(selected)} process={process} selected={selectedId === process.id} />)}</div>
       </aside>}
-      <section className={`min-w-0 bg-white ${embedded ? "min-h-full" : "rounded-2xl border border-slate-200 shadow-sm"}`}>{workspace.kind === "closed" ? <div className="grid min-h-96 place-items-center p-8 text-center"><div><ClipboardCheck aria-hidden="true" className="mx-auto size-10 text-teal-700" /><h2 className="mt-4 text-xl font-bold text-slate-900">{t("triage.selectProposal")}</h2><p className="mt-2 text-sm text-slate-600">{t("triage.selectDescription")}</p></div></div> : <TriageReviewPanel key={selectedId} onDecision={decide} onFeedbackChange={(itemId, verdict, reason) => updateReady((current) => ({ ...current, feedback: { ...current.feedback, [itemId]: { item_id: itemId, verdict, reason: reason || null } } }))} onRetry={() => { const process = workspace.kind === "ready" ? workspace.snapshot.process : workspace.process; void selectProcess(process); }} onReviewChange={(fieldKey, status, comments) => updateReady((current) => ({ ...current, reviews: { ...current.reviews, [fieldKey]: { field_key: fieldKey, status, comments: comments || null } } }))} onSaveFeedback={() => void saveFeedback()} onSaveReviews={() => void saveReviews()} state={workspace} />}</section>
+      <section className={`min-w-0 bg-white ${embedded ? "min-h-full" : "rounded-2xl border border-slate-200 shadow-sm"}`}>{workspace.kind === "closed" ? <div className="grid min-h-96 place-items-center p-8 text-center"><div><ClipboardCheck aria-hidden="true" className="mx-auto size-10 text-teal-700" /><h2 className="mt-4 text-xl font-bold text-slate-900">{t("triage.selectProposal")}</h2><p className="mt-2 text-sm text-slate-600">{t("triage.selectDescription")}</p></div></div> : <TriageReviewPanel key={selectedId} onDecision={decide} onFeedbackChange={(itemId, verdict, reason) => updateReady((current) => ({ ...current, feedback: { ...current.feedback, [itemId]: { item_id: itemId, verdict, reason: reason || null } } }))} onRetry={() => { const process = workspace.kind === "ready" ? workspace.snapshot.process : workspace.process; void selectProcess(process); }} onReviewChange={(fieldKey, status, comments) => updateReady((current) => ({ ...current, reviews: { ...current.reviews, [fieldKey]: { field_key: fieldKey, status, comments: comments || null } } }))} onSaveFeedback={() => void saveFeedback()} state={workspace} />}</section>
     </div>
   );
 }
@@ -224,15 +225,16 @@ function TriageQueueCard({ process, selected, onSelect }: TriageQueueCardProps) 
   return <button aria-pressed={selected} className={`w-full rounded-xl border p-4 text-left outline-none focus-visible:ring-2 focus-visible:ring-teal-500 ${selected ? "border-teal-500 bg-teal-50" : "border-slate-200 hover:border-teal-300"}`} onClick={() => onSelect(process)} type="button"><p className="font-mono text-[0.7rem] font-bold text-teal-700">{process.code}</p><p className="mt-1 font-semibold text-slate-900">{process.title}</p><div className="mt-2 flex flex-wrap justify-between gap-2 text-xs text-slate-500"><span>{process.template_key}</span>{process.started_at && <span>{formatDate(process.started_at, i18n.resolvedLanguage)}</span>}</div></button>;
 }
 
-function TriageReviewPanel({ state, onRetry, onReviewChange, onFeedbackChange, onSaveReviews, onSaveFeedback, onDecision }: TriageReviewPanelProps) {
+function TriageReviewPanel({ state, onRetry, onReviewChange, onFeedbackChange, onSaveFeedback, onDecision }: TriageReviewPanelProps) {
   const { t } = useTranslation();
-  const [outcome, setOutcome] = useState<TriageDecisionInput["outcome"]>("APPROVED");
+  const [outcome, setOutcome] = useState<TriageDecisionInput["outcome"] | "">("");
   const [justification, setJustification] = useState("");
   const [activeSectionIndex, setActiveSectionIndex] = useState(0);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
   if (state.kind === "loading") return <Loading label={t("triage.loadingProposal")} />;
   if (state.kind === "error") return <div className="p-6"><Message action={onRetry} message={state.message} /></div>;
+  const readyState = state;
   const busy = state.isSavingReviews || state.isSavingFeedback || state.isDeciding;
   const fields = state.snapshot.form.fields.slice().sort((first, second) => first.order_index - second.order_index);
   const generalSection = t("triage.generalSection");
@@ -268,6 +270,48 @@ function TriageReviewPanel({ state, onRetry, onReviewChange, onFeedbackChange, o
         .getElementById(`triage-section-tab-${nextSectionIndex}`)
         ?.focus();
     });
+  }
+
+  function confirmDecision() {
+    const missingField = fields.find((field) => !readyState.reviews[field.field_key]);
+    if (missingField) {
+      const missingSection = missingField.section?.trim() || generalSection;
+      const missingSectionIndex = sections.indexOf(missingSection);
+      if (missingSectionIndex >= 0) setActiveSectionIndex(missingSectionIndex);
+      toast.error(t("triage.allFieldsReviewRequired"));
+      requestAnimationFrame(() => document.getElementById(`triage-review-${missingField.field_key}`)?.focus());
+      return;
+    }
+    const incompleteReview = fields
+      .map((field) => readyState.reviews[field.field_key])
+      .find((review) => review.status !== "APPROVED" && !review.comments?.trim());
+    if (incompleteReview) {
+      const incompleteField = fields.find((field) => field.field_key === incompleteReview.field_key);
+      const incompleteSection = incompleteField?.section?.trim() || generalSection;
+      const incompleteSectionIndex = sections.indexOf(incompleteSection);
+      if (incompleteSectionIndex >= 0) setActiveSectionIndex(incompleteSectionIndex);
+      toast.error(t("triage.reviewCommentRequired"));
+      requestAnimationFrame(() => document.getElementById(`triage-comment-${incompleteReview.field_key}`)?.focus());
+      return;
+    }
+    if (!outcome) {
+      toast.error(t("triage.finalDecisionRequired"));
+      document.getElementById("triage-final-outcome")?.focus();
+      return;
+    }
+    if (justification.trim().length < 3) {
+      toast.error(t("triage.finalJustificationRequired"));
+      document.getElementById("triage-final-justification")?.focus();
+      return;
+    }
+    if (outcome === "NEEDS_REVISION" && !fields.some((field) => {
+      const status = readyState.reviews[field.field_key]?.status;
+      return status === "NEEDS_REVISION" || status === "REJECTED";
+    })) {
+      toast.error(t("triage.correctionFieldRequired"));
+      return;
+    }
+    void onDecision({ outcome, justification });
   }
 
   return <div><header className="flex items-start justify-between gap-4 border-b border-slate-200 p-5 sm:p-6"><div className="min-w-0"><p className="font-mono text-xs font-bold text-teal-700">{state.snapshot.process.code}</p><h2 className="mt-1 truncate text-2xl font-bold text-slate-900">{state.snapshot.process.title}</h2><p className="mt-1 text-sm text-slate-500">{state.snapshot.process.template_key}</p></div><button aria-expanded={isHistoryOpen} aria-label={t(isHistoryOpen ? "triage.showAnalysis" : "triage.showHistory")} className={`inline-flex min-h-10 shrink-0 items-center gap-2 rounded-lg border px-4 text-sm font-bold outline-none transition focus-visible:ring-2 focus-visible:ring-teal-500 ${isHistoryOpen ? "border-teal-700 bg-teal-700 text-white" : "border-teal-700 bg-white text-teal-800 hover:bg-teal-50"}`} onClick={() => setIsHistoryOpen((current) => !current)} type="button"><History aria-hidden="true" className="size-4" />{t("triage.historyButton")}</button></header><div className="mx-5 mt-4 flex items-start gap-2 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2.5 text-sm leading-5 text-sky-900 sm:mx-6" role="note"><Info aria-hidden="true" className="mt-0.5 size-4 shrink-0" /><p>{t("triage.historyToggleHint")}</p></div>{isHistoryOpen ? <TriageTimelineView onClose={() => setIsHistoryOpen(false)} timeline={state.snapshot.timeline} /> : <div className="grid items-start gap-6 p-5 sm:p-6 xl:grid-cols-[minmax(0,1fr)_22rem] 2xl:grid-cols-[minmax(0,1fr)_24rem]">
@@ -340,11 +384,10 @@ function TriageReviewPanel({ state, onRetry, onReviewChange, onFeedbackChange, o
           </section>
         ))}
       </div>
-      <button className="inline-flex min-h-10 w-fit items-center gap-2 rounded-lg border border-teal-700 px-4 text-sm font-bold text-teal-800" disabled={busy || Object.keys(state.reviews).length === 0} onClick={onSaveReviews} type="button">{state.isSavingReviews ? <LoaderCircle aria-hidden="true" className="size-4 animate-spin" /> : <Save aria-hidden="true" className="size-4" />}{t("triage.saveReviews")}</button>
       <TriageAiReport disabled={busy} evaluation={state.snapshot.preEvaluation} feedback={state.feedback} onChange={onFeedbackChange} />
       {state.snapshot.preEvaluation && <button className="inline-flex min-h-10 w-fit items-center gap-2 rounded-lg border border-violet-700 px-4 text-sm font-bold text-violet-800" disabled={busy || Object.keys(state.feedback).length === 0} onClick={onSaveFeedback} type="button">{state.isSavingFeedback ? <LoaderCircle aria-hidden="true" className="size-4 animate-spin" /> : <Save aria-hidden="true" className="size-4" />}{t("triage.saveAiFeedback")}</button>}
     </div>
-    <aside className="sticky top-0 rounded-2xl border border-teal-200 bg-teal-50/60 p-5 shadow-sm"><div className="flex items-center gap-2"><ClipboardCheck aria-hidden="true" className="size-6 text-teal-700" /><h3 className="text-base font-bold text-slate-900">{t("triage.confirmDecision")}</h3></div><label className="mt-5 grid gap-1.5 text-sm font-bold text-slate-800">{t("triage.resultLabel")}<select className="min-h-11 rounded-xl border border-slate-300 bg-white px-3 font-normal" disabled={busy} onChange={(event) => setOutcome(event.target.value as TriageDecisionInput["outcome"])} value={outcome}><option value="APPROVED">{t("triage.approve")}</option><option value="NEEDS_REVISION">{t("triage.requestCorrection")}</option><option value="REJECTED">{t("triage.reject")}</option></select></label><label className="mt-4 grid gap-1.5 text-sm font-bold text-slate-800">{t("triage.justification")}<textarea className="min-h-36 resize-y rounded-xl border border-slate-300 bg-white p-3 font-normal" disabled={busy} maxLength={4000} onChange={(event) => setJustification(event.target.value)} value={justification} /></label><button className="mt-5 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-teal-700 px-4 text-sm font-bold text-white disabled:opacity-60" disabled={busy || justification.trim().length < 3} onClick={() => void onDecision({ outcome, justification })} type="button">{state.isDeciding && <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />}{t("triage.confirm")}</button></aside>
+    <aside className="sticky top-0 rounded-2xl border border-teal-200 bg-teal-50/60 p-5 shadow-sm"><div className="flex items-center gap-2"><ClipboardCheck aria-hidden="true" className="size-6 text-teal-700" /><h3 className="text-base font-bold text-slate-900">{t("triage.confirmDecision")}</h3></div><label className="mt-5 grid gap-1.5 text-sm font-bold text-slate-800">{t("triage.resultLabel")}<select className="min-h-11 rounded-xl border border-slate-300 bg-white px-3 font-normal" disabled={busy} id="triage-final-outcome" onChange={(event) => setOutcome(event.target.value as TriageDecisionInput["outcome"] | "")} value={outcome}><option disabled value="">{t("triage.selectFinalDecision")}</option><option value="APPROVED">{t("triage.approve")}</option><option value="NEEDS_REVISION">{t("triage.requestCorrection")}</option><option value="REJECTED">{t("triage.reject")}</option></select></label><label className="mt-4 grid gap-1.5 text-sm font-bold text-slate-800">{t("triage.justification")}<textarea className="min-h-36 resize-y rounded-xl border border-slate-300 bg-white p-3 font-normal" disabled={busy} id="triage-final-justification" maxLength={4000} onChange={(event) => setJustification(event.target.value)} value={justification} /></label><button className="mt-5 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-teal-700 px-4 text-sm font-bold text-white disabled:opacity-60" disabled={busy} onClick={confirmDecision} type="button">{state.isDeciding && <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />}{t("triage.confirm")}</button></aside>
   </div>}</div>;
 }
 
@@ -382,8 +425,8 @@ function formatTimelineEventFallback(value: string) {
 
 function TriageFieldCard({ field, value, review, disabled, onChange }: TriageFieldCardProps) {
   const { t } = useTranslation();
-  const status = review?.status ?? "APPROVED";
-  return <article className="rounded-xl border border-slate-200 p-4"><DynamicFormFieldValue field={field} value={value} /><div className="mt-3 grid gap-3 sm:grid-cols-[13rem_1fr]"><label className="grid gap-1.5 text-xs font-bold text-slate-700">{t("triage.review")}<select className="min-h-10 rounded-lg border border-slate-300 px-2 text-sm font-normal" disabled={disabled} onChange={(event) => onChange(event.target.value as TriageFieldReviewStatus, review?.comments ?? "")} value={status}>{REVIEW_STATUSES.map((item) => <option key={item} value={item}>{t(`triage.reviewStatuses.${item}`)}</option>)}</select></label><label className="grid gap-1.5 text-xs font-bold text-slate-700">{t("triage.comment")}<textarea className="min-h-20 rounded-lg border border-slate-300 p-2 text-sm font-normal" disabled={disabled} onChange={(event) => onChange(status, event.target.value)} value={review?.comments ?? ""} /></label></div></article>;
+  const status = review?.status ?? "";
+  return <article className="rounded-xl border border-slate-200 p-4"><DynamicFormFieldValue field={field} value={value} /><div className="mt-3 grid gap-3 sm:grid-cols-[13rem_1fr]"><label className="grid gap-1.5 text-xs font-bold text-slate-700">{t("triage.review")}<select className="min-h-10 rounded-lg border border-slate-300 px-2 text-sm font-normal" disabled={disabled} id={`triage-review-${field.field_key}`} onChange={(event) => onChange(event.target.value as TriageFieldReviewStatus, review?.comments ?? "")} value={status}><option disabled value="">{t("triage.registerDecision")}</option>{REVIEW_STATUSES.map((item) => <option key={item} value={item}>{t(`triage.reviewStatuses.${item}`)}</option>)}</select></label><label className="grid gap-1.5 text-xs font-bold text-slate-700">{t("triage.comment")}<textarea className="min-h-20 rounded-lg border border-slate-300 p-2 text-sm font-normal" disabled={disabled || !review} id={`triage-comment-${field.field_key}`} onChange={(event) => { if (review) onChange(review.status, event.target.value); }} value={review?.comments ?? ""} /></label></div></article>;
 }
 
 function TriageAiReport({ evaluation, feedback, disabled, onChange }: TriageAiReportProps) {

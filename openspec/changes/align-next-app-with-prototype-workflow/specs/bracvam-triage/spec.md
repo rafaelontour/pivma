@@ -48,17 +48,27 @@ O sistema SHALL apresentar junto à proposta o relatório automático disponíve
 
 ### Requirement: Revisão humana por campo
 
-O sistema SHALL permitir registrar em cada campo `APPROVED`, `NEEDS_REVISION` ou `REJECTED`, acompanhado de comentário quando exigido pelo contrato. A gravação MUST apresentar o estado confirmado pela API.
+O sistema SHALL exigir uma escolha explícita entre `APPROVED`, `NEEDS_REVISION` ou `REJECTED` para cada campo da proposta, acompanhado de comentário quando exigido pelo contrato. Nenhum resultado MUST ser selecionado implicitamente. Os pareceres MUST ser persistidos como parte da confirmação da decisão final, sem uma ação separada de salvamento, e a transição do processo MUST ocorrer somente depois que a API confirmar sua gravação.
 
-#### Scenario: Revisão registrada
+#### Scenario: Campo ainda não analisado
 
-- **WHEN** a pessoa escolhe um resultado válido e salva o comentário aplicável
-- **THEN** o sistema atualiza a revisão do campo sem alterar o valor submetido pelo proponente
+- **WHEN** a pessoa ainda não escolheu um resultado para um campo
+- **THEN** o seletor apresenta Registrar decisão e não assume aprovação ou outro parecer
+
+#### Scenario: Todos os campos são analisados
+
+- **WHEN** a pessoa escolhe um resultado válido para cada campo, informa os comentários aplicáveis e confirma a decisão final
+- **THEN** o sistema grava todos os pareceres antes da decisão sem alterar os valores submetidos pelo proponente
 
 #### Scenario: Revisão incompleta
 
-- **WHEN** o resultado escolhido exige justificativa e ela não foi informada
-- **THEN** o sistema impede a gravação e indica a informação pendente
+- **WHEN** algum campo não possui resultado explícito ou um resultado exige comentário e ele não foi informado
+- **THEN** o sistema impede a confirmação da decisão final, leva a pessoa ao campo pendente e indica a informação necessária
+
+#### Scenario: Gravação dos pareceres falha
+
+- **WHEN** a API não confirma a gravação do conjunto completo de pareceres
+- **THEN** o sistema preserva a análise local, comunica a falha e não solicita a transição final do processo
 
 ### Requirement: Feedback humano sobre critérios da IA
 
@@ -76,7 +86,7 @@ O sistema SHALL permitir classificar cada critério automático como concordante
 
 ### Requirement: Decisão final da triagem
 
-O sistema SHALL permitir concluir a triagem somente quando as validações requeridas estiverem satisfeitas. A decisão `APPROVED` MUST mover o processo para `PLANNING`, `NEEDS_REVISION` MUST devolvê-lo para `SUBMISSION` e `REJECTED` MUST movê-lo para `CLOSED`.
+O sistema SHALL exigir a escolha explícita do resultado final e uma justificativa antes de concluir a triagem. A confirmação MUST permanecer indisponível enquanto qualquer campo estiver sem parecer válido. Depois de persistir todos os pareceres, a decisão `APPROVED` MUST mover o processo para `PLANNING`, `NEEDS_REVISION` MUST devolvê-lo para `SUBMISSION` e `REJECTED` MUST movê-lo para `CLOSED`.
 
 #### Scenario: Proposta aprovada
 
@@ -87,6 +97,11 @@ O sistema SHALL permitir concluir a triagem somente quando as validações reque
 
 - **WHEN** a pessoa confirma `NEEDS_REVISION` com a justificativa aplicável
 - **THEN** o sistema registra a decisão, devolve o processo para `SUBMISSION` e disponibiliza a orientação ao proponente
+
+#### Scenario: Correção sem campo indicado
+
+- **WHEN** a pessoa escolhe `NEEDS_REVISION` sem marcar nenhum campo como `NEEDS_REVISION` ou `REJECTED`
+- **THEN** o sistema impede a confirmação e solicita a indicação de ao menos um campo corrigível
 
 #### Scenario: Proposta rejeitada
 

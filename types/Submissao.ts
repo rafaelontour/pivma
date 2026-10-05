@@ -151,11 +151,6 @@ export type SubmissionReturnReviewResult = {
   submission_run?: number | null;
 };
 
-export type SubmissionReturnReviewSnapshot = {
-  returnReview: SubmissionReturnReview;
-  reviews: Record<string, DynamicFormReview>;
-};
-
 export type DynamicFormReview = {
   status: string;
   comments?: string | null;

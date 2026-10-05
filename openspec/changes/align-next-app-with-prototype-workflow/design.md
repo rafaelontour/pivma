@@ -99,13 +99,15 @@ Associações serão tratadas como um conjunto completo porque o contrato de des
 
 Alternativa considerada: salvar cada seletor isoladamente. Foi rejeitada porque o endpoint de substituição em lote poderia apagar silenciosamente associações mantidas por outro campo ou editor.
 
-### 7. Triagem usa gravações granulares e decisão consolidada não otimista
+### 7. Triagem confirma pareceres completos antes da decisão consolidada
 
-A página carrega fila, snapshot da proposta, relatório automático, revisões por campo, feedback por critério e timeline como recursos distintos. Revisões e feedbacks são gravados individualmente e reconciliados com a resposta da API. A decisão final requer confirmação e só altera a interface após a resposta e uma nova consulta ao processo. Conflitos de estado recarregam o dado vigente e preservam texto local ainda não submetido quando possível.
+A página carrega fila, snapshot da proposta, relatório automático, revisões por campo, feedback por critério e timeline como recursos distintos. Cada seletor de parecer começa sem resultado, com Registrar decisão como opção de orientação, e a confirmação final exige uma escolha explícita para todos os campos e o comentário aplicável. Não existe botão separado para salvar pareceres: ao confirmar, o cliente envia o conjunto completo ao endpoint de revisões e somente depois de seu sucesso envia a decisão final. Se a primeira operação falhar, nenhuma transição é solicitada e a análise local é preservada. O feedback por critério mantém gravação própria porque pertence a outro recurso do contrato.
+
+A decisão final também começa sem resultado implícito, requer justificativa e só altera a interface após a resposta e uma nova consulta ao processo. Conflitos de estado recarregam o dado vigente e preservam texto local ainda não submetido quando possível. Quando uma correção retorna a `SUBMISSION`, a tela do proponente consulta o retorno e os pareceres persistidos na API; armazenamento da sessão do navegador não substitui essas fontes autoritativas.
 
 O resultado automático permanece imutável. Concordância, discordância ou inconclusão são registros humanos vinculados à execução e ao critério, nunca alterações do payload histórico.
 
-Alternativa considerada: manter toda a análise local e enviar somente a decisão final. Foi rejeitada porque perderia autoria, recuperação parcial e rastreabilidade granular.
+Alternativa considerada: manter um botão independente para salvar pareceres. Foi rejeitada porque a ação ficava distante da decisão final e permitia concluir a triagem sem persistir escolhas ainda locais. Os dois endpoints publicados continuam sendo usados em sequência para preservar autoria e rastreabilidade.
 
 ### 8. SSE será retransmitido pela origem interna e reconciliado com histórico
 

@@ -95,7 +95,6 @@ export type TriageReviewPanelProps = {
   onRetry: () => void;
   onReviewChange: (fieldKey: string, status: TriageFieldReviewStatus, comments: string) => void;
   onFeedbackChange: (itemId: string, verdict: TriageFeedbackVerdict, reason: string) => void;
-  onSaveReviews: () => void;
   onSaveFeedback: () => void;
   onDecision: (input: TriageDecisionInput) => Promise<boolean>;
 };
