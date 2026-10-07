@@ -11,7 +11,7 @@ O frontend Next.js implementa autenticação, administração básica, Kanban e 
 - **BREAKING**: substituir o título técnico automático da nova submissão por um título significativo informado pelo proponente antes da criação do processo.
 - **BREAKING**: remover a ação de excluir rascunho enquanto o backend de referência não publicar `DELETE /processes/{id}`, evitando manter uma operação que sempre falha.
 - Ampliar o formulário dinâmico para respeitar seções e indicar campos avaliados por IA, preservando rascunhos, salvamento explícito, retomada e acompanhamento já existentes.
-- Integrar a pré-avaliação assíncrona após o envio, exibindo progresso, síntese, evidências e pontos de atenção e oferecendo, quando necessário, correção com reenvio ou solicitação de intervenção direta do BraCVAM.
+- Integrar a pré-avaliação assíncrona após o envio, exibindo progresso, síntese, evidências e pontos de atenção e oferecendo, quando necessário, correção com reenvio ou solicitação de intervenção direta do BraCVAM. Rascunho existirá somente antes do primeiro envio; depois disso, inclusive durante correções, o processo continuará classificado como submissão.
 - Adicionar a área de triagem humana com leitura da proposta, feedback sobre cada critério da IA, parecer por campo, decisão consolidada e linha do tempo auditável.
 - Alinhar o Kanban aos estados reais `SUBMISSION`, `AI_PRE_EVALUATION`, `TRIAGE`, `PLANNING` e `CLOSED`, mantendo o quadro somente leitura e usando `triage.review` para identificar o acesso da equipe BraCVAM.
 - Adicionar observabilidade administrativa de execuções de IA e eventos operacionais, com histórico, filtros, agrupamento por correlação e atualização em tempo real por SSE.

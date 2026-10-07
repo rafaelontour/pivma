@@ -60,7 +60,7 @@
 - [x] 5.7 Implementar serviço e Route Handler para consultar a pré-avaliação pelo endpoint publicado sem reintroduzir avaliação imediata
 - [x] 5.8 Implementar acompanhamento com uma requisição em voo, cancelamento, pausa por visibilidade, atualização manual e reconsulta do processo
 - [x] 5.9 Apresentar progresso e distinguir resultado positivo, negativo, falha técnica e submissão que seguiu sem IA
-- [x] 5.10 Recolocar em Meus rascunhos o processo devolvido a `SUBMISSION`, exibindo pontos por campo/critério e permitindo corrigir, salvar e reenviar
+- [x] 5.10 Manter em Submissões todo processo já enviado, permitir edição somente dos campos apontados, controlar Salvar correção/Editar e a contagem pendente por campo, e habilitar Confirmar e reenviar apenas depois que todas as correções estiverem concluídas
 - [x] 5.11 Implementar revisão humana direta com confirmação acessível, justificativa opcional, proteção contra duplicidade e reconsulta até `TRIAGE`
 - [ ] 5.12 Verificar criação concorrente, anexos, salvamento explícito, envio, transições, polling, retorno para correção, reenvio e revisão direta contra a API atual
   - Lint, build, rotas internas e recusas sem sessão foram verificados; o ciclo positivo completo aguarda uma sessão de proponente e dados elegíveis na API publicada.
@@ -79,8 +79,10 @@
 - [x] 6.9 Implementar linha do tempo ordenada com transições, execuções, revisões, feedbacks e decisão conforme autorização
   - Contratos confrontados com o OpenAPI publicado em 11/09/2026; lint, build e recusa `401` nas cinco rotas internas foram verificados.
 - [ ] 6.10 Verificar triagem parcial, retomada, três decisões finais, conflito concorrente, timeline e negação para sessão sem `triage.review`
+  - As validações dos pareceres por campo estão temporariamente desativadas na interface para facilitar estes testes; o botão de confirmação permanece desabilitado até selecionar o resultado final e informar uma justificativa válida, e o backend permanece autoritativo.
   - A negação `401`, validações de entrada e a integração controlada foram verificadas; pareceres, conflito e os três desfechos aguardam uma sessão com `triage.review` e processos reais em `TRIAGE`.
 - [x] 6.11 Exigir decisão explícita para todos os campos e para o resultado final, remover o salvamento separado de pareceres e persistir o conjunto completo antes de solicitar a transição
+- [x] 6.12 Comparar as duas versões mais recentes, sinalizar os campos corrigidos e exibir à direita do cabeçalho uma lista com campo, parecer e comentário, oferecendo navegação direta para cada ponto no modal ampliado
 
 ## 7. Kanban e navegação
 

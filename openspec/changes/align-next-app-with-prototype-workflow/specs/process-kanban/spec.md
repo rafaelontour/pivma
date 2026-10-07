@@ -52,3 +52,12 @@ O navegador MUST usar somente rotas internas da aplicação para consultar proce
 
 - **WHEN** o quadro carrega ou revalida processos
 - **THEN** o navegador consulta uma rota interna sem receber a URL externa ou a credencial de sessão
+
+### Requirement: Área ampliada para análise de correções
+
+O modal de análise da BraCVAM SHALL usar aproximadamente 95% da largura e 92% da altura da viewport para acomodar a lista de campos corrigidos, o formulário e a decisão final sem ocultar ações essenciais.
+
+#### Scenario: Correção é aberta no Kanban
+
+- **WHEN** a BraCVAM abre para análise uma submissão corrigida
+- **THEN** o modal ampliado apresenta a navegação dos campos corrigidos e o formulário na mesma área de trabalho

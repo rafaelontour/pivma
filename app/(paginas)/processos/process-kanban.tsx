@@ -584,7 +584,7 @@ function ProcessAnalysisDialog({
         className="flex min-h-0 max-w-none flex-col overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 shadow-2xl"
         ref={dialogRef}
         role="dialog"
-        style={{ height: "85dvh", width: "85vw" }}
+        style={{ height: "92dvh", width: "95vw" }}
         tabIndex={-1}
       >
         <header className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200 bg-white px-5 py-4">

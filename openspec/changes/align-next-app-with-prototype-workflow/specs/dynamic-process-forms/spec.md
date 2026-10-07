@@ -109,7 +109,7 @@ O sistema SHALL apresentar Enviar para análise ao lado de Salvar rascunho enqua
 
 ### Requirement: Acompanhamento das submissões enviadas
 
-O sistema SHALL listar na aba Submissões os processos em que a sessão possui o papel local `proponent` e que estejam em `AI_PRE_EVALUATION`, `TRIAGE`, `PLANNING`, `CLOSED` ou em outro estado posterior conhecido. Um processo devolvido para correção no estado `SUBMISSION` MUST voltar a Meus rascunhos com o resultado da pré-avaliação disponível para orientar a revisão.
+O sistema SHALL listar na aba Submissões os processos em que a sessão possui o papel local `proponent` e que tenham sido enviados ao menos uma vez. Meus rascunhos MUST conter somente processos que nunca foram enviados ao BraCVAM. Uma submissão devolvida para correção MUST permanecer em Submissões com o resultado da avaliação disponível para orientar a revisão.
 
 #### Scenario: Submissões disponíveis
 
@@ -129,7 +129,7 @@ O sistema SHALL listar na aba Submissões os processos em que a sessão possui o
 #### Scenario: Processo retorna para correção
 
 - **WHEN** uma pré-avaliação negativa ou uma decisão de triagem devolve o processo para `SUBMISSION`
-- **THEN** o processo deixa a aba Submissões e reaparece em Meus rascunhos com a indicação de correção pendente
+- **THEN** o processo permanece na aba Submissões com a indicação de correção pendente e não aparece em Meus rascunhos
 
 #### Scenario: Nenhuma submissão enviada
 
@@ -183,7 +183,9 @@ O sistema SHALL acompanhar a execução assíncrona da pré-avaliação enquanto
 
 ### Requirement: Tratamento de pré-avaliação negativa
 
-O sistema SHALL apresentar ao proponente um resumo por campo e por critério quando a pré-avaliação devolver o processo para `SUBMISSION`. A pessoa MUST poder escolher entre corrigir e reenviar o formulário ou solicitar revisão humana direta.
+O sistema SHALL apresentar ao proponente um resumo por campo e por critério quando a pré-avaliação ou a triagem devolver o processo para correção. Durante a correção, somente campos marcados como `NEEDS_REVISION` ou `REJECTED` MUST aceitar edição. A ação Confirmar e reenviar MUST permanecer desabilitada até que todos os campos apontados tenham sido alterados e o formulário esteja válido. Ao confirmar, o sistema MUST registrar a resposta de correção e concluir imediatamente o novo envio, mantendo o processo em Submissões.
+
+Cada campo corrigível SHALL oferecer Salvar correção e Editar. Salvar correção MUST bloquear novamente o campo e reduzir sua contagem pendente; Editar MUST liberar o campo e restaurar a contagem. Essa confirmação intermediária é estado local da interface até o reenvio, pois o contrato publicado não oferece persistência isolada por campo.
 
 #### Scenario: Resultado negativo recebido
 
@@ -192,8 +194,28 @@ O sistema SHALL apresentar ao proponente um resumo por campo e por critério qua
 
 #### Scenario: Proponente escolhe corrigir
 
-- **WHEN** a pessoa altera os valores, salva e envia novamente
-- **THEN** o sistema preserva o histórico anterior e inicia uma nova passagem pelo fluxo aplicável
+- **WHEN** a pessoa altera todos os campos apontados e aciona Confirmar e reenviar
+- **THEN** o sistema registra a escolha de correção, conclui o novo envio, preserva o histórico anterior e inicia uma nova passagem pelo fluxo aplicável sem mover o processo para Meus rascunhos
+
+#### Scenario: Correção ainda incompleta
+
+- **WHEN** ao menos um campo apontado permanece com o valor devolvido ou o formulário corrigido é inválido
+- **THEN** o sistema mantém Confirmar e reenviar desabilitado
+
+#### Scenario: Campo não apontado pela BraCVAM
+
+- **WHEN** o formulário de correção contém um campo sem parecer `NEEDS_REVISION` ou `REJECTED`
+- **THEN** o sistema apresenta esse campo somente para consulta
+
+#### Scenario: Correção de campo é salva
+
+- **WHEN** a pessoa altera um campo apontado e aciona Salvar correção
+- **THEN** o sistema bloqueia o campo, marca a correção como salva e reduz em um a contagem pendente da seção
+
+#### Scenario: Correção salva volta à edição
+
+- **WHEN** a pessoa aciona Editar em um campo com correção salva
+- **THEN** o sistema libera o campo e acrescenta novamente um ponto à contagem pendente
 
 ### Requirement: Solicitação de revisão humana direta
 

@@ -151,6 +151,19 @@ export type SubmissionReturnReviewResult = {
   submission_run?: number | null;
 };
 
+export type SubmissionVersionSummary = {
+  run_number: number;
+  submitted_at: string;
+  returned_at: string;
+  title: string;
+  return_justification: string;
+};
+
+export type SubmissionVersion = SubmissionVersionSummary & {
+  values: Record<string, unknown>;
+  attachments: Record<string, unknown>[];
+};
+
 export type DynamicFormReview = {
   status: string;
   comments?: string | null;
@@ -333,6 +346,7 @@ export type SubmissionDialogContentProps = {
   returnReview?: SubmissionReturnReview | null;
   returnChoice: SubmissionReturnReviewChoice;
   returnJustification: string;
+  savedCorrectionFieldKeys: ReadonlySet<string>;
   activeSectionIndex: number;
   onFieldChange: (
     fieldKey: string,
@@ -344,6 +358,8 @@ export type SubmissionDialogContentProps = {
   onReturnChoiceChange: (choice: SubmissionReturnReviewChoice) => void;
   onReturnJustificationChange: (justification: string) => void;
   onReturnResponse: () => void;
+  onSaveCorrection: (fieldKey: string) => void;
+  onEditCorrection: (fieldKey: string) => void;
 };
 
 export type SubmissionTrackingCardProps = {

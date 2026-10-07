@@ -56,6 +56,7 @@ export type TriageSnapshot = {
   form: SubmissionForm;
   preEvaluation: SubmissionPreEvaluation | null;
   timeline: TriageTimeline;
+  correctedFieldKeys: string[];
 };
 
 export type TriageQueueState =
@@ -103,6 +104,7 @@ export type TriageFieldCardProps = {
   field: SubmissionForm["fields"][number];
   value: unknown;
   review: TriageFieldReviewInput | undefined;
+  corrected: boolean;
   disabled: boolean;
   onChange: (status: TriageFieldReviewStatus, comments: string) => void;
 };

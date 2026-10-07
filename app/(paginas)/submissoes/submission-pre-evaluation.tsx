@@ -55,7 +55,11 @@ export function SubmissionTrackingCard({ submission, templateName, onProcessChan
       const processPayload = await processResponse.json().catch(() => null);
       if (processResponse.ok && isProcess(processPayload)) {
         if (processPayload.status !== process.status) onProcessChanged();
-        setProcess(processPayload);
+        setProcess({
+          ...processPayload,
+          has_been_submitted: process.has_been_submitted,
+          awaiting_correction: process.awaiting_correction,
+        });
       }
     } catch {
       if (!controller.signal.aborted) setError(t("submissionTracking.refreshInterrupted"));
@@ -63,7 +67,7 @@ export function SubmissionTrackingCard({ submission, templateName, onProcessChan
       if (!controller.signal.aborted) setIsRefreshing(false);
       inFlight.current = false;
     }
-  }, [onProcessChanged, process.id, process.status, t]);
+  }, [onProcessChanged, process.awaiting_correction, process.has_been_submitted, process.id, process.status, t]);
 
   useEffect(() => {
     const initial = window.setTimeout(() => void refresh(), 0);
@@ -79,6 +83,9 @@ export function SubmissionTrackingCard({ submission, templateName, onProcessChan
     };
   }, [process.status, refresh]);
 
+  const canOpenCorrection =
+    hasReturnReview || process.awaiting_correction === true;
+
   return (
     <article className="flex min-h-52 flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-300/30">
       <div className="flex items-start justify-between gap-3"><div className="grid size-10 shrink-0 place-items-center rounded-xl bg-teal-100 text-teal-800"><Bot aria-hidden="true" className="size-5" /></div><span className="max-w-48 rounded-full bg-teal-100 px-2.5 py-1 text-center text-[11px] font-bold uppercase tracking-wide text-teal-800">{t(`submissionTracking.statuses.${process.status}`, { defaultValue: process.status })}</span></div>
@@ -88,7 +95,7 @@ export function SubmissionTrackingCard({ submission, templateName, onProcessChan
       {process.status === "AI_PRE_EVALUATION" && <div className="mt-4 flex items-center gap-2 rounded-xl bg-violet-50 p-3 text-xs font-semibold text-violet-900"><LoaderCircle aria-hidden="true" className="size-4 animate-spin" />{t("submissionTracking.inProgress")}</div>}
       {evaluation && <SubmissionPreEvaluationPanel compact evaluation={evaluation} />}
       {!evaluation && process.status !== "AI_PRE_EVALUATION" && <p className="mt-4 rounded-xl bg-slate-50 p-3 text-xs leading-5 text-slate-600">{t("submissionTracking.noReport")}</p>}
-      {hasReturnReview && <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-3"><div className="flex items-start gap-2"><FilePenLine aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-amber-800" /><p className="text-xs font-semibold leading-5 text-amber-950">{t("submissionTracking.returnReviewAvailable")}</p></div><button className="mt-3 inline-flex min-h-9 items-center gap-2 rounded-lg bg-amber-800 px-3 text-xs font-bold text-white outline-none hover:bg-amber-900 focus-visible:ring-2 focus-visible:ring-amber-500" onClick={() => onOpenReturnReview(process)} type="button">{t("submissionTracking.openReturnReview")}</button></div>}
+      {canOpenCorrection && <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-3"><div className="flex items-start gap-2"><FilePenLine aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-amber-800" /><p className="text-xs font-semibold leading-5 text-amber-950">{t("submissionTracking.returnReviewAvailable")}</p></div><button className="mt-3 inline-flex min-h-9 items-center gap-2 rounded-lg bg-amber-800 px-3 text-xs font-bold text-white outline-none hover:bg-amber-900 focus-visible:ring-2 focus-visible:ring-amber-500" onClick={() => onOpenReturnReview(process)} type="button">{t("submissionTracking.openReturnReview")}</button></div>}
       {error && <p className="mt-3 text-xs leading-5 text-rose-700" role="alert">{error}</p>}
       <button className="mt-4 inline-flex min-h-9 w-fit items-center gap-2 rounded-lg border border-teal-700 px-3 text-xs font-bold text-teal-800 outline-none hover:bg-teal-50 focus-visible:ring-2 focus-visible:ring-teal-500 disabled:opacity-60" disabled={isRefreshing} onClick={() => void refresh()} type="button">{isRefreshing ? <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" /> : <RefreshCw aria-hidden="true" className="size-3.5" />}{t("submissionTracking.refresh")}</button>
     </article>

@@ -50,6 +50,8 @@ O sistema SHALL apresentar junto à proposta o relatório automático disponíve
 
 O sistema SHALL exigir uma escolha explícita entre `APPROVED`, `NEEDS_REVISION` ou `REJECTED` para cada campo da proposta, acompanhado de comentário quando exigido pelo contrato. Nenhum resultado MUST ser selecionado implicitamente. Os pareceres MUST ser persistidos como parte da confirmação da decisão final, sem uma ação separada de salvamento, e a transição do processo MUST ocorrer somente depois que a API confirmar sua gravação.
 
+Quando houver ao menos duas versões da submissão, o sistema SHALL comparar os valores persistidos da rodada anterior e da rodada atual e indicar em cada campo da triagem se ele foi corrigido pelo proponente.
+
 #### Scenario: Campo ainda não analisado
 
 - **WHEN** a pessoa ainda não escolheu um resultado para um campo
@@ -69,6 +71,17 @@ O sistema SHALL exigir uma escolha explícita entre `APPROVED`, `NEEDS_REVISION`
 
 - **WHEN** a API não confirma a gravação do conjunto completo de pareceres
 - **THEN** o sistema preserva a análise local, comunica a falha e não solicita a transição final do processo
+
+#### Scenario: Submissão corrigida retorna à BraCVAM
+
+- **WHEN** a versão mais recente possui valor diferente da versão anterior para um campo
+- **THEN** a triagem destaca esse campo como Corrigido pelo proponente
+
+#### Scenario: BraCVAM navega pelos campos corrigidos
+
+- **WHEN** a triagem possui campos alterados na última correção
+- **THEN** o lado direito do cabeçalho apresenta uma lista com o nome de cada campo, seu parecer anterior e o comentário do pedido de correção
+- **AND** cada item muda para a seção correspondente, rola até o campo e posiciona o foco em seu parecer
 
 ### Requirement: Feedback humano sobre critérios da IA
 

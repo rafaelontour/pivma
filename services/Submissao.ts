@@ -4,7 +4,6 @@ import { isAxiosError } from "axios";
 import { tryit } from "radash";
 import { getApiOrigin, http } from "./Http";
 import { normalizeProcessInstance } from "./Processo";
-import { getTriageTimeline } from "./Triagem";
 import type { ProcessInstance } from "@/types/Processo";
 import type { CurrentSessionUser } from "@/types/Autenticacao";
 import type { ApiRecord, ServiceResult } from "@/types/Servico";
@@ -23,6 +22,8 @@ import type {
   SubmissionReturnReviewInput,
   SubmissionReturnReviewResult,
   SubmissionTemplate,
+  SubmissionVersion,
+  SubmissionVersionSummary,
   SubmitSubmissionResult,
 } from "@/types/Submissao";
 
@@ -192,22 +193,118 @@ async function listProponentProcessesBySubmissionState(
     const submissionHistory = await Promise.all(
       batch.map(async (process, batchIndex) => {
         const form = forms[batchIndex];
-        if (!form.ok || form.data.is_submitted) return false;
-        const timeline = await getTriageTimeline(accessToken, process.id);
-        if (!timeline.ok) return true;
-        return timeline.data.events.some((event) => event.event_type === "SUBMISSION_SUBMITTED");
+        if (!form.ok || form.data.is_submitted) {
+          return { ok: true as const, data: false };
+        }
+        if (Object.values(form.data.reviews).some(isCorrectableReview)) {
+          return { ok: true as const, data: true };
+        }
+        return hasSubmissionVersions(accessToken, process.id);
       }),
     );
+    const failedHistory = submissionHistory.find((result) => !result.ok);
+    if (failedHistory && !failedHistory.ok) {
+      return { ok: false, status: failedHistory.status };
+    }
 
     batch.forEach((process, batchIndex) => {
       const form = forms[batchIndex];
-      if (form.ok && form.data.is_submitted === isSubmitted) {
-        matchingProcesses.push({ ...process, has_been_submitted: form.data.is_submitted || submissionHistory[batchIndex] });
+      if (form.ok) {
+        const historyResult = submissionHistory[batchIndex];
+        const hasBeenSubmitted =
+          form.data.is_submitted || (historyResult.ok && historyResult.data);
+        const matchesRequestedList = isSubmitted
+          ? hasBeenSubmitted
+          : !hasBeenSubmitted;
+
+        if (matchesRequestedList) {
+          matchingProcesses.push({
+            ...process,
+            has_been_submitted: hasBeenSubmitted,
+            awaiting_correction: !form.data.is_submitted && hasBeenSubmitted,
+          });
+        }
       }
     });
   }
 
   return { ok: true, data: matchingProcesses };
+}
+
+async function hasSubmissionVersions(
+  accessToken: string,
+  processId: string,
+): Promise<ServiceResult<boolean>> {
+  const [error, response] = await tryit(() =>
+    http.get<unknown>(`/processes/${processId}/submission-versions`, {
+      headers: { Cookie: `access_token=${accessToken}` },
+      params: { page: 1, per_page: 1 },
+    }),
+  )();
+
+  if (error) {
+    return { ok: false, status: getStatus(error) };
+  }
+
+  if (
+    !isRecord(response.data) ||
+    !Array.isArray(response.data.data) ||
+    !isRecord(response.data.pagination) ||
+    typeof response.data.pagination.total_items !== "number"
+  ) {
+    return { ok: false };
+  }
+
+  return {
+    ok: true,
+    data:
+      response.data.pagination.total_items > 0 || response.data.data.length > 0,
+  };
+}
+
+export async function getCorrectedSubmissionFieldKeys(
+  accessToken: string,
+  processId: string,
+): Promise<ServiceResult<string[]>> {
+  const [listError, listResponse] = await tryit(() =>
+    http.get<unknown>(`/processes/${processId}/submission-versions`, {
+      headers: { Cookie: `access_token=${accessToken}` },
+      params: { page: 1, per_page: 100 },
+    }),
+  )();
+
+  if (listError) return { ok: false, status: getStatus(listError) };
+  const versions = normalizeSubmissionVersionList(listResponse.data);
+  if (!versions) return { ok: false };
+  const latestVersions = versions
+    .slice()
+    .sort((first, second) => second.run_number - first.run_number)
+    .slice(0, 2);
+  if (latestVersions.length < 2) return { ok: true, data: [] };
+
+  const details = await Promise.all(
+    latestVersions.map(async (version) => {
+      const [error, response] = await tryit(() =>
+        http.get<unknown>(
+          `/processes/${processId}/submission-versions/${version.run_number}`,
+          { headers: { Cookie: `access_token=${accessToken}` } },
+        ),
+      )();
+      if (error) return { ok: false as const, status: getStatus(error) };
+      const data = normalizeSubmissionVersion(response.data);
+      return data
+        ? { ok: true as const, data }
+        : { ok: false as const, status: undefined };
+    }),
+  );
+  const failed = details.find((detail) => !detail.ok);
+  if (failed && !failed.ok) return { ok: false, status: failed.status };
+  if (!details[0].ok || !details[1].ok) return { ok: false };
+
+  return {
+    ok: true,
+    data: compareSubmissionVersions(details[1].data, details[0].data),
+  };
 }
 
 export async function getSubmissionForm(
@@ -494,6 +591,124 @@ function isReturnReviewChoice(value: unknown): value is SubmissionReturnReviewRe
 
 function isReturnReviewSource(value: unknown): value is SubmissionReturnReview["source"] {
   return value === "AI_PRE_EVALUATION" || value === "TRIAGE";
+}
+
+function normalizeSubmissionVersionList(
+  value: unknown,
+): SubmissionVersionSummary[] | null {
+  if (!isRecord(value) || !Array.isArray(value.data)) return null;
+  const versions = value.data.map(normalizeSubmissionVersionSummary);
+  return versions.every((version) => version !== null)
+    ? (versions as SubmissionVersionSummary[])
+    : null;
+}
+
+function normalizeSubmissionVersionSummary(
+  value: unknown,
+): SubmissionVersionSummary | null {
+  if (
+    !isRecord(value) ||
+    typeof value.run_number !== "number" ||
+    typeof value.submitted_at !== "string" ||
+    typeof value.returned_at !== "string" ||
+    typeof value.title !== "string" ||
+    typeof value.return_justification !== "string"
+  ) {
+    return null;
+  }
+  return value as SubmissionVersionSummary;
+}
+
+function normalizeSubmissionVersion(value: unknown): SubmissionVersion | null {
+  const summary = normalizeSubmissionVersionSummary(value);
+  if (
+    !summary ||
+    !isRecord(value) ||
+    !isRecord(value.values) ||
+    !Array.isArray(value.attachments) ||
+    !value.attachments.every(isRecord)
+  ) {
+    return null;
+  }
+  return value as SubmissionVersion;
+}
+
+function compareSubmissionVersions(
+  previous: SubmissionVersion,
+  current: SubmissionVersion,
+) {
+  const correctedKeys = new Set<string>();
+  const valueKeys = new Set([
+    ...Object.keys(previous.values),
+    ...Object.keys(current.values),
+  ]);
+  for (const fieldKey of valueKeys) {
+    if (!areSubmissionValuesEqual(previous.values[fieldKey], current.values[fieldKey])) {
+      correctedKeys.add(fieldKey);
+    }
+  }
+
+  const previousAttachments = groupAttachmentsByField(previous.attachments);
+  const currentAttachments = groupAttachmentsByField(current.attachments);
+  const attachmentKeys = new Set([
+    ...previousAttachments.keys(),
+    ...currentAttachments.keys(),
+  ]);
+  for (const fieldKey of attachmentKeys) {
+    if (
+      !areSubmissionValuesEqual(
+        previousAttachments.get(fieldKey) ?? [],
+        currentAttachments.get(fieldKey) ?? [],
+      )
+    ) {
+      correctedKeys.add(fieldKey);
+    }
+  }
+
+  return [...correctedKeys];
+}
+
+function groupAttachmentsByField(attachments: Record<string, unknown>[]) {
+  const grouped = new Map<string, Record<string, unknown>[]>();
+  for (const attachment of attachments) {
+    if (typeof attachment.field_key !== "string") continue;
+    const values = grouped.get(attachment.field_key) ?? [];
+    values.push(attachment);
+    grouped.set(attachment.field_key, values);
+  }
+  return grouped;
+}
+
+function areSubmissionValuesEqual(first: unknown, second: unknown): boolean {
+  if (Object.is(first, second)) return true;
+  if (Array.isArray(first) && Array.isArray(second)) {
+    return (
+      first.length === second.length &&
+      first.every((value, index) =>
+        areSubmissionValuesEqual(value, second[index]),
+      )
+    );
+  }
+  if (isRecord(first) && isRecord(second)) {
+    const firstKeys = Object.keys(first).sort();
+    const secondKeys = Object.keys(second).sort();
+    return (
+      firstKeys.length === secondKeys.length &&
+      firstKeys.every(
+        (key, index) =>
+          key === secondKeys[index] &&
+          areSubmissionValuesEqual(first[key], second[key]),
+      )
+    );
+  }
+  return false;
+}
+
+function isCorrectableReview(value: unknown) {
+  return (
+    isRecord(value) &&
+    (value.status === "NEEDS_REVISION" || value.status === "REJECTED")
+  );
 }
 
 function isAttachmentUpload(value: unknown): value is SubmissionAttachmentUploadResult {

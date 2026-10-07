@@ -208,6 +208,33 @@ export function buildDynamicFormInputs(form: SubmissionForm) {
   return inputs;
 }
 
+export function getPendingSubmissionCorrectionField(
+  form: SubmissionForm,
+  inputs: SubmissionFieldInputs,
+) {
+  return [...form.fields]
+    .sort((first, second) => first.order_index - second.order_index)
+    .find((field) => {
+      const review = form.reviews[field.field_key];
+      const requiresCorrection =
+        review?.status === "NEEDS_REVISION" || review?.status === "REJECTED";
+
+      return (
+        requiresCorrection &&
+        !isSubmissionCorrectionFieldChanged(form, inputs, field.field_key)
+      );
+    });
+}
+
+export function isSubmissionCorrectionFieldChanged(
+  form: SubmissionForm,
+  inputs: SubmissionFieldInputs,
+  fieldKey: string,
+) {
+  const initialInputs = buildDynamicFormInputs(form);
+  return !Object.is(inputs[fieldKey], initialInputs[fieldKey]);
+}
+
 export function buildDynamicFormValues(
   fields: DynamicFormField[],
   inputs: SubmissionFieldInputs,

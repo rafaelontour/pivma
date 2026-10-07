@@ -87,7 +87,7 @@ SUBMISSION -> AI_PRE_EVALUATION -> TRIAGE -> PLANNING
                     +-- revisão humana direta --> TRIAGE
 ```
 
-O acompanhamento por polling terá uma única requisição em voo, intervalo centralizado, pausa pela Page Visibility API, cancelamento ao desmontar e atualização manual. Um resultado negativo ou falho reabre o processo somente quando o backend o devolver a `SUBMISSION`; o cliente exibe a evidência e permite correção ou revisão direta conforme elegibilidade. Cada reenvio preserva as execuções anteriores no histórico.
+O acompanhamento por polling terá uma única requisição em voo, intervalo centralizado, pausa pela Page Visibility API, cancelamento ao desmontar e atualização manual. Um resultado negativo ou falho reabre o processo somente quando o backend liberar a correção; o cliente exibe a evidência e permite correção ou revisão direta conforme elegibilidade. A classificação usa o histórico persistente de versões: somente processos nunca enviados são rascunhos, e todo processo já enviado permanece em Submissões. Durante a edição, Salvar correção e Editar controlam localmente cada campo e a contagem pendente; como a API não possui gravação isolada de correção por campo, essa marcação só se torna persistente no reenvio completo. A triagem compara as duas versões mais recentes para indicar à BraCVAM os campos efetivamente alterados. Cada reenvio preserva as execuções anteriores no histórico.
 
 Alternativa considerada: atualizar o estado otimisticamente após submissão ou revisão direta. Foi rejeitada porque filas assíncronas e validações concorrentes tornam essa representação enganosa.
 

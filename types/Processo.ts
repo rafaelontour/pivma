@@ -14,6 +14,7 @@ export type ProcessInstance = {
   closure_reason?: string | null;
   available_actions?: ProcessAvailableAction[];
   has_been_submitted?: boolean;
+  awaiting_correction?: boolean;
 };
 
 export type ProcessAvailableAction = "DELETE" | "ARCHIVE";

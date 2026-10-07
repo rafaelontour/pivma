@@ -2,7 +2,7 @@
 
 import type { FormEvent } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertCircle, ArrowLeft, Bot, CalendarDays, ClipboardCheck, History, Info, LoaderCircle, RefreshCw, Save } from "lucide-react";
+import { AlertCircle, ArrowLeft, Bot, CalendarDays, CheckCircle2, ClipboardCheck, History, Info, LoaderCircle, RefreshCw, Save } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
@@ -30,6 +30,9 @@ import type {
 const REVIEW_STATUSES: TriageFieldReviewStatus[] = ["APPROVED", "NEEDS_REVISION", "REJECTED"];
 const FEEDBACK_VERDICTS: TriageFeedbackVerdict[] = ["agree", "disagree", "inconclusive"];
 const TRIAGE_LOAD_TIMEOUT_MS = 20_000;
+// Temporarily disabled to exercise the integrated triage flow with partial field reviews.
+// Restore this to true after the test period; the backend remains authoritative.
+const ENFORCE_TRIAGE_FIELD_REVIEW_VALIDATION = false;
 
 export function TriageWorkspace({
   embedded = false,
@@ -166,27 +169,29 @@ export function TriageWorkspace({
   async function decide(input: TriageDecisionInput) {
     if (workspace.kind !== "ready" || workspace.isDeciding) return false;
     const reviews = workspace.snapshot.form.fields.map((field) => workspace.reviews[field.field_key]);
-    if (reviews.some((review) => !review)) {
+    if (ENFORCE_TRIAGE_FIELD_REVIEW_VALIDATION && reviews.some((review) => !review)) {
       toast.error(t("triage.allFieldsReviewRequired"));
       return false;
     }
     const completedReviews = reviews.filter((review): review is NonNullable<typeof review> => Boolean(review));
-    if (completedReviews.some((review) => review.status !== "APPROVED" && !review.comments?.trim())) {
+    if (ENFORCE_TRIAGE_FIELD_REVIEW_VALIDATION && completedReviews.some((review) => review.status !== "APPROVED" && !review.comments?.trim())) {
       toast.error(t("triage.reviewCommentRequired"));
       return false;
     }
-    if (input.outcome === "NEEDS_REVISION" && !completedReviews.some((review) => review.status === "NEEDS_REVISION" || review.status === "REJECTED")) {
+    if (ENFORCE_TRIAGE_FIELD_REVIEW_VALIDATION && input.outcome === "NEEDS_REVISION" && !completedReviews.some((review) => review.status === "NEEDS_REVISION" || review.status === "REJECTED")) {
       toast.error(t("triage.correctionFieldRequired"));
       return false;
     }
     updateReady((current) => ({ ...current, isSavingReviews: true, isDeciding: true }));
     try {
-      const reviewsResponse = await fetch(`/api/triage/${workspace.snapshot.process.id}/reviews`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ reviews: completedReviews }) });
-      const reviewsPayload = await reviewsResponse.json().catch(() => null);
-      if (!reviewsResponse.ok) {
-        toast.error(getApiMessage(reviewsPayload, t("triage.reviewsSaveFailed"), t));
-        if (reviewsResponse.status === 409) await selectProcess(workspace.snapshot.process, true);
-        return false;
+      if (completedReviews.length > 0) {
+        const reviewsResponse = await fetch(`/api/triage/${workspace.snapshot.process.id}/reviews`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ reviews: completedReviews }) });
+        const reviewsPayload = await reviewsResponse.json().catch(() => null);
+        if (!reviewsResponse.ok) {
+          toast.error(getApiMessage(reviewsPayload, t("triage.reviewsSaveFailed"), t));
+          if (reviewsResponse.status === 409) await selectProcess(workspace.snapshot.process, true);
+          return false;
+        }
       }
 
       const response = await fetch(`/api/triage/${workspace.snapshot.process.id}/decision`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
@@ -244,6 +249,27 @@ function TriageReviewPanel({ state, onRetry, onReviewChange, onFeedbackChange, o
     activeSectionIndex,
     Math.max(sections.length - 1, 0),
   );
+  const correctedFields = fields.filter((field) =>
+    state.snapshot.correctedFieldKeys.includes(field.field_key),
+  );
+
+  function focusCorrectedField(fieldKey: string) {
+    const field = fields.find((candidate) => candidate.field_key === fieldKey);
+    if (!field) return;
+    const section = field.section?.trim() || generalSection;
+    const sectionIndex = sections.indexOf(section);
+    if (sectionIndex >= 0) setActiveSectionIndex(sectionIndex);
+    setIsHistoryOpen(false);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const fieldElement = document.getElementById(`triage-field-${fieldKey}`);
+        fieldElement?.scrollIntoView({ behavior: "smooth", block: "center" });
+        document.getElementById(`triage-review-${fieldKey}`)?.focus({
+          preventScroll: true,
+        });
+      });
+    });
+  }
 
   function handleSectionTabKeyDown(
     event: React.KeyboardEvent<HTMLButtonElement>,
@@ -274,7 +300,7 @@ function TriageReviewPanel({ state, onRetry, onReviewChange, onFeedbackChange, o
 
   function confirmDecision() {
     const missingField = fields.find((field) => !readyState.reviews[field.field_key]);
-    if (missingField) {
+    if (ENFORCE_TRIAGE_FIELD_REVIEW_VALIDATION && missingField) {
       const missingSection = missingField.section?.trim() || generalSection;
       const missingSectionIndex = sections.indexOf(missingSection);
       if (missingSectionIndex >= 0) setActiveSectionIndex(missingSectionIndex);
@@ -284,8 +310,8 @@ function TriageReviewPanel({ state, onRetry, onReviewChange, onFeedbackChange, o
     }
     const incompleteReview = fields
       .map((field) => readyState.reviews[field.field_key])
-      .find((review) => review.status !== "APPROVED" && !review.comments?.trim());
-    if (incompleteReview) {
+      .find((review) => review && review.status !== "APPROVED" && !review.comments?.trim());
+    if (ENFORCE_TRIAGE_FIELD_REVIEW_VALIDATION && incompleteReview) {
       const incompleteField = fields.find((field) => field.field_key === incompleteReview.field_key);
       const incompleteSection = incompleteField?.section?.trim() || generalSection;
       const incompleteSectionIndex = sections.indexOf(incompleteSection);
@@ -304,7 +330,7 @@ function TriageReviewPanel({ state, onRetry, onReviewChange, onFeedbackChange, o
       document.getElementById("triage-final-justification")?.focus();
       return;
     }
-    if (outcome === "NEEDS_REVISION" && !fields.some((field) => {
+    if (ENFORCE_TRIAGE_FIELD_REVIEW_VALIDATION && outcome === "NEEDS_REVISION" && !fields.some((field) => {
       const status = readyState.reviews[field.field_key]?.status;
       return status === "NEEDS_REVISION" || status === "REJECTED";
     })) {
@@ -314,7 +340,7 @@ function TriageReviewPanel({ state, onRetry, onReviewChange, onFeedbackChange, o
     void onDecision({ outcome, justification });
   }
 
-  return <div><header className="flex items-start justify-between gap-4 border-b border-slate-200 p-5 sm:p-6"><div className="min-w-0"><p className="font-mono text-xs font-bold text-teal-700">{state.snapshot.process.code}</p><h2 className="mt-1 truncate text-2xl font-bold text-slate-900">{state.snapshot.process.title}</h2><p className="mt-1 text-sm text-slate-500">{state.snapshot.process.template_key}</p></div><button aria-expanded={isHistoryOpen} aria-label={t(isHistoryOpen ? "triage.showAnalysis" : "triage.showHistory")} className={`inline-flex min-h-10 shrink-0 items-center gap-2 rounded-lg border px-4 text-sm font-bold outline-none transition focus-visible:ring-2 focus-visible:ring-teal-500 ${isHistoryOpen ? "border-teal-700 bg-teal-700 text-white" : "border-teal-700 bg-white text-teal-800 hover:bg-teal-50"}`} onClick={() => setIsHistoryOpen((current) => !current)} type="button"><History aria-hidden="true" className="size-4" />{t("triage.historyButton")}</button></header><div className="mx-5 mt-4 flex items-start gap-2 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2.5 text-sm leading-5 text-sky-900 sm:mx-6" role="note"><Info aria-hidden="true" className="mt-0.5 size-4 shrink-0" /><p>{t("triage.historyToggleHint")}</p></div>{isHistoryOpen ? <TriageTimelineView onClose={() => setIsHistoryOpen(false)} timeline={state.snapshot.timeline} /> : <div className="grid items-start gap-6 p-5 sm:p-6 xl:grid-cols-[minmax(0,1fr)_22rem] 2xl:grid-cols-[minmax(0,1fr)_24rem]">
+  return <div><header className={`grid items-start gap-4 border-b border-slate-200 p-5 sm:p-6 ${correctedFields.length > 0 ? "lg:grid-cols-[minmax(0,1fr)_minmax(22rem,30rem)_auto]" : "lg:grid-cols-[minmax(0,1fr)_auto]"}`}><div className="min-w-0"><p className="font-mono text-xs font-bold text-teal-700">{state.snapshot.process.code}</p><h2 className="mt-1 truncate text-2xl font-bold text-slate-900">{state.snapshot.process.title}</h2><p className="mt-1 text-sm text-slate-500">{state.snapshot.process.template_key}</p></div>{correctedFields.length > 0 && <section aria-labelledby="triage-corrected-fields-title" className="min-w-0 rounded-xl border border-emerald-300 bg-emerald-50 p-3"><div className="flex items-start gap-2"><CheckCircle2 aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-emerald-700" /><div className="min-w-0"><h3 className="text-sm font-bold text-emerald-950" id="triage-corrected-fields-title">{t("triage.correctedFieldsTitle")}</h3><p className="mt-0.5 text-xs leading-5 text-emerald-900">{t("triage.correctedFieldsDescription")}</p></div></div><ul className="mt-2 max-h-32 space-y-2 overflow-y-auto pr-1">{correctedFields.map((field) => { const review = state.snapshot.form.reviews[field.field_key]; return <li key={field.field_key}><button aria-label={t("triage.goToCorrectedField", { field: field.label })} className="w-full rounded-lg border border-emerald-300 bg-white px-3 py-2 text-left outline-none transition hover:bg-emerald-100 focus-visible:ring-2 focus-visible:ring-emerald-600" onClick={() => focusCorrectedField(field.field_key)} type="button"><span className="flex flex-wrap items-center justify-between gap-2"><span className="text-xs font-bold text-emerald-950">{field.label}</span>{review && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[0.65rem] font-bold text-amber-900">{t(`triage.reviewStatuses.${review.status}`, { defaultValue: review.status })}</span>}</span>{review?.comments && <span className="mt-1 block line-clamp-2 text-xs leading-5 text-slate-600">{review.comments}</span>}</button></li>; })}</ul></section>}<button aria-expanded={isHistoryOpen} aria-label={t(isHistoryOpen ? "triage.showAnalysis" : "triage.showHistory")} className={`inline-flex min-h-10 shrink-0 items-center gap-2 rounded-lg border px-4 text-sm font-bold outline-none transition focus-visible:ring-2 focus-visible:ring-teal-500 ${isHistoryOpen ? "border-teal-700 bg-teal-700 text-white" : "border-teal-700 bg-white text-teal-800 hover:bg-teal-50"}`} onClick={() => setIsHistoryOpen((current) => !current)} type="button"><History aria-hidden="true" className="size-4" />{t("triage.historyButton")}</button></header><div className="mx-5 mt-4 flex items-start gap-2 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2.5 text-sm leading-5 text-sky-900 sm:mx-6" role="note"><Info aria-hidden="true" className="mt-0.5 size-4 shrink-0" /><p>{t("triage.historyToggleHint")}</p></div>{isHistoryOpen ? <TriageTimelineView onClose={() => setIsHistoryOpen(false)} timeline={state.snapshot.timeline} /> : <div className="grid items-start gap-6 p-5 sm:p-6 xl:grid-cols-[minmax(0,1fr)_22rem] 2xl:grid-cols-[minmax(0,1fr)_24rem]">
     <div className="grid min-w-0 gap-6">
       <div className="min-w-0">
         {hasSectionTabs && (
@@ -370,6 +396,7 @@ function TriageReviewPanel({ state, onRetry, onReviewChange, onFeedbackChange, o
                 )
                 .map((field) => (
                   <TriageFieldCard
+                    corrected={state.snapshot.correctedFieldKeys.includes(field.field_key)}
                     disabled={busy}
                     field={field}
                     key={field.field_key}
@@ -387,7 +414,7 @@ function TriageReviewPanel({ state, onRetry, onReviewChange, onFeedbackChange, o
       <TriageAiReport disabled={busy} evaluation={state.snapshot.preEvaluation} feedback={state.feedback} onChange={onFeedbackChange} />
       {state.snapshot.preEvaluation && <button className="inline-flex min-h-10 w-fit items-center gap-2 rounded-lg border border-violet-700 px-4 text-sm font-bold text-violet-800" disabled={busy || Object.keys(state.feedback).length === 0} onClick={onSaveFeedback} type="button">{state.isSavingFeedback ? <LoaderCircle aria-hidden="true" className="size-4 animate-spin" /> : <Save aria-hidden="true" className="size-4" />}{t("triage.saveAiFeedback")}</button>}
     </div>
-    <aside className="sticky top-0 rounded-2xl border border-teal-200 bg-teal-50/60 p-5 shadow-sm"><div className="flex items-center gap-2"><ClipboardCheck aria-hidden="true" className="size-6 text-teal-700" /><h3 className="text-base font-bold text-slate-900">{t("triage.confirmDecision")}</h3></div><label className="mt-5 grid gap-1.5 text-sm font-bold text-slate-800">{t("triage.resultLabel")}<select className="min-h-11 rounded-xl border border-slate-300 bg-white px-3 font-normal" disabled={busy} id="triage-final-outcome" onChange={(event) => setOutcome(event.target.value as TriageDecisionInput["outcome"] | "")} value={outcome}><option disabled value="">{t("triage.selectFinalDecision")}</option><option value="APPROVED">{t("triage.approve")}</option><option value="NEEDS_REVISION">{t("triage.requestCorrection")}</option><option value="REJECTED">{t("triage.reject")}</option></select></label><label className="mt-4 grid gap-1.5 text-sm font-bold text-slate-800">{t("triage.justification")}<textarea className="min-h-36 resize-y rounded-xl border border-slate-300 bg-white p-3 font-normal" disabled={busy} id="triage-final-justification" maxLength={4000} onChange={(event) => setJustification(event.target.value)} value={justification} /></label><button className="mt-5 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-teal-700 px-4 text-sm font-bold text-white disabled:opacity-60" disabled={busy} onClick={confirmDecision} type="button">{state.isDeciding && <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />}{t("triage.confirm")}</button></aside>
+    <aside className="sticky top-0 rounded-2xl border border-teal-200 bg-teal-50/60 p-5 shadow-sm"><div className="flex items-center gap-2"><ClipboardCheck aria-hidden="true" className="size-6 text-teal-700" /><h3 className="text-base font-bold text-slate-900">{t("triage.confirmDecision")}</h3></div><label className="mt-5 grid gap-1.5 text-sm font-bold text-slate-800">{t("triage.resultLabel")}<select className="min-h-11 rounded-xl border border-slate-300 bg-white px-3 font-normal" disabled={busy} id="triage-final-outcome" onChange={(event) => setOutcome(event.target.value as TriageDecisionInput["outcome"] | "")} value={outcome}><option disabled value="">{t("triage.selectFinalDecision")}</option><option value="APPROVED">{t("triage.approve")}</option><option value="NEEDS_REVISION">{t("triage.requestCorrection")}</option><option value="REJECTED">{t("triage.reject")}</option></select></label><label className="mt-4 grid gap-1.5 text-sm font-bold text-slate-800">{t("triage.justification")}<textarea className="min-h-36 resize-y rounded-xl border border-slate-300 bg-white p-3 font-normal" disabled={busy} id="triage-final-justification" maxLength={4000} onChange={(event) => setJustification(event.target.value)} value={justification} /></label><button className="mt-5 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-teal-700 px-4 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-60" disabled={busy || !outcome || justification.trim().length < 3} onClick={confirmDecision} type="button">{state.isDeciding && <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />}{t("triage.confirm")}</button></aside>
   </div>}</div>;
 }
 
@@ -423,10 +450,10 @@ function formatTimelineEventFallback(value: string) {
   return normalized ? normalized[0].toLocaleUpperCase() + normalized.slice(1) : value;
 }
 
-function TriageFieldCard({ field, value, review, disabled, onChange }: TriageFieldCardProps) {
+function TriageFieldCard({ field, value, review, corrected, disabled, onChange }: TriageFieldCardProps) {
   const { t } = useTranslation();
   const status = review?.status ?? "";
-  return <article className="rounded-xl border border-slate-200 p-4"><DynamicFormFieldValue field={field} value={value} /><div className="mt-3 grid gap-3 sm:grid-cols-[13rem_1fr]"><label className="grid gap-1.5 text-xs font-bold text-slate-700">{t("triage.review")}<select className="min-h-10 rounded-lg border border-slate-300 px-2 text-sm font-normal" disabled={disabled} id={`triage-review-${field.field_key}`} onChange={(event) => onChange(event.target.value as TriageFieldReviewStatus, review?.comments ?? "")} value={status}><option disabled value="">{t("triage.registerDecision")}</option>{REVIEW_STATUSES.map((item) => <option key={item} value={item}>{t(`triage.reviewStatuses.${item}`)}</option>)}</select></label><label className="grid gap-1.5 text-xs font-bold text-slate-700">{t("triage.comment")}<textarea className="min-h-20 rounded-lg border border-slate-300 p-2 text-sm font-normal" disabled={disabled || !review} id={`triage-comment-${field.field_key}`} onChange={(event) => { if (review) onChange(review.status, event.target.value); }} value={review?.comments ?? ""} /></label></div></article>;
+  return <article className={`scroll-mt-6 rounded-xl border p-4 ${corrected ? "border-emerald-300 bg-emerald-50/40" : "border-slate-200"}`} id={`triage-field-${field.field_key}`}>{corrected && <p className="mb-3 w-fit rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-800">{t("triage.correctedByProponent")}</p>}<DynamicFormFieldValue field={field} value={value} /><div className="mt-3 grid gap-3 sm:grid-cols-[13rem_1fr]"><label className="grid gap-1.5 text-xs font-bold text-slate-700">{t("triage.review")}<select className="min-h-10 rounded-lg border border-slate-300 px-2 text-sm font-normal" disabled={disabled} id={`triage-review-${field.field_key}`} onChange={(event) => onChange(event.target.value as TriageFieldReviewStatus, review?.comments ?? "")} value={status}><option disabled value="">{t("triage.registerDecision")}</option>{REVIEW_STATUSES.map((item) => <option key={item} value={item}>{t(`triage.reviewStatuses.${item}`)}</option>)}</select></label><label className="grid gap-1.5 text-xs font-bold text-slate-700">{t("triage.comment")}<textarea className="min-h-20 rounded-lg border border-slate-300 p-2 text-sm font-normal" disabled={disabled || !review} id={`triage-comment-${field.field_key}`} onChange={(event) => { if (review) onChange(review.status, event.target.value); }} value={review?.comments ?? ""} /></label></div></article>;
 }
 
 function TriageAiReport({ evaluation, feedback, disabled, onChange }: TriageAiReportProps) {
@@ -438,7 +465,7 @@ function Loading({ label }: TriageLoadingProps) { return <div className="flex mi
 function Message({ message, action }: TriageMessageProps) { const { t } = useTranslation(); return <div className="rounded-xl border border-slate-200 bg-slate-50 p-5 text-center"><AlertCircle aria-hidden="true" className="mx-auto size-6 text-slate-500" /><p className="mt-2 text-sm leading-6 text-slate-600">{message}</p>{action && <button className="mt-3 min-h-10 rounded-lg bg-teal-700 px-3 text-sm font-bold text-white" onClick={action} type="button">{t("common.retry")}</button>}</div>; }
 function isProcessList(value: unknown): value is ProcessList { return isRecord(value) && Array.isArray(value.items) && value.items.every(isProcess) && typeof value.total === "number"; }
 function isProcess(value: unknown): value is ProcessInstance { return isRecord(value) && typeof value.id === "string" && typeof value.code === "string" && typeof value.title === "string" && typeof value.status === "string" && typeof value.template_key === "string" && typeof value.version_number === "number"; }
-function isSnapshot(value: unknown): value is TriageSnapshot { return isRecord(value) && isProcess(value.process) && isRecord(value.form) && Array.isArray(value.form.fields) && isRecord(value.form.values) && isRecord(value.timeline) && Array.isArray(value.timeline.events); }
+function isSnapshot(value: unknown): value is TriageSnapshot { return isRecord(value) && isProcess(value.process) && isRecord(value.form) && Array.isArray(value.form.fields) && isRecord(value.form.values) && isRecord(value.timeline) && Array.isArray(value.timeline.events) && Array.isArray(value.correctedFieldKeys) && value.correctedFieldKeys.every((fieldKey) => typeof fieldKey === "string"); }
 function isReviewStatus(value: string): value is TriageFieldReviewStatus { return REVIEW_STATUSES.includes(value as TriageFieldReviewStatus); }
 function isRecord(value: unknown): value is ApiRecord { return Boolean(value) && typeof value === "object" && !Array.isArray(value); }
 function getApiMessage(value: unknown, fallback: string, t: TFunction) { return getLocalizedApiError(isRecord(value) ? value : null, fallback, t); }
