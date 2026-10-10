@@ -4,6 +4,7 @@ import { internalApiErrorResponse } from "@/app/(paginas)/api/_shared/responses"
 import { getCurrentUser } from "@/services/Autenticacao";
 import type { CurrentSessionUser } from "@/types/Autenticacao";
 import {
+  getLatestSubmissionVersionValues,
   getSubmissionForm,
   saveSubmissionDraft,
   submitSubmission,
@@ -41,6 +42,25 @@ export async function GET(
   const result = await getSubmissionForm(accessToken, processId);
   if (!result.ok) {
     return formErrorResponse(result.status, cookieStore, "consultar");
+  }
+
+  if (
+    !result.data.is_submitted &&
+    Object.values(result.data.reviews).some(
+      (review) =>
+        review.status === "NEEDS_REVISION" || review.status === "REJECTED",
+    )
+  ) {
+    const baseline = await getLatestSubmissionVersionValues(
+      accessToken,
+      processId,
+    );
+    if (baseline.ok && baseline.data) {
+      return NextResponse.json({
+        ...result.data,
+        correction_baseline_values: baseline.data,
+      });
+    }
   }
 
   return NextResponse.json(result.data);

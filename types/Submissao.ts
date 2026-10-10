@@ -177,6 +177,15 @@ export type SubmissionForm = {
   fields: DynamicFormField[];
   values: Record<string, unknown>;
   reviews: Record<string, DynamicFormReview>;
+  correction_baseline_values?: Record<string, unknown>;
+  correction_completed_field_keys?: string[];
+};
+
+export type SubmissionCorrectionReviewSnapshot = {
+  reviews: Record<string, DynamicFormReview>;
+  baseline_values: Record<string, unknown>;
+  completed_field_keys: string[];
+  return_review: SubmissionReturnReview;
 };
 
 export type CreateSubmissionDraftInput = {
@@ -206,6 +215,7 @@ export type SubmitSubmissionResult = {
 };
 
 export type SubmissionFormOperation = "idle" | "saving" | "submitting" | "responding";
+export type SubmissionSaveContext = "draft" | "response";
 
 export type SubmissionDialogIntent = "edit" | "return-review";
 
@@ -284,9 +294,9 @@ export type SubmissionFormDialogProps = {
   state: Exclude<SubmissionDialogState, { kind: "closed" }>;
   onClose: () => void;
   onRetry: () => void;
-  onSaved: () => void;
+  onSaved: (context: SubmissionSaveContext) => void;
   onSubmitted: (process: ProcessInstance) => void;
-  onReturnResolved: (choice: SubmissionReturnReviewChoice) => void;
+  onReturnResolved: () => void;
 };
 
 export type SubmissionDraftCardProps = {
@@ -340,12 +350,11 @@ export type DynamicFormValidationResult =
 
 export type SubmissionDialogContentProps = {
   processId: string;
+  awaitingCorrection: boolean;
   form: SubmissionForm;
   inputs: SubmissionFieldInputs;
   operation: SubmissionFormOperation;
   returnReview?: SubmissionReturnReview | null;
-  returnChoice: SubmissionReturnReviewChoice;
-  returnJustification: string;
   savedCorrectionFieldKeys: ReadonlySet<string>;
   activeSectionIndex: number;
   onFieldChange: (
@@ -355,8 +364,6 @@ export type SubmissionDialogContentProps = {
   onSectionChange: (sectionIndex: number) => void;
   onSave: () => void;
   onSubmit: () => void;
-  onReturnChoiceChange: (choice: SubmissionReturnReviewChoice) => void;
-  onReturnJustificationChange: (justification: string) => void;
   onReturnResponse: () => void;
   onSaveCorrection: (fieldKey: string) => void;
   onEditCorrection: (fieldKey: string) => void;

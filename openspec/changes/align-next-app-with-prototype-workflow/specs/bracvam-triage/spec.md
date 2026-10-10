@@ -48,9 +48,9 @@ O sistema SHALL apresentar junto à proposta o relatório automático disponíve
 
 ### Requirement: Revisão humana por campo
 
-O sistema SHALL exigir uma escolha explícita entre `APPROVED`, `NEEDS_REVISION` ou `REJECTED` para cada campo da proposta, acompanhado de comentário quando exigido pelo contrato. Nenhum resultado MUST ser selecionado implicitamente. Os pareceres MUST ser persistidos como parte da confirmação da decisão final, sem uma ação separada de salvamento, e a transição do processo MUST ocorrer somente depois que a API confirmar sua gravação.
+O sistema SHALL exigir uma escolha explícita entre `APPROVED`, `NEEDS_REVISION` ou `REJECTED` para cada campo da proposta na primeira triagem, acompanhado de comentário quando exigido pelo contrato. Em uma reanálise após correção, o sistema MUST exigir um novo parecer somente para os campos alterados pelo proponente, preservando os pareceres históricos dos demais campos. Nenhum resultado MUST ser selecionado implicitamente. Os pareceres exigidos na rodada MUST ser persistidos como parte da confirmação da decisão final, sem uma ação separada de salvamento, e a transição do processo MUST ocorrer somente depois que a API confirmar sua gravação.
 
-Quando houver ao menos duas versões da submissão, o sistema SHALL comparar os valores persistidos da rodada anterior e da rodada atual e indicar em cada campo da triagem se ele foi corrigido pelo proponente.
+Quando houver uma correção em andamento, o sistema SHALL comparar os valores atuais persistidos no formulário com a última versão submetida e indicar em cada campo da triagem se ele já foi revisado pelo proponente. Depois do reenvio, quando o formulário atual não possuir diferenças pendentes, o sistema SHALL comparar as duas versões submetidas mais recentes para preservar a indicação dos campos corrigidos.
 
 #### Scenario: Campo ainda não analisado
 
@@ -67,6 +67,11 @@ Quando houver ao menos duas versões da submissão, o sistema SHALL comparar os 
 - **WHEN** algum campo não possui resultado explícito ou um resultado exige comentário e ele não foi informado
 - **THEN** o sistema impede a confirmação da decisão final, leva a pessoa ao campo pendente e indica a informação necessária
 
+#### Scenario: Reanálise de campos corrigidos
+
+- **WHEN** a BraCVAM analisa uma nova versão que possui campos alterados pelo proponente
+- **THEN** o sistema exige um novo parecer somente para esses campos e não bloqueia a decisão por campos inalterados da proposta
+
 #### Scenario: Gravação dos pareceres falha
 
 - **WHEN** a API não confirma a gravação do conjunto completo de pareceres
@@ -77,11 +82,18 @@ Quando houver ao menos duas versões da submissão, o sistema SHALL comparar os 
 - **WHEN** a versão mais recente possui valor diferente da versão anterior para um campo
 - **THEN** a triagem destaca esse campo como Corrigido pelo proponente
 
+#### Scenario: Resposta revisada foi salva no rascunho de correção
+
+- **WHEN** o proponente salva uma resposta diferente da última versão submetida
+- **THEN** a visualização da BraCVAM destaca imediatamente o campo como Corrigido pelo proponente
+
 #### Scenario: BraCVAM navega pelos campos corrigidos
 
 - **WHEN** a triagem possui campos alterados na última correção
-- **THEN** o lado direito do cabeçalho apresenta uma lista com o nome de cada campo, seu parecer anterior e o comentário do pedido de correção
+- **THEN** a coluna esquerda do modal apresenta uma lista com o nome de cada campo, seu parecer anterior e o comentário do pedido de correção junto ao acesso ao histórico
 - **AND** cada item muda para a seção correspondente, rola até o campo e posiciona o foco em seu parecer
+- **AND** cada aba de seção que contenha campos corrigidos recebe destaque e informa quantos desses campos aguardam verificação
+- **AND** as abas permanecem em uma única faixa com rolagem horizontal, posicionada automaticamente na primeira seção corrigida ao abrir a análise
 
 ### Requirement: Feedback humano sobre critérios da IA
 
@@ -99,7 +111,7 @@ O sistema SHALL permitir classificar cada critério automático como concordante
 
 ### Requirement: Decisão final da triagem
 
-O sistema SHALL exigir a escolha explícita do resultado final e uma justificativa antes de concluir a triagem. A confirmação MUST permanecer indisponível enquanto qualquer campo estiver sem parecer válido. Depois de persistir todos os pareceres, a decisão `APPROVED` MUST mover o processo para `PLANNING`, `NEEDS_REVISION` MUST devolvê-lo para `SUBMISSION` e `REJECTED` MUST movê-lo para `CLOSED`.
+O sistema SHALL exigir a escolha explícita do resultado final e uma justificativa antes de concluir a triagem. A confirmação MUST permanecer indisponível enquanto qualquer campo exigido na rodada estiver sem parecer válido. Depois de persistir os pareceres exigidos, a decisão `APPROVED` MUST mover o processo para `PLANNING`, `NEEDS_REVISION` MUST devolver o processo com ao menos um parecer corrigível persistido para `SUBMISSION` e `REJECTED` MUST movê-lo para `CLOSED`.
 
 #### Scenario: Proposta aprovada
 

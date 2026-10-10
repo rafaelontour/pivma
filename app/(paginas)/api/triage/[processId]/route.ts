@@ -13,12 +13,20 @@ export async function GET(_request: Request, context: RouteContext<"/api/triage/
   if (!isTriageUuid(processId)) return NextResponse.json({ code: "VALIDATION_ERROR", message: "Processo inválido." }, { status: 400 });
   const authorization = await authorizeInternalApi(["triage.review"]);
   if (!authorization.ok) return authorization.response;
+  const formRequest = getSubmissionForm(authorization.accessToken, processId);
+  const correctedFieldsRequest = formRequest.then((form) =>
+    getCorrectedSubmissionFieldKeys(
+      authorization.accessToken,
+      processId,
+      form.ok ? form.data.values : undefined,
+    ),
+  );
   const [process, form, preEvaluation, timeline, correctedFields] = await Promise.all([
     getProcess(authorization.accessToken, processId),
-    getSubmissionForm(authorization.accessToken, processId),
+    formRequest,
     getSubmissionPreEvaluation(authorization.accessToken, processId),
     getTriageTimeline(authorization.accessToken, processId),
-    getCorrectedSubmissionFieldKeys(authorization.accessToken, processId),
+    correctedFieldsRequest,
   ]);
   const failed = !process.ok ? process : !form.ok ? form : !timeline.ok ? timeline : !preEvaluation.ok && preEvaluation.status !== 404 ? preEvaluation : null;
   if (failed && !failed.ok) return triageErrorResponse(failed.status, authorization.cookieStore, "Não foi possível carregar o processo para triagem.");

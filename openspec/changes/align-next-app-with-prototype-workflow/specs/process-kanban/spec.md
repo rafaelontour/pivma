@@ -55,9 +55,9 @@ O navegador MUST usar somente rotas internas da aplicação para consultar proce
 
 ### Requirement: Área ampliada para análise de correções
 
-O modal de análise da BraCVAM SHALL usar aproximadamente 95% da largura e 92% da altura da viewport para acomodar a lista de campos corrigidos, o formulário e a decisão final sem ocultar ações essenciais.
+O modal de análise da BraCVAM SHALL usar 95% da largura e 92% da altura da viewport para acomodar a lista de campos corrigidos, o formulário e a decisão final sem ocultar ações essenciais. A lista de campos corrigidos, o acesso ao histórico e sua orientação MUST permanecer fixos na coluna esquerda durante a rolagem, enquanto o formulário MUST ocupar e rolar na coluna direita.
 
 #### Scenario: Correção é aberta no Kanban
 
 - **WHEN** a BraCVAM abre para análise uma submissão corrigida
-- **THEN** o modal ampliado apresenta a navegação dos campos corrigidos e o formulário na mesma área de trabalho
+- **THEN** o modal ampliado apresenta a navegação dos campos corrigidos e o acesso ao histórico à esquerda, com o formulário à direita

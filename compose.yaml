@@ -11,4 +11,4 @@ services:
       - "4025:3000"
     environment:
       API_PIVMA: ${API_PIVMA}
-    restart: unless-stopped
+    restart: unless-stopped 

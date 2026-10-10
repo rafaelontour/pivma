@@ -109,7 +109,7 @@ O sistema SHALL apresentar Enviar para análise ao lado de Salvar rascunho enqua
 
 ### Requirement: Acompanhamento das submissões enviadas
 
-O sistema SHALL listar na aba Submissões os processos em que a sessão possui o papel local `proponent` e que tenham sido enviados ao menos uma vez. Meus rascunhos MUST conter somente processos que nunca foram enviados ao BraCVAM. Uma submissão devolvida para correção MUST permanecer em Submissões com o resultado da avaliação disponível para orientar a revisão.
+O sistema SHALL listar na aba Submissões os processos do proponente cujo formulário atual esteja concluído. Meus rascunhos MUST conter os formulários atuais ainda abertos, incluindo correções salvas de processos enviados anteriormente. Uma submissão devolvida permanece em Submissões até a pessoa salvar a correção como rascunho; depois disso, MUST aparecer em Meus rascunhos com o resultado da avaliação preservado para orientar a revisão.
 
 #### Scenario: Submissões disponíveis
 
@@ -129,7 +129,17 @@ O sistema SHALL listar na aba Submissões os processos em que a sessão possui o
 #### Scenario: Processo retorna para correção
 
 - **WHEN** uma pré-avaliação negativa ou uma decisão de triagem devolve o processo para `SUBMISSION`
-- **THEN** o processo permanece na aba Submissões com a indicação de correção pendente e não aparece em Meus rascunhos
+- **THEN** o processo permanece na aba Submissões com a indicação de correção pendente até o salvamento explícito como rascunho
+
+#### Scenario: Correção é movida para rascunhos
+
+- **WHEN** a pessoa salva a correção como rascunho
+- **THEN** o sistema fecha o modal, abre Meus rascunhos e lista ali o processo com indicação de correção
+
+#### Scenario: Correção em rascunho é retomada
+
+- **WHEN** a pessoa aciona Retomar edição em uma correção salva
+- **THEN** o sistema restaura o modal ampliado, o painel laranja, os pontos pendentes e as respostas salvas individualmente
 
 #### Scenario: Nenhuma submissão enviada
 
@@ -183,19 +193,44 @@ O sistema SHALL acompanhar a execução assíncrona da pré-avaliação enquanto
 
 ### Requirement: Tratamento de pré-avaliação negativa
 
-O sistema SHALL apresentar ao proponente um resumo por campo e por critério quando a pré-avaliação ou a triagem devolver o processo para correção. Durante a correção, somente campos marcados como `NEEDS_REVISION` ou `REJECTED` MUST aceitar edição. A ação Confirmar e reenviar MUST permanecer desabilitada até que todos os campos apontados tenham sido alterados e o formulário esteja válido. Ao confirmar, o sistema MUST registrar a resposta de correção e concluir imediatamente o novo envio, mantendo o processo em Submissões.
+O sistema SHALL apresentar ao proponente um resumo por campo e por critério quando a pré-avaliação ou a triagem devolver o processo para correção. Cada campo apontado pela BraCVAM MUST exibir de forma destacada o parecer `NEEDS_REVISION` ou `REJECTED` e seu comentário, e o resumo do retorno MUST permitir navegar diretamente para esses pontos. Durante a correção, somente os campos apontados MUST aceitar edição. A ação Confirmar e reenviar MUST permanecer desabilitada até que todos os campos apontados tenham sido alterados e o formulário esteja válido. Ao confirmar, o sistema MUST concluir o novo envio, mantendo o processo em Submissões.
 
-Cada campo corrigível SHALL oferecer Salvar correção e Editar. Salvar correção MUST bloquear novamente o campo e reduzir sua contagem pendente; Editar MUST liberar o campo e restaurar a contagem. Essa confirmação intermediária é estado local da interface até o reenvio, pois o contrato publicado não oferece persistência isolada por campo.
+O retorno da BraCVAM MUST apresentar somente a ação Iniciar correção, sem perguntar como o proponente deseja prosseguir e sem solicitar justificativa. Essa ação SHALL registrar `REVISE`, iniciar a etapa de correção e liberar o formulário como rascunho, sem reenviá-lo na mesma operação. O contexto visual de correção MUST permanecer ativo enquanto o processo estiver `awaiting_correction`, usando aproximadamente 85% da largura da viewport e mantendo visíveis o resumo lateral e os destaques dos campos apontados. A aplicação SHALL preservar no navegador o snapshot dos pareceres recebido antes de `REVISE` enquanto a API não os expuser na nova rodada, isolando-o por processo e removendo-o depois do reenvio. Cada campo corrigível SHALL oferecer Salvar resposta e Editar. Salvar resposta MUST persistir os valores atuais antes de bloquear o campo, removê-lo da lista pendente e reduzir a contagem; Editar MUST liberar o campo, devolvê-lo à lista e restaurar a contagem. O formulário de correção SHALL oferecer Salvar rascunho da correção, persistindo pela operação de salvamento do formulário todos os valores atuais sem concluir a submissão. A pessoa MUST poder fechar e retomar esse rascunho com os valores persistidos e os apontamentos da BraCVAM ainda visíveis no mesmo navegador.
 
 #### Scenario: Resultado negativo recebido
 
 - **WHEN** a pré-avaliação termina com critérios não atendidos
 - **THEN** o sistema mostra o resultado, identifica os pontos que exigem atenção e reabre a edição do formulário
 
-#### Scenario: Proponente escolhe corrigir
+#### Scenario: Proponente inicia a correção obrigatória
+
+- **WHEN** a pessoa aciona Iniciar correção em uma submissão devolvida
+- **THEN** o sistema registra `REVISE` sem solicitar escolha ou justificativa, libera os campos apontados como rascunho e mantém a proposta sem reenvio até uma confirmação posterior
+
+#### Scenario: Pontos da BraCVAM são apresentados
+
+- **WHEN** a triagem devolve a submissão com pareceres por campo
+- **THEN** o sistema apresenta no resumo e junto a cada campo apontado o resultado, o comentário e uma ação de navegação para o ponto correspondente
+
+#### Scenario: Contexto visual permanece durante a correção
+
+- **WHEN** o retorno já foi aceito e o processo permanece aguardando correção
+- **THEN** o modal continua ampliado para aproximadamente 85% da viewport e mantém o painel dos apontamentos visível
+
+#### Scenario: Rascunho da correção é salvo
+
+- **WHEN** a pessoa altera parte dos campos apontados e aciona Salvar rascunho da correção
+- **THEN** o sistema persiste os valores atuais sem concluir o formulário, mantém o processo em Submissões e confirma que a correção pode ser retomada
+
+#### Scenario: Correção parcial é retomada
+
+- **WHEN** a pessoa reabre uma correção salva anteriormente
+- **THEN** o sistema carrega os valores persistidos, mantém os pareceres da BraCVAM visíveis e permite continuar a edição dos campos apontados
+
+#### Scenario: Correção concluída é reenviada
 
 - **WHEN** a pessoa altera todos os campos apontados e aciona Confirmar e reenviar
-- **THEN** o sistema registra a escolha de correção, conclui o novo envio, preserva o histórico anterior e inicia uma nova passagem pelo fluxo aplicável sem mover o processo para Meus rascunhos
+- **THEN** o sistema conclui o novo envio, preserva o histórico anterior e inicia uma nova passagem pelo fluxo aplicável sem mover o processo para Meus rascunhos
 
 #### Scenario: Correção ainda incompleta
 
@@ -209,13 +244,13 @@ Cada campo corrigível SHALL oferecer Salvar correção e Editar. Salvar correç
 
 #### Scenario: Correção de campo é salva
 
-- **WHEN** a pessoa altera um campo apontado e aciona Salvar correção
-- **THEN** o sistema bloqueia o campo, marca a correção como salva e reduz em um a contagem pendente da seção
+- **WHEN** a pessoa altera um campo apontado e aciona Salvar resposta
+- **THEN** o sistema persiste os valores atuais, bloqueia o campo, remove o ponto da lista lateral e reduz em um a contagem pendente da seção
 
 #### Scenario: Correção salva volta à edição
 
 - **WHEN** a pessoa aciona Editar em um campo com correção salva
-- **THEN** o sistema libera o campo e acrescenta novamente um ponto à contagem pendente
+- **THEN** o sistema libera o campo, devolve o ponto à lista lateral e acrescenta novamente um ponto à contagem pendente
 
 ### Requirement: Solicitação de revisão humana direta
 

@@ -214,8 +214,8 @@ async function listProponentProcessesBySubmissionState(
         const hasBeenSubmitted =
           form.data.is_submitted || (historyResult.ok && historyResult.data);
         const matchesRequestedList = isSubmitted
-          ? hasBeenSubmitted
-          : !hasBeenSubmitted;
+          ? form.data.is_submitted
+          : !form.data.is_submitted;
 
         if (matchesRequestedList) {
           matchingProcesses.push({
@@ -265,6 +265,7 @@ async function hasSubmissionVersions(
 export async function getCorrectedSubmissionFieldKeys(
   accessToken: string,
   processId: string,
+  currentValues?: Record<string, unknown>,
 ): Promise<ServiceResult<string[]>> {
   const [listError, listResponse] = await tryit(() =>
     http.get<unknown>(`/processes/${processId}/submission-versions`, {
@@ -280,7 +281,7 @@ export async function getCorrectedSubmissionFieldKeys(
     .slice()
     .sort((first, second) => second.run_number - first.run_number)
     .slice(0, 2);
-  if (latestVersions.length < 2) return { ok: true, data: [] };
+  if (latestVersions.length === 0) return { ok: true, data: [] };
 
   const details = await Promise.all(
     latestVersions.map(async (version) => {
@@ -299,12 +300,54 @@ export async function getCorrectedSubmissionFieldKeys(
   );
   const failed = details.find((detail) => !detail.ok);
   if (failed && !failed.ok) return { ok: false, status: failed.status };
-  if (!details[0].ok || !details[1].ok) return { ok: false };
+  if (!details[0].ok) return { ok: false };
+
+  if (currentValues) {
+    const currentDraftKeys = compareSubmissionValues(
+      details[0].data.values,
+      currentValues,
+    );
+    if (currentDraftKeys.length > 0) {
+      return { ok: true, data: currentDraftKeys };
+    }
+  }
+
+  if (details.length < 2 || !details[1].ok) return { ok: true, data: [] };
 
   return {
     ok: true,
     data: compareSubmissionVersions(details[1].data, details[0].data),
   };
+}
+
+export async function getLatestSubmissionVersionValues(
+  accessToken: string,
+  processId: string,
+): Promise<ServiceResult<Record<string, unknown> | null>> {
+  const [listError, listResponse] = await tryit(() =>
+    http.get<unknown>(`/processes/${processId}/submission-versions`, {
+      headers: { Cookie: `access_token=${accessToken}` },
+      params: { page: 1, per_page: 100 },
+    }),
+  )();
+
+  if (listError) return { ok: false, status: getStatus(listError) };
+  const versions = normalizeSubmissionVersionList(listResponse.data);
+  if (!versions) return { ok: false };
+  const latest = versions
+    .slice()
+    .sort((first, second) => second.run_number - first.run_number)[0];
+  if (!latest) return { ok: true, data: null };
+
+  const [detailError, detailResponse] = await tryit(() =>
+    http.get<unknown>(
+      `/processes/${processId}/submission-versions/${latest.run_number}`,
+      { headers: { Cookie: `access_token=${accessToken}` } },
+    ),
+  )();
+  if (detailError) return { ok: false, status: getStatus(detailError) };
+  const detail = normalizeSubmissionVersion(detailResponse.data);
+  return detail ? { ok: true, data: detail.values } : { ok: false };
 }
 
 export async function getSubmissionForm(
@@ -637,17 +680,9 @@ function compareSubmissionVersions(
   previous: SubmissionVersion,
   current: SubmissionVersion,
 ) {
-  const correctedKeys = new Set<string>();
-  const valueKeys = new Set([
-    ...Object.keys(previous.values),
-    ...Object.keys(current.values),
-  ]);
-  for (const fieldKey of valueKeys) {
-    if (!areSubmissionValuesEqual(previous.values[fieldKey], current.values[fieldKey])) {
-      correctedKeys.add(fieldKey);
-    }
-  }
-
+  const correctedKeys = new Set(
+    compareSubmissionValues(previous.values, current.values),
+  );
   const previousAttachments = groupAttachmentsByField(previous.attachments);
   const currentAttachments = groupAttachmentsByField(current.attachments);
   const attachmentKeys = new Set([
@@ -665,6 +700,23 @@ function compareSubmissionVersions(
     }
   }
 
+  return [...correctedKeys];
+}
+
+function compareSubmissionValues(
+  previous: Record<string, unknown>,
+  current: Record<string, unknown>,
+) {
+  const correctedKeys = new Set<string>();
+  const valueKeys = new Set([
+    ...Object.keys(previous),
+    ...Object.keys(current),
+  ]);
+  for (const fieldKey of valueKeys) {
+    if (!areSubmissionValuesEqual(previous[fieldKey], current[fieldKey])) {
+      correctedKeys.add(fieldKey);
+    }
+  }
   return [...correctedKeys];
 }
 
@@ -778,7 +830,14 @@ function isSubmissionForm(value: unknown): value is SubmissionForm {
     Array.isArray(value.fields) &&
     value.fields.every(isDynamicFormField) &&
     isRecord(value.values) &&
-    isRecord(value.reviews)
+    isRecord(value.reviews) &&
+    (value.correction_baseline_values === undefined ||
+      isRecord(value.correction_baseline_values)) &&
+    (value.correction_completed_field_keys === undefined ||
+      (Array.isArray(value.correction_completed_field_keys) &&
+        value.correction_completed_field_keys.every(
+          (fieldKey) => typeof fieldKey === "string",
+        )))
   );
 }
 

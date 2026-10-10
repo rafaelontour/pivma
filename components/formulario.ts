@@ -231,7 +231,10 @@ export function isSubmissionCorrectionFieldChanged(
   inputs: SubmissionFieldInputs,
   fieldKey: string,
 ) {
-  const initialInputs = buildDynamicFormInputs(form);
+  const initialInputs = buildDynamicFormInputs({
+    ...form,
+    values: form.correction_baseline_values ?? form.values,
+  });
   return !Object.is(inputs[fieldKey], initialInputs[fieldKey]);
 }
 

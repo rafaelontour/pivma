@@ -60,11 +60,13 @@
 - [x] 5.7 Implementar serviço e Route Handler para consultar a pré-avaliação pelo endpoint publicado sem reintroduzir avaliação imediata
 - [x] 5.8 Implementar acompanhamento com uma requisição em voo, cancelamento, pausa por visibilidade, atualização manual e reconsulta do processo
 - [x] 5.9 Apresentar progresso e distinguir resultado positivo, negativo, falha técnica e submissão que seguiu sem IA
-- [x] 5.10 Manter em Submissões todo processo já enviado, permitir edição somente dos campos apontados, controlar Salvar correção/Editar e a contagem pendente por campo, e habilitar Confirmar e reenviar apenas depois que todas as correções estiverem concluídas
+- [x] 5.10 Manter em Submissões os formulários concluídos, mover correções salvas para Meus rascunhos, permitir edição somente dos campos apontados, controlar Salvar resposta/Editar e habilitar Confirmar e reenviar apenas depois que todas as correções estiverem concluídas
 - [x] 5.11 Implementar revisão humana direta com confirmação acessível, justificativa opcional, proteção contra duplicidade e reconsulta até `TRIAGE`
 - [ ] 5.12 Verificar criação concorrente, anexos, salvamento explícito, envio, transições, polling, retorno para correção, reenvio e revisão direta contra a API atual
   - Lint, build, rotas internas e recusas sem sessão foram verificados; o ciclo positivo completo aguarda uma sessão de proponente e dados elegíveis na API publicada.
 - [x] 5.13 Corrigir a retomada de processos devolvidos para consultar o retorno e os pareceres persistidos, liberar os campos indicados após `REVISE` e não depender de estado temporário do navegador
+- [x] 5.14 Separar a aceitação de `REVISE` do reenvio, apresentar no resumo e nos campos os apontamentos persistidos da BraCVAM e permitir salvar e retomar o rascunho da correção sem concluir o formulário
+  - Na submissão real `VAL-2026-99c4366d716d27e8`, a rodada 13 foi devolvida com 79 pareceres persistidos e três campos apontados. O retorno oferece somente Iniciar correção; a ação abre o rascunho sem reenvio, cada resposta pode ser salva ou reaberta individualmente, e Salvar rascunho fecha o modal e move o processo para Meus rascunhos mantendo a visualização de retorno na retomada.
 
 ## 6. Triagem BraCVAM
 
@@ -79,10 +81,12 @@
 - [x] 6.9 Implementar linha do tempo ordenada com transições, execuções, revisões, feedbacks e decisão conforme autorização
   - Contratos confrontados com o OpenAPI publicado em 11/09/2026; lint, build e recusa `401` nas cinco rotas internas foram verificados.
 - [ ] 6.10 Verificar triagem parcial, retomada, três decisões finais, conflito concorrente, timeline e negação para sessão sem `triage.review`
-  - As validações dos pareceres por campo estão temporariamente desativadas na interface para facilitar estes testes; o botão de confirmação permanece desabilitado até selecionar o resultado final e informar uma justificativa válida, e o backend permanece autoritativo.
-  - A negação `401`, validações de entrada e a integração controlada foram verificadas; pareceres, conflito e os três desfechos aguardam uma sessão com `triage.review` e processos reais em `TRIAGE`.
+  - As validações dos pareceres por campo estão ativas: a primeira triagem exige todos os campos e a reanálise exige somente os campos alterados. O botão de confirmação também exige resultado final e justificativa válida, e o backend permanece autoritativo.
+  - A negação `401`, validações de entrada e uma decisão real `NEEDS_REVISION` foram verificadas; triagem parcial, conflito e os outros desfechos permanecem pendentes.
 - [x] 6.11 Exigir decisão explícita para todos os campos e para o resultado final, remover o salvamento separado de pareceres e persistir o conjunto completo antes de solicitar a transição
-- [x] 6.12 Comparar as duas versões mais recentes, sinalizar os campos corrigidos e exibir à direita do cabeçalho uma lista com campo, parecer e comentário, oferecendo navegação direta para cada ponto no modal ampliado
+- [x] 6.12 Comparar o formulário atual com a última versão submetida durante o rascunho e, após o reenvio, comparar as duas versões mais recentes; sinalizar os campos corrigidos e exibir à esquerda do modal uma lista com campo, parecer e comentário junto ao acesso ao histórico, mantendo o formulário à direita e oferecendo navegação direta para cada ponto
+  - Na submissão real `VAL-2026-99c4366d716d27e8`, a comparação do formulário atual com a rodada 13 identificou `transferability_assessed`, `transferability_detail` e `within_lab_reproducibility_detail`, enquanto a comparação isolada das rodadas 12 e 13 retornava uma lista vazia para a correção em andamento.
+- [x] 6.13 Persistir antes da decisão os pareceres exigidos na rodada, exigir todos os campos na primeira triagem e somente os campos corrigidos na reanálise, impedindo `NEEDS_REVISION` sem apontamento corrigível
 
 ## 7. Kanban e navegação
 
@@ -124,3 +128,5 @@
   - A matriz mantém todas as ações e a única exclusão sem contrato; a promoção de cada linha a verificada depende das evidências autenticadas registradas nas tarefas 2.9, 3.9, 4.10, 5.12, 6.10, 7.6 e 8.9.
 - [x] 9.7 Executar `openspec validate align-next-app-with-prototype-workflow --strict` e manter proposta, specs, design e tarefas coerentes com a implementação final
   - `pnpm lint`, `pnpm build` e a validação estrita passaram após a integração de triagem, Kanban, navegação e observabilidade.
+- [ ] 9.8 Verificar nos dois idiomas o fluxo `BraCVAM aponta campo → proponente inicia correção → salva rascunho → retoma → reenvia`, incluindo falhas de persistência, navegação por teclado e ausência de reenvio ao salvar
+  - A paridade dos 951 valores dos dicionários passou. O fluxo real confirmou sinalização com pareceres, início da correção e salvamento sem reenvio; retomada completa, falhas e roteiro por teclado nos dois idiomas permanecem pendentes.

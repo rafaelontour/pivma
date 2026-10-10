@@ -37,6 +37,7 @@ import type {
   SaveSubmissionDraftResult,
   SubmissionCatalogMessageProps,
   SubmissionCatalogState,
+  SubmissionCorrectionReviewSnapshot,
   SubmissionDialogContentProps,
   SubmissionDialogIntent,
   SubmissionDialogState,
@@ -315,7 +316,28 @@ export function SubmissionCatalog() {
         }
       }
 
-      setDialog({ kind: "ready", template, process, intent, form: payload, returnReview });
+      const correctionSnapshot =
+        !payload.is_submitted && process.awaiting_correction
+          ? readCorrectionReviewSnapshot(process.id)
+          : null;
+      const restoredForm = correctionSnapshot
+        ? {
+            ...payload,
+            reviews: correctionSnapshot.reviews,
+            correction_baseline_values: correctionSnapshot.baseline_values,
+            correction_completed_field_keys:
+              correctionSnapshot.completed_field_keys,
+          }
+        : payload;
+
+      setDialog({
+        kind: "ready",
+        template,
+        process,
+        intent,
+        form: restoredForm,
+        returnReview: returnReview ?? correctionSnapshot?.return_review ?? null,
+      });
     } catch {
       setDialog({
         kind: "error",
@@ -644,18 +666,17 @@ export function SubmissionCatalog() {
 
       {dialog.kind !== "closed" && (
         <SubmissionFormDialog
-          key={`${dialog.process.id}-${dialog.kind}`}
+          key={`${dialog.process.id}-${dialog.kind}-${dialog.kind === "ready" ? `${dialog.form.is_submitted}-${dialog.returnReview?.run_number ?? "none"}-${Boolean(dialog.process.awaiting_correction)}` : dialog.intent}`}
           onClose={() => setDialog({ kind: "closed" })}
           onRetry={() => void loadForm(dialog.template, dialog.process, dialog.intent)}
-          onReturnResolved={(choice) => {
+          onReturnResolved={() => undefined}
+          onSaved={(context) => {
+            if (context === "response") return;
             setDialog({ kind: "closed" });
-            if (choice === "REVISE") {
-              setActiveTab("submitted");
-            }
+            setActiveTab("drafts");
             refreshDrafts();
             refreshSubmittedSubmissions();
           }}
-          onSaved={refreshDrafts}
           onSubmitted={(submittedProcess) => {
             setDraftsState((current) =>
               current.kind === "ready"
@@ -947,7 +968,7 @@ function SubmissionFormDialog({
   onReturnResolved,
 }: SubmissionFormDialogProps) {
   const { t } = useTranslation();
-  const [form] = useState<SubmissionForm | null>(() =>
+  const [form, setForm] = useState<SubmissionForm | null>(() =>
     state.kind === "ready" ? state.form : null,
   );
   const [returnReview] = useState<SubmissionReturnReview | null>(() =>
@@ -957,16 +978,11 @@ function SubmissionFormDialog({
     state.kind === "ready" ? buildDynamicFormInputs(state.form) : {},
   );
   const [operation, setOperation] = useState<SubmissionFormOperation>("idle");
-  const [returnChoice, setReturnChoice] = useState<SubmissionReturnReviewChoice>(() =>
-    state.kind === "ready" && state.returnReview?.available_choices.includes("REVISE")
-      ? "REVISE"
-      : state.kind === "ready" && state.returnReview?.available_choices[0]
-        ? state.returnReview.available_choices[0]
-        : "REVISE",
-  );
-  const [returnJustification, setReturnJustification] = useState("");
   const [savedCorrectionFieldKeys, setSavedCorrectionFieldKeys] = useState(
-    () => new Set<string>(),
+    () =>
+      state.kind === "ready"
+        ? getPersistedCorrectionFieldKeys(state.form)
+        : new Set<string>(),
   );
   const [activeSectionIndex, setActiveSectionIndex] = useState(() =>
     state.kind === "ready"
@@ -977,7 +993,6 @@ function SubmissionFormDialog({
       : 0,
   );
   const operationRef = useRef<SubmissionFormOperation>("idle");
-  const returnResponseResolvedRef = useRef(false);
   const defaultSection = t("submissions.generalSection");
   const sections = form
     ? getSubmissionFormSections(form.fields, defaultSection)
@@ -986,20 +1001,58 @@ function SubmissionFormDialog({
     activeSectionIndex,
     Math.max(sections.length - 1, 0),
   );
+  const hasCorrectionContext = Boolean(
+    state.kind === "ready" &&
+      (state.process.awaiting_correction ||
+        state.returnReview ||
+        Object.values(state.form.reviews).some(isCorrectableReview)),
+  );
 
   function updateField(fieldKey: string, value: string | boolean) {
     setInputs((current) => ({ ...current, [fieldKey]: value }));
   }
 
-  function saveCorrectionField(fieldKey: string) {
-    if (!form || !isSubmissionCorrectionFieldChanged(form, inputs, fieldKey)) {
+  async function saveCorrectionField(fieldKey: string) {
+    if (
+      !form ||
+      form.is_submitted ||
+      operationRef.current !== "idle" ||
+      !isSubmissionCorrectionFieldChanged(form, inputs, fieldKey)
+    ) {
       return;
     }
-    setSavedCorrectionFieldKeys((current) => {
-      const next = new Set(current);
-      next.add(fieldKey);
-      return next;
-    });
+
+    operationRef.current = "saving";
+    setOperation("saving");
+
+    try {
+      const response = await fetch(`/api/submissions/${state.process.id}/form`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          values: buildDynamicFormValues(form.fields, inputs, false),
+        }),
+      });
+      const payload = (await response.json().catch(() => null)) as unknown;
+      if (!response.ok || !isSaveResult(payload)) {
+        toast.error(getApiMessage(payload, t("submissions.saveFailed"), t));
+        return;
+      }
+
+      setSavedCorrectionFieldKeys((current) => {
+        const next = new Set(current);
+        next.add(fieldKey);
+        return next;
+      });
+      updateCorrectionCompletedFieldKeys(state.process.id, fieldKey, true);
+      toast.success(t("submissions.correctionResponseSaved"));
+      onSaved("response");
+    } catch {
+      toast.error(t("submissions.connectionFailed"));
+    } finally {
+      operationRef.current = "idle";
+      setOperation("idle");
+    }
   }
 
   function editCorrectionField(fieldKey: string) {
@@ -1008,6 +1061,7 @@ function SubmissionFormDialog({
       next.delete(fieldKey);
       return next;
     });
+    updateCorrectionCompletedFieldKeys(state.process.id, fieldKey, false);
   }
 
   async function saveDraft() {
@@ -1015,11 +1069,12 @@ function SubmissionFormDialog({
       state.kind !== "ready" ||
       !form ||
       form.is_submitted ||
-      Object.values(form.reviews).some(isCorrectableReview) ||
       operationRef.current !== "idle"
     ) {
       return;
     }
+
+    const isCorrectionMode = Object.values(form.reviews).some(isCorrectableReview);
 
     operationRef.current = "saving";
     setOperation("saving");
@@ -1042,8 +1097,14 @@ function SubmissionFormDialog({
         return;
       }
 
-      toast.success(t("submissions.saved"));
-      onSaved();
+      toast.success(
+        t(
+          isCorrectionMode
+            ? "submissions.correctionDraftSaved"
+            : "submissions.saved",
+        ),
+      );
+      onSaved("draft");
     } catch {
       toast.error(t("submissions.connectionFailed"));
     } finally {
@@ -1133,6 +1194,7 @@ function SubmissionFormDialog({
       toast.success(
         t(isCorrectionMode ? "submissions.resubmitted" : "submissions.submitted"),
       );
+      clearCorrectionReviewSnapshot(state.process.id);
       onSubmitted(state.process);
     } catch {
       toast.error(t("submissions.connectionFailed"));
@@ -1145,75 +1207,38 @@ function SubmissionFormDialog({
   async function respondToReturn() {
     if (state.kind !== "ready" || !form || !returnReview || operationRef.current !== "idle") return;
 
-    if (returnChoice === "REVISE") {
-      const unsavedCorrectionField = form.fields.find(
-        (field) =>
-          isCorrectableReview(form.reviews[field.field_key]) &&
-          !savedCorrectionFieldKeys.has(field.field_key),
-      );
-      const pendingCorrectionField = getPendingSubmissionCorrectionField(form, inputs);
-      const incompleteCorrectionField =
-        unsavedCorrectionField ?? pendingCorrectionField;
-      if (incompleteCorrectionField) {
-        toast.error(t("submissions.correctionsIncomplete"));
-        const pendingSectionIndex = sections.indexOf(
-          getSubmissionFieldSection(incompleteCorrectionField, defaultSection),
-        );
-        if (pendingSectionIndex >= 0) setActiveSectionIndex(pendingSectionIndex);
-        requestAnimationFrame(() => {
-          document
-            .getElementById(`dynamic-form-field-${incompleteCorrectionField.field_key}`)
-            ?.focus();
-        });
-        return;
-      }
-
-      const validation = validateDynamicFormValues(form.fields, inputs, t);
-      if (!validation.valid) {
-        toast.error(validation.message);
-        return;
-      }
-    }
-
     operationRef.current = "responding";
     setOperation("responding");
     try {
-      if (!returnResponseResolvedRef.current) {
-        const response = await fetch(`/api/submissions/${state.process.id}/return-review`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ choice: returnChoice, justification: returnJustification.trim() || null }),
-        });
-        const payload = await response.json().catch(() => null) as unknown;
-        if (!response.ok || !isReturnReviewResult(payload)) {
-          toast.error(getApiMessage(payload, t("submissions.returnReviewResponseFailed"), t));
-          return;
-        }
-        if (payload.choice !== "REVISE") {
-          toast.success(t(`submissions.returnChoicesSuccess.${payload.choice}`));
-          onReturnResolved(payload.choice);
-          return;
-        }
-        returnResponseResolvedRef.current = true;
-      }
-
-      operationRef.current = "submitting";
-      setOperation("submitting");
-      const submitResponse = await fetch(`/api/submissions/${state.process.id}/form`, {
+      const response = await fetch(`/api/submissions/${state.process.id}/return-review`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          values: buildDynamicFormValues(form.fields, inputs, true),
-        }),
+        body: JSON.stringify({ choice: "REVISE", justification: null }),
       });
-      const submitPayload = await submitResponse.json().catch(() => null) as unknown;
-      if (!submitResponse.ok || !isSubmitResult(submitPayload)) {
-        toast.error(getApiMessage(submitPayload, t("submissions.submitFailed"), t));
+      const payload = await response.json().catch(() => null) as unknown;
+      if (
+        !response.ok ||
+        !isReturnReviewResult(payload) ||
+        payload.choice !== "REVISE"
+      ) {
+        toast.error(getApiMessage(payload, t("submissions.returnReviewResponseFailed"), t));
         return;
       }
-
-      toast.success(t("submissions.resubmitted"));
-      onSubmitted(state.process);
+      const correctionSnapshot: SubmissionCorrectionReviewSnapshot = {
+        reviews: form.reviews,
+        baseline_values: form.values,
+        completed_field_keys: [],
+        return_review: returnReview,
+      };
+      writeCorrectionReviewSnapshot(state.process.id, correctionSnapshot);
+      setForm({
+        ...form,
+        is_submitted: false,
+        correction_baseline_values: form.values,
+        correction_completed_field_keys: [],
+      });
+      toast.success(t("submissions.returnRevisionOpened"));
+      onReturnResolved();
     } catch {
       toast.error(t("submissions.connectionFailed"));
     } finally {
@@ -1229,11 +1254,11 @@ function SubmissionFormDialog({
       className="fixed inset-0 z-50 grid place-items-center bg-slate-950/50 p-3 backdrop-blur-[2px] sm:p-6"
       role="dialog"
     >
-      <div className={`flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl ${returnReview ? "h-[92dvh] w-[94vw] max-w-none" : "max-h-[94dvh] w-full max-w-3xl"}`}>
+      <div className={`flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl ${hasCorrectionContext ? "h-[92dvh] w-[85vw] max-w-none" : "max-h-[94dvh] w-full max-w-3xl"}`}>
         <header className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200 px-5 py-4 sm:px-6">
           <div className="min-w-0">
             <p className="font-mono text-xs font-bold uppercase tracking-wide text-teal-700">
-              {state.process.code} · {t(returnReview ? "submissions.returnReviewLabel" : "submissions.draftLabel")}
+              {state.process.code} · {t(hasCorrectionContext ? "submissions.returnReviewLabel" : "submissions.draftLabel")}
             </p>
             <h2
               className="mt-1 truncate text-xl font-bold text-slate-900"
@@ -1273,19 +1298,16 @@ function SubmissionFormDialog({
         ) : form ? (
           <SubmissionDialogContent
             activeSectionIndex={visibleSectionIndex}
+            awaitingCorrection={Boolean(state.process.awaiting_correction)}
             form={form}
             inputs={inputs}
             operation={operation}
-            returnChoice={returnChoice}
-            returnJustification={returnJustification}
             returnReview={returnReview}
             processId={state.process.id}
             onFieldChange={updateField}
             onSectionChange={setActiveSectionIndex}
             onSave={() => void saveDraft()}
             onSubmit={() => void submitForAnalysis()}
-            onReturnChoiceChange={setReturnChoice}
-            onReturnJustificationChange={setReturnJustification}
             onReturnResponse={() => void respondToReturn()}
             onSaveCorrection={saveCorrectionField}
             onEditCorrection={editCorrectionField}
@@ -1299,20 +1321,17 @@ function SubmissionFormDialog({
 
 function SubmissionDialogContent({
   activeSectionIndex,
+  awaitingCorrection,
   processId,
   form,
   inputs,
   operation,
   returnReview,
-  returnChoice,
-  returnJustification,
   savedCorrectionFieldKeys,
   onFieldChange,
   onSectionChange,
   onSave,
   onSubmit,
-  onReturnChoiceChange,
-  onReturnJustificationChange,
   onReturnResponse,
   onSaveCorrection,
   onEditCorrection,
@@ -1327,7 +1346,9 @@ function SubmissionDialogContent({
   const awaitingReturnResponse = Boolean(returnReview && form.is_submitted);
   const hasCorrectionFields = Object.values(form.reviews).some(isCorrectableReview);
   const isCorrectionMode = hasCorrectionFields && (Boolean(returnReview) || !form.is_submitted);
-  const hasCorrectionContext = Boolean(returnReview || isCorrectionMode);
+  const hasCorrectionContext = Boolean(
+    awaitingCorrection || returnReview || isCorrectionMode,
+  );
   const pendingCorrectionField = isCorrectionMode
     ? getPendingSubmissionCorrectionField(form, inputs)
     : undefined;
@@ -1337,15 +1358,40 @@ function SubmissionDialogContent({
   const correctionFields = orderedFields.filter((field) =>
     isCorrectableReview(form.reviews[field.field_key]),
   );
-  const pendingCorrectionCount = correctionFields.filter(
+  const pendingCorrectionFields = correctionFields.filter(
     (field) => !savedCorrectionFieldKeys.has(field.field_key),
-  ).length;
+  );
+  const pendingCorrectionCount = pendingCorrectionFields.length;
+  const listedCorrectionFields = form.is_submitted
+    ? correctionFields
+    : pendingCorrectionFields;
   const canResubmit =
     isCorrectionMode &&
     correctionFields.length > 0 &&
     pendingCorrectionCount === 0 &&
     !pendingCorrectionField &&
     correctionFormIsValid;
+
+  function focusCorrectionField(fieldKey: string) {
+    const field = orderedFields.find(
+      (candidate) => candidate.field_key === fieldKey,
+    );
+    if (!field) return;
+    const sectionIndex = sections.indexOf(
+      getSubmissionFieldSection(field, defaultSection),
+    );
+    if (sectionIndex >= 0) onSectionChange(sectionIndex);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        document
+          .getElementById(`dynamic-form-field-${fieldKey}`)
+          ?.scrollIntoView({ behavior: "smooth", block: "center" });
+        document.getElementById(`dynamic-form-field-${fieldKey}`)?.focus({
+          preventScroll: true,
+        });
+      });
+    });
+  }
 
   function handleSectionTabKeyDown(
     event: ReactKeyboardEvent<HTMLButtonElement>,
@@ -1389,13 +1435,14 @@ function SubmissionDialogContent({
                 <p className="mt-1 text-sm leading-6">{awaitingReturnResponse ? t("submissions.returnReviewDescription") : t("submissions.correctionModeDescription")}</p>
                 {isCorrectionMode && <p className="mt-3 w-fit rounded-full bg-amber-200 px-3 py-1 text-xs font-bold text-amber-950">{t("submissions.correctionsRemaining", { count: pendingCorrectionCount })}</p>}
                 {returnReview?.triage_decision?.justification && <div className="mt-3 rounded-lg border border-amber-200 bg-white/75 p-3"><p className="text-xs font-bold uppercase tracking-wide text-amber-800">{t("submissions.bracvamJustification")}</p><p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-slate-800">{returnReview.triage_decision.justification}</p></div>}
+                {correctionFields.length > 0 ? <div className="mt-3"><p className="text-xs font-bold uppercase tracking-wide text-amber-800">{t("submissions.bracvamPoints")}</p>{listedCorrectionFields.length > 0 ? <ul className="mt-2 grid gap-2">{listedCorrectionFields.map((field) => { const review = form.reviews[field.field_key]; return <li key={field.field_key}><button aria-label={t("submissions.goToReviewedField", { field: field.label })} className="w-full rounded-lg border border-amber-300 bg-white/80 px-3 py-2 text-left outline-none transition hover:bg-amber-100 focus-visible:ring-2 focus-visible:ring-amber-600" onClick={() => focusCorrectionField(field.field_key)} type="button"><span className="block text-xs font-bold text-slate-900">{field.label}</span><span className="mt-1 block text-xs font-semibold text-amber-900">{t(`submissions.reviewStatuses.${review?.status}`, { defaultValue: review?.status })}</span>{review?.comments && <span className="mt-1 block text-xs leading-5 text-slate-700">{review.comments}</span>}</button></li>; })}</ul> : <p className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs font-semibold leading-5 text-emerald-800" role="status">{t("submissions.allCorrectionPointsAnswered")}</p>}</div> : awaitingCorrection || returnReview?.source === "TRIAGE" ? <p className="mt-3 rounded-lg border border-amber-300 bg-white/80 p-3 text-xs leading-5 text-amber-950" role="alert">{t("submissions.noFieldReviewDetails")}</p> : null}
                 {returnReview && <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-amber-900">
                   <span>{t("submissions.returnOpenedAt", { date: formatSubmissionDate(returnReview.opened_at, i18n.resolvedLanguage) })}</span>
                   {returnReview.due_date && <span>{t("submissions.returnDueDate", { date: formatSubmissionDate(returnReview.due_date, i18n.resolvedLanguage) })}</span>}
                 </div>}
               </div>
             </div>
-            {returnReview && awaitingReturnResponse && <div className="mt-4 grid gap-3 border-t border-amber-200 pt-4"><label className="grid gap-1.5 text-sm font-bold">{t("submissions.returnChoiceLabel")}<select className="min-h-11 rounded-xl border border-amber-300 bg-white px-3 font-normal text-slate-900" disabled={operation !== "idle"} onChange={(event) => onReturnChoiceChange(event.target.value as SubmissionReturnReviewChoice)} value={returnChoice}>{returnReview.available_choices.map((choice) => <option key={choice} value={choice}>{t(`submissions.returnChoices.${choice}`)}</option>)}</select></label><label className="grid gap-1.5 text-sm font-bold">{t("submissions.returnJustificationLabel")}<textarea className="min-h-20 rounded-xl border border-amber-300 bg-white p-3 font-normal text-slate-900" disabled={operation !== "idle"} maxLength={4000} onChange={(event) => onReturnJustificationChange(event.target.value)} placeholder={t("submissions.returnJustificationPlaceholder")} value={returnJustification} /></label><button className="inline-flex min-h-11 w-fit items-center gap-2 rounded-xl bg-amber-800 px-4 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-60" disabled={operation !== "idle" || (returnChoice === "REVISE" && !canResubmit)} onClick={onReturnResponse} type="button">{operation !== "idle" && <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />}{operation !== "idle" ? t(returnChoice === "REVISE" ? "submissions.resubmitting" : "submissions.respondingToReturn") : t(returnChoice === "REVISE" ? "submissions.confirmAndResubmit" : "submissions.confirmReturnChoice")}</button></div>}
+            {returnReview && awaitingReturnResponse && <div className="mt-4 border-t border-amber-200 pt-4"><button className="inline-flex min-h-11 w-fit items-center gap-2 rounded-xl bg-amber-800 px-4 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-60" disabled={operation !== "idle"} onClick={onReturnResponse} type="button">{operation !== "idle" && <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />}{operation !== "idle" ? t("submissions.respondingToReturn") : t("submissions.startCorrection")}</button></div>}
           </section>
           </aside>
         )}
@@ -1481,12 +1528,6 @@ function SubmissionDialogContent({
                     const isLockedDuringCorrection = Boolean(
                       isCorrectionMode && !isCorrectionField,
                     );
-                    const canEditReturnedField = Boolean(
-                      returnReview &&
-                      returnChoice === "REVISE" &&
-                      isCorrectionField &&
-                      !savedCorrectionFieldKeys.has(field.field_key),
-                    );
                     const isSavedCorrection =
                       isCorrectionField &&
                       savedCorrectionFieldKeys.has(field.field_key);
@@ -1502,7 +1543,7 @@ function SubmissionDialogContent({
                       {review && <div className="mb-4 border-b border-amber-200 pb-3"><p className="text-xs font-bold uppercase tracking-wide text-amber-900">{t("submissions.fieldReviewed", { status: t(`submissions.reviewStatuses.${review.status}`, { defaultValue: review.status }) })}</p>{review.comments && <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-amber-950">{review.comments}</p>}</div>}
                       {isLockedDuringCorrection && <div className="mb-3 flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600"><LockKeyhole aria-hidden="true" className="size-3.5 shrink-0" />{t("submissions.fieldLockedDuringCorrection")}</div>}
                       <DynamicFormFieldControl
-                        disabled={isSavedCorrection || (form.is_submitted && !canEditReturnedField) || operation !== "idle" || isLockedDuringCorrection}
+                        disabled={isSavedCorrection || form.is_submitted || operation !== "idle" || isLockedDuringCorrection}
                         field={field}
                         onChange={(value) => onFieldChange(field.field_key, value)}
                         processId={processId}
@@ -1519,10 +1560,10 @@ function SubmissionDialogContent({
       </div>
 
       <footer className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:px-6">
-        <p className="text-xs leading-5 text-slate-500">{t(returnReview && returnChoice !== "REVISE" ? "submissions.returnReviewFooterNotice" : hasCorrectionContext ? "submissions.correctionResubmitNotice" : "submissions.saveNotice")}</p>
+        <p className="text-xs leading-5 text-slate-500">{t(hasCorrectionContext ? "submissions.correctionResubmitNotice" : "submissions.saveNotice")}</p>
         {!form.is_submitted && (
           <div className="flex flex-wrap justify-end gap-2">
-            {!isCorrectionMode && <button
+            <button
               className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-teal-700 bg-white px-4 py-2 text-sm font-semibold text-teal-800 outline-none transition hover:bg-teal-50 focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-60"
               disabled={operation !== "idle"}
               onClick={onSave}
@@ -1533,8 +1574,10 @@ function SubmissionDialogContent({
               ) : (
                 <Save aria-hidden="true" className="size-4" />
               )}
-              {operation === "saving" ? t("submissions.saving") : t("submissions.saveDraft")}
-            </button>}
+              {operation === "saving"
+                ? t(isCorrectionMode ? "submissions.savingCorrectionDraft" : "submissions.saving")
+                : t(isCorrectionMode ? "submissions.saveCorrectionDraft" : "submissions.saveDraft")}
+            </button>
             <button
               className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-teal-700 px-4 py-2 text-sm font-semibold text-white outline-none transition hover:bg-teal-800 focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-60"
               disabled={operation !== "idle" || (isCorrectionMode && !canResubmit)}
@@ -1572,6 +1615,10 @@ function getSubmissionFormSections(
 
 function isCorrectableReview(review: DynamicFormReview | undefined) {
   return review?.status === "NEEDS_REVISION" || review?.status === "REJECTED";
+}
+
+function getPersistedCorrectionFieldKeys(form: SubmissionForm) {
+  return new Set(form.correction_completed_field_keys ?? []);
 }
 
 function getSubmissionFieldSection(
@@ -1674,7 +1721,14 @@ function isSubmissionForm(value: unknown): value is SubmissionForm {
     Array.isArray(value.fields) &&
     value.fields.every(isDynamicFormField) &&
     isRecord(value.values) &&
-    isRecord(value.reviews)
+    isRecord(value.reviews) &&
+    (value.correction_baseline_values === undefined ||
+      isRecord(value.correction_baseline_values)) &&
+    (value.correction_completed_field_keys === undefined ||
+      (Array.isArray(value.correction_completed_field_keys) &&
+        value.correction_completed_field_keys.every(
+          (fieldKey) => typeof fieldKey === "string",
+        )))
   );
 }
 
@@ -1720,6 +1774,97 @@ function isReturnReviewResult(value: unknown): value is SubmissionReturnReviewRe
 
 function isReturnReviewChoice(value: unknown): value is SubmissionReturnReviewChoice {
   return value === "REVISE" || value === "CONTEST_AI" || value === "WITHDRAW";
+}
+
+function getCorrectionReviewStorageKey(processId: string) {
+  return `pivma:submission-correction:${processId}`;
+}
+
+function writeCorrectionReviewSnapshot(
+  processId: string,
+  snapshot: SubmissionCorrectionReviewSnapshot,
+) {
+  try {
+    window.localStorage.setItem(
+      getCorrectionReviewStorageKey(processId),
+      JSON.stringify(snapshot),
+    );
+  } catch {
+    // The in-memory form still preserves the reviews for the active dialog.
+  }
+}
+
+function updateCorrectionCompletedFieldKeys(
+  processId: string,
+  fieldKey: string,
+  completed: boolean,
+) {
+  const snapshot = readCorrectionReviewSnapshot(processId);
+  if (!snapshot) return;
+  const completedFieldKeys = new Set(snapshot.completed_field_keys);
+  if (completed) {
+    completedFieldKeys.add(fieldKey);
+  } else {
+    completedFieldKeys.delete(fieldKey);
+  }
+  writeCorrectionReviewSnapshot(processId, {
+    ...snapshot,
+    completed_field_keys: [...completedFieldKeys],
+  });
+}
+
+function readCorrectionReviewSnapshot(
+  processId: string,
+): SubmissionCorrectionReviewSnapshot | null {
+  try {
+    const serialized = window.localStorage.getItem(
+      getCorrectionReviewStorageKey(processId),
+    );
+    if (!serialized) return null;
+    const value = JSON.parse(serialized) as unknown;
+    if (!isCorrectionReviewSnapshot(value)) {
+      clearCorrectionReviewSnapshot(processId);
+      return null;
+    }
+    return value;
+  } catch {
+    clearCorrectionReviewSnapshot(processId);
+    return null;
+  }
+}
+
+function clearCorrectionReviewSnapshot(processId: string) {
+  try {
+    window.localStorage.removeItem(getCorrectionReviewStorageKey(processId));
+  } catch {
+    // Storage may be unavailable without affecting the active correction.
+  }
+}
+
+function isCorrectionReviewSnapshot(
+  value: unknown,
+): value is SubmissionCorrectionReviewSnapshot {
+  if (
+    !isRecord(value) ||
+    !isRecord(value.reviews) ||
+    !isRecord(value.baseline_values) ||
+    !Array.isArray(value.completed_field_keys) ||
+    !value.completed_field_keys.every(
+      (fieldKey) => typeof fieldKey === "string",
+    ) ||
+    !isReturnReview(value.return_review)
+  ) {
+    return false;
+  }
+
+  return Object.values(value.reviews).every(
+    (review) =>
+      isRecord(review) &&
+      typeof review.status === "string" &&
+      (review.comments === undefined ||
+        review.comments === null ||
+        typeof review.comments === "string"),
+  );
 }
 
 function isRecord(value: unknown): value is ApiRecord {
