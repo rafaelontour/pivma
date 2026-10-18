@@ -21,6 +21,37 @@ pnpm build
 pnpm start
 ```
 
+## Regras gerais para entradas e formulários
+
+Estas regras são obrigatórias para todos os campos de entrada da aplicação,
+incluindo formulários, diálogos, filtros, seletores e uploads:
+
+- Trate valores ausentes, `null`, vazios, compostos somente por espaços,
+  malformados ou fora dos limites permitidos como entradas inválidas.
+- Normalize os valores de acordo com o domínio antes do envio, sem alterar
+  identificadores técnicos ou conteúdo escrito por pessoas.
+- Declare no controle as restrições aplicáveis, como obrigatoriedade, tamanho,
+  formato, faixa e opções permitidas, oferecendo mensagens acessíveis e
+  internacionalizadas em português do Brasil e inglês.
+- Mantenha a ação de confirmação ou envio desabilitada enquanto as informações
+  obrigatórias não estiverem completas e válidas. A validação também deve ser
+  repetida no manipulador de envio para evitar chamadas programáticas inválidas.
+- Nunca confie somente na validação do navegador. Route Handlers, serviços e a
+  API devem validar novamente os dados antes de realizar qualquer mutação.
+- Durante uma requisição, bloqueie novos envios e ações conflitantes para evitar
+  cliques duplos, concorrência acidental e operações duplicadas.
+- Quando uma operação for rejeitada, preserve as informações preenchidas para
+  que a pessoa possa corrigir somente o necessário. Não envie automaticamente
+  uma segunda mutação.
+- Estados desabilitados, erros e instruções devem possuir indicação visual e
+  semântica adequada para teclado e tecnologias assistivas.
+
+Uma entrada de teste somente pode desconsiderar alguma dessas regras quando o
+responsável pelo projeto solicitar explicitamente essa exceção no momento do
+teste. A exceção deve ficar limitada aos campos e ao cenário indicados, não deve
+ser generalizada para outros testes e não pode enfraquecer silenciosamente a
+validação usada em produção.
+
 ## Docker
 
 Build and start the production application at

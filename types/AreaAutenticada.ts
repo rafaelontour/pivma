@@ -19,6 +19,7 @@ export type AuthenticatedPage =
   | "home"
   | "settings"
   | "users"
+  | "institutional-catalog"
   | "processes"
   | "submissions"
   | "forms"

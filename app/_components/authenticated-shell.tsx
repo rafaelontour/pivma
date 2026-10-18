@@ -128,15 +128,20 @@ export function AuthenticatedShell({
     session.user.permissions.includes("rbac.read") ||
     session.user.profiles.some((profile) => profile.name === "Grupo Gestor");
   const canManageUsers = session.user.permissions.includes("users.read");
+  const canManageInstitutionalCatalog = session.user.permissions.includes(
+    "institutional.catalogs.manage",
+  );
   const canViewSettings =
-    canManageForms || canViewAiEvaluations || canManageUsers;
+    canManageForms || canViewAiEvaluations || canManageUsers || canManageInstitutionalCatalog;
   const headingKey = activePage === "ai-evaluations"
     ? "aiEvaluations"
     : activePage === "operational-observability"
       ? "operationalObservability"
       : activePage === "ai-observability"
         ? "aiObservability"
-        : activePage;
+        : activePage === "institutional-catalog"
+          ? "institutionalCatalog"
+          : activePage;
   const heading = {
     eyebrow: t(`shell.headings.${headingKey}.eyebrow`),
     title: t(`shell.headings.${headingKey}.title`),
@@ -248,7 +253,9 @@ export function AuthenticatedShell({
                 ? "h-full min-h-0 max-w-[100rem]"
                 : activePage === "submissions" ||
               activePage === "operational-observability" ||
-              activePage === "ai-observability"
+              activePage === "ai-observability" ||
+              activePage === "institutional-catalog" ||
+              activePage === "settings"
                   ? "min-h-full max-w-none"
                   : activePage === "forms"
                     ? "min-h-full max-w-[100rem]"
@@ -365,7 +372,8 @@ function Sidebar({
               activePage === "settings" ||
               activePage === "forms" ||
               activePage === "ai-evaluations" ||
-              activePage === "users"
+              activePage === "users" ||
+              activePage === "institutional-catalog"
                 ? "page"
                 : undefined
             }
@@ -374,7 +382,8 @@ function Sidebar({
               activePage === "settings" ||
                 activePage === "forms" ||
                 activePage === "ai-evaluations" ||
-                activePage === "users",
+                activePage === "users" ||
+                activePage === "institutional-catalog",
             )}`}
             href="/configuracoes"
           >

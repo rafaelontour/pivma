@@ -123,9 +123,9 @@
     "loading": "Loading settings modules…",
     "ariaLabel": "Settings modules",
     "title": "Configuration and management resources",
-    "description": "Manage submission forms, AI criteria libraries, and the platform user directory according to your access profiles.",
+    "description": "Manage forms, AI evaluations, users, and the platform institutional catalog according to your access profiles.",
     "noModules": "No settings modules available",
-    "noModulesDescription": "Your account does not have administrative or configuration permissions to access forms, AI evaluations, or user management. Ask an administrator if you need access.",
+    "noModulesDescription": "Your account does not have permission to access the available settings modules. Ask an administrator if you need access.",
     "restricted": "Restricted",
     "restrictedLabel": "{{title}} (Restricted access)",
     "defaultDenied": "Access has not been granted to your current profile.",
@@ -136,7 +136,75 @@
     "modules": {
       "forms": { "title": "Forms", "description": "Edit and structure process forms, defining sections, dynamic fields, requirements, and AI enablement.", "badge": "BraCVAM configuration", "denied": "Your profile does not have permission to manage process forms." },
       "ai-evaluations": { "title": "AI evaluations", "description": "View and configure goals, published versions, criterion suggestions, and associations with evaluated fields.", "badge": "Artificial intelligence", "denied": "Your profile does not have permission to view or configure AI evaluations." },
-      "users": { "title": "Users", "description": "View registered accounts, manage access status, edit full names, and configure permission profiles.", "badge": "Administration", "denied": "Your profile does not have permission to view the user directory." }
+      "users": { "title": "Users", "description": "View registered accounts, manage access status, edit full names, and configure permission profiles.", "badge": "Administration", "denied": "Your profile does not have permission to view the user directory." },
+      "institutionalCatalog": { "title": "Institutions and laboratories", "description": "Create, rename, and deactivate the institutions and laboratories that make up the platform institutional catalog.", "badge": "Institutional catalog", "denied": "Your profile does not have permission to manage institutions and laboratories." }
+    }
+  },
+  "institutionalCatalog": {
+    "ariaLabel": "Institutions and laboratories catalog",
+    "title": "Institutional catalog",
+    "description": "Organize institutions and their laboratories. Assigning people to laboratories is handled separately.",
+    "loading": "Loading institutions and laboratories…",
+    "createdAt": "Created on {{date}}",
+    "laboratories_one": "{{count}} laboratory",
+    "laboratories_other": "{{count}} laboratories",
+    "emptyLaboratories": "This institution does not have any registered laboratories yet.",
+    "noActiveInstitution": "Create or keep an active institution before creating a laboratory.",
+    "empty": {
+      "title": "No institutions registered",
+      "description": "Create the first institution to start organizing laboratories."
+    },
+    "status": { "active": "Active", "inactive": "Inactive" },
+    "fields": {
+      "institution": "Institution",
+      "selectInstitution": "Select an institution",
+      "institutionName": "Institution name",
+      "laboratoryName": "Laboratory name",
+      "namePlaceholder": "Enter the name"
+    },
+    "actions": {
+      "refresh": "Refresh",
+      "retry": "Try again",
+      "newInstitution": "New institution",
+      "newLaboratory": "New laboratory",
+      "renameInstitution": "Rename institution {{name}}",
+      "renameLaboratory": "Rename laboratory {{name}}",
+      "deactivateInstitution": "Deactivate institution {{name}}",
+      "deactivateLaboratory": "Deactivate laboratory {{name}}",
+      "close": "Close dialog",
+      "cancel": "Cancel",
+      "save": "Save",
+      "saving": "Saving…",
+      "confirmDeactivate": "Confirm deactivation"
+    },
+    "validation": {
+      "name": "The name must be between 1 and 255 characters.",
+      "institution": "Select an active institution."
+    },
+    "dialog": {
+      "create": {
+        "institution": { "title": "Create institution" },
+        "laboratory": { "title": "Create laboratory" }
+      },
+      "rename": {
+        "institution": { "title": "Rename institution" },
+        "laboratory": { "title": "Rename laboratory" }
+      },
+      "deactivate": {
+        "institution": { "title": "Deactivate institution?", "description": "The institution “{{name}}” will become inactive. Its laboratories will not be deactivated automatically, and this interface does not offer reactivation." },
+        "laboratory": { "title": "Deactivate laboratory?", "description": "The laboratory “{{name}}” will become inactive. This interface does not offer reactivation." }
+      }
+    },
+    "success": {
+      "create": { "institution": "Institution created.", "laboratory": "Laboratory created." },
+      "rename": { "institution": "Institution renamed.", "laboratory": "Laboratory renamed." },
+      "deactivate": { "institution": "Institution deactivated.", "laboratory": "Laboratory deactivated." }
+    },
+    "errors": {
+      "load": "We could not load the institutional catalog.",
+      "connection": "We could not connect to the institutional catalog.",
+      "mutation": "We could not complete the operation.",
+      "reconciliation": "The operation was accepted, but the data could not be refreshed. Use Refresh before repeating the operation."
     }
   },
   "dynamicForm": {
@@ -967,6 +1035,7 @@
       "home": { "eyebrow": "Authenticated area", "title": "Home", "description": "Welcome, {{username}}. Track validation workflows and upcoming platform activities from here." },
       "settings": { "eyebrow": "Administration", "title": "Settings", "description": "Manage platform parameters, submission forms, AI criteria, and the account directory." },
       "users": { "eyebrow": "Administration", "title": "Users", "description": "View active and inactive accounts registered on the platform." },
+      "institutionalCatalog": { "eyebrow": "Administration", "title": "Institutions and laboratories", "description": "Manage the institutional catalog used by platform workflows." },
       "processes": { "eyebrow": "Tracking", "title": "Processes", "description": "Track submissions by their current workflow status. The system moves them automatically." },
       "submissions": { "eyebrow": "Applicant area", "title": "Submissions", "description": "Choose a submission type to create a draft and start completing the form." },
       "forms": { "eyebrow": "BraCVAM configuration", "title": "Forms", "description": "Edit forms linked to processes, including their sections, fields, and completion rules." },

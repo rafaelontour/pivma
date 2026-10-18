@@ -123,9 +123,9 @@
     "loading": "Carregando módulos de configuração…",
     "ariaLabel": "Módulos de configuração",
     "title": "Recursos de parametrização e gestão",
-    "description": "Gerencie formulários de submissão, bibliotecas de critérios de inteligência artificial e diretório de usuários da plataforma com base nos seus perfis de acesso.",
+    "description": "Gerencie formulários, avaliações por IA, usuários e o catálogo institucional da plataforma com base nos seus perfis de acesso.",
     "noModules": "Nenhum módulo de configuração disponível",
-    "noModulesDescription": "Sua conta atual não possui permissões administrativas ou de configuração concedidas para acessar formulários, avaliações por IA ou gestão de usuários. Caso precise de acesso, solicite autorização a uma pessoa administradora.",
+    "noModulesDescription": "Sua conta atual não possui permissões para acessar os módulos de configuração disponíveis. Caso precise de acesso, solicite autorização a uma pessoa administradora.",
     "restricted": "Restrito",
     "restrictedLabel": "{{title}} (Acesso restrito)",
     "defaultDenied": "Acesso não concedido para o perfil atual.",
@@ -136,7 +136,75 @@
     "modules": {
       "forms": { "title": "Formulários", "description": "Edite e estruture os formulários dos processos, definindo seções, campos dinâmicos, obrigatoriedade e habilitação para IA.", "badge": "Configuração BraCVAM", "denied": "Seu perfil não possui permissão para gerenciar os formulários de processo." },
       "ai-evaluations": { "title": "Avaliações por IA", "description": "Consulte e configure objetivos, versões publicadas, sugestões de critérios e associações com campos avaliados.", "badge": "Inteligência Artificial", "denied": "Seu perfil não possui permissão para consultar ou configurar avaliações por IA." },
-      "users": { "title": "Usuários", "description": "Consulte as contas cadastradas, gerencie a situação de acesso, edite nomes completos e configure perfis de permissão.", "badge": "Administração", "denied": "Seu perfil não possui permissão para consultar o diretório de usuários." }
+      "users": { "title": "Usuários", "description": "Consulte as contas cadastradas, gerencie a situação de acesso, edite nomes completos e configure perfis de permissão.", "badge": "Administração", "denied": "Seu perfil não possui permissão para consultar o diretório de usuários." },
+      "institutionalCatalog": { "title": "Instituições e laboratórios", "description": "Cadastre, renomeie e desative as instituições e os laboratórios que formam o catálogo institucional da plataforma.", "badge": "Catálogo institucional", "denied": "Seu perfil não possui permissão para gerenciar instituições e laboratórios." }
+    }
+  },
+  "institutionalCatalog": {
+    "ariaLabel": "Catálogo de instituições e laboratórios",
+    "title": "Catálogo institucional",
+    "description": "Organize instituições e seus laboratórios. A vinculação de pessoas aos laboratórios será tratada separadamente.",
+    "loading": "Carregando instituições e laboratórios…",
+    "createdAt": "Cadastrada em {{date}}",
+    "laboratories_one": "{{count}} laboratório",
+    "laboratories_other": "{{count}} laboratórios",
+    "emptyLaboratories": "Esta instituição ainda não possui laboratórios cadastrados.",
+    "noActiveInstitution": "Cadastre ou mantenha uma instituição ativa antes de criar um laboratório.",
+    "empty": {
+      "title": "Nenhuma instituição cadastrada",
+      "description": "Cadastre a primeira instituição para começar a organizar os laboratórios."
+    },
+    "status": { "active": "Ativo", "inactive": "Inativo" },
+    "fields": {
+      "institution": "Instituição",
+      "selectInstitution": "Selecione uma instituição",
+      "institutionName": "Nome da instituição",
+      "laboratoryName": "Nome do laboratório",
+      "namePlaceholder": "Digite o nome"
+    },
+    "actions": {
+      "refresh": "Atualizar",
+      "retry": "Tentar novamente",
+      "newInstitution": "Nova instituição",
+      "newLaboratory": "Novo laboratório",
+      "renameInstitution": "Renomear instituição {{name}}",
+      "renameLaboratory": "Renomear laboratório {{name}}",
+      "deactivateInstitution": "Desativar instituição {{name}}",
+      "deactivateLaboratory": "Desativar laboratório {{name}}",
+      "close": "Fechar diálogo",
+      "cancel": "Cancelar",
+      "save": "Salvar",
+      "saving": "Salvando…",
+      "confirmDeactivate": "Confirmar desativação"
+    },
+    "validation": {
+      "name": "O nome deve ter entre 1 e 255 caracteres.",
+      "institution": "Selecione uma instituição ativa."
+    },
+    "dialog": {
+      "create": {
+        "institution": { "title": "Cadastrar instituição" },
+        "laboratory": { "title": "Cadastrar laboratório" }
+      },
+      "rename": {
+        "institution": { "title": "Renomear instituição" },
+        "laboratory": { "title": "Renomear laboratório" }
+      },
+      "deactivate": {
+        "institution": { "title": "Desativar instituição?", "description": "A instituição “{{name}}” ficará inativa. Os laboratórios não serão desativados automaticamente e esta interface não oferece reativação." },
+        "laboratory": { "title": "Desativar laboratório?", "description": "O laboratório “{{name}}” ficará inativo. Esta interface não oferece reativação." }
+      }
+    },
+    "success": {
+      "create": { "institution": "Instituição cadastrada.", "laboratory": "Laboratório cadastrado." },
+      "rename": { "institution": "Instituição renomeada.", "laboratory": "Laboratório renomeado." },
+      "deactivate": { "institution": "Instituição desativada.", "laboratory": "Laboratório desativado." }
+    },
+    "errors": {
+      "load": "Não foi possível carregar o catálogo institucional.",
+      "connection": "Não foi possível conectar ao catálogo institucional.",
+      "mutation": "Não foi possível concluir a operação.",
+      "reconciliation": "A operação foi aceita, mas não foi possível atualizar os dados. Use Atualizar antes de repetir a operação."
     }
   },
   "dynamicForm": {
@@ -967,6 +1035,7 @@
       "home": { "eyebrow": "Área autenticada", "title": "Início", "description": "Boas-vindas, {{username}}. Acompanhe os fluxos de validação e as próximas atividades da plataforma a partir daqui." },
       "settings": { "eyebrow": "Administração", "title": "Configurações", "description": "Gerencie parâmetros da plataforma, formulários de submissão, critérios de IA e diretório de contas." },
       "users": { "eyebrow": "Administração", "title": "Usuários", "description": "Consulte as contas ativas e inativas cadastradas na plataforma." },
+      "institutionalCatalog": { "eyebrow": "Administração", "title": "Instituições e laboratórios", "description": "Gerencie o catálogo institucional usado pelos fluxos da plataforma." },
       "processes": { "eyebrow": "Acompanhamento", "title": "Processos", "description": "Acompanhe as submissões organizadas pelo estado atual do fluxo. As movimentações são feitas automaticamente pelo sistema." },
       "submissions": { "eyebrow": "Área do proponente", "title": "Submissões", "description": "Escolha um tipo de submissão para criar um rascunho e começar o preenchimento do formulário." },
       "forms": { "eyebrow": "Configuração BraCVAM", "title": "Formulários", "description": "Edite os formulários vinculados aos processos, suas seções, campos e regras de preenchimento." },

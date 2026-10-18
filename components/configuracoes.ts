@@ -34,11 +34,15 @@ export function getSettingsCapabilities(
   ].some((permission) => user.permissions.includes(permission));
 
   const canManageUsers = user.permissions.includes("users.read");
+  const canManageInstitutionalCatalog = user.permissions.includes(
+    "institutional.catalogs.manage",
+  );
 
   return {
     canManageForms,
     canViewAiEvaluations,
     canManageUsers,
+    canManageInstitutionalCatalog,
     user,
   };
 }
@@ -49,7 +53,8 @@ export function hasAnySettingsAccess(
   return (
     capabilities.canManageForms ||
     capabilities.canViewAiEvaluations ||
-    capabilities.canManageUsers
+    capabilities.canManageUsers ||
+    capabilities.canManageInstitutionalCatalog
   );
 }
 
@@ -87,6 +92,16 @@ export function getSettingsModules(
       iconName: "UsersRound",
       isAllowed: capabilities.canManageUsers,
       deniedReason: t("settings.modules.users.denied"),
+    },
+    {
+      id: "institutional-catalog",
+      title: t("settings.modules.institutionalCatalog.title"),
+      description: t("settings.modules.institutionalCatalog.description"),
+      href: "/instituicoes-laboratorios",
+      badge: t("settings.modules.institutionalCatalog.badge"),
+      iconName: "Building2",
+      isAllowed: capabilities.canManageInstitutionalCatalog,
+      deniedReason: t("settings.modules.institutionalCatalog.denied"),
     },
   ];
 }

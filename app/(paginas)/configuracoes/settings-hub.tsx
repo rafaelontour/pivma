@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import {
   ArrowRight,
   Bot,
+  Building2,
   ListChecks,
   Lock,
   ShieldAlert,
@@ -78,6 +79,7 @@ export function SettingsHub({ initialCapabilities }: SettingsHubProps) {
     canManageForms: false,
     canViewAiEvaluations: false,
     canManageUsers: false,
+    canManageInstitutionalCatalog: false,
   };
 
   const hasAccess = hasAnySettingsAccess(effectiveCapabilities);
@@ -110,7 +112,7 @@ export function SettingsHub({ initialCapabilities }: SettingsHubProps) {
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
           {modules.map((module) => (
             <SettingsModuleCard key={module.id} module={module} />
           ))}
@@ -198,6 +200,10 @@ function ModuleIcon({ name, className }: ModuleIconProps) {
 
   if (name === "Bot") {
     return <Bot aria-hidden="true" className={className} />;
+  }
+
+  if (name === "Building2") {
+    return <Building2 aria-hidden="true" className={className} />;
   }
 
   return <UsersRound aria-hidden="true" className={className} />;

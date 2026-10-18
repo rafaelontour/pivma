@@ -1,6 +1,10 @@
 import type { CurrentUser } from "./Usuario";
 
-export type SettingsModuleId = "forms" | "ai-evaluations" | "users";
+export type SettingsModuleId =
+  | "forms"
+  | "ai-evaluations"
+  | "users"
+  | "institutional-catalog";
 
 export type SettingsModuleItem = {
   id: SettingsModuleId;
@@ -8,7 +12,7 @@ export type SettingsModuleItem = {
   description: string;
   href: string;
   badge: string;
-  iconName: "ListChecks" | "Bot" | "UsersRound";
+  iconName: "ListChecks" | "Bot" | "UsersRound" | "Building2";
   isAllowed: boolean;
   deniedReason?: string;
 };
@@ -17,6 +21,7 @@ export type SettingsSessionCapabilities = {
   canManageForms: boolean;
   canViewAiEvaluations: boolean;
   canManageUsers: boolean;
+  canManageInstitutionalCatalog: boolean;
   user?: CurrentUser;
 };
 
