@@ -92,11 +92,11 @@ O quadro usará uma grade com uma fração igual por coluna e largura mínima ze
 
 Alternativa considerada: manter colunas fixas com rolagem lateral. Isso exige navegação horizontal constante e impede enxergar o fluxo completo de uma vez, contrariando a necessidade operacional atual.
 
-### Autorização orientada por permissões
+### Acesso de leitura para o perfil BraCVAM
 
-O item Processos e todas as consultas do quadro usarão a permissão de leitura de processos publicada pelo backend. Ocultar o item no cliente é apenas uma melhoria de interface; Route Handlers e API externa continuam responsáveis pela autorização efetiva.
+O item Processos e as consultas de leitura do quadro aceitarão `triage.review` ou um perfil atribuído cujo nome identifique a BraCVAM. O escopo de participação continua autorizando somente processos vinculados à pessoa. Ocultar o item no cliente é apenas uma melhoria de interface; Route Handlers e API externa continuam responsáveis pela autorização efetiva.
 
-Alternativa considerada: verificar apenas um nome de perfil BraCVAM. Perfis podem mudar e reunir permissões diferentes; códigos de permissão expressam melhor a capacidade efetiva da sessão.
+Essa compatibilidade cobre contas institucionais BraCVAM que ainda não recebem `triage.review` em `global_permissions`. As operações de triagem permanecem protegidas pela permissão específica; a compatibilidade de perfil habilita leitura do Kanban.
 
 ## Risks / Trade-offs
 

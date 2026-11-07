@@ -1,5 +1,7 @@
 import type { ProcessInstance } from "./Processo";
 import type { ProcessTask } from "./Tarefa";
+import type { ProcessCompositionSnapshot } from "./ParticipacaoProcesso";
+import type { ApiRecord } from "./Servico";
 
 export type ProcessOperationalStage =
   | "new"
@@ -69,7 +71,7 @@ export type ProcessDetailsState =
   | { kind: "closed" }
   | { kind: "loading"; process: ProcessInstance }
   | { kind: "error"; process: ProcessInstance; message: string }
-  | { kind: "ready"; process: ProcessInstance };
+  | { kind: "ready"; process: ProcessInstance; composition: ProcessCompositionSnapshot | null; structure: ApiRecord | null; operationsPermissions: ApiRecord | null };
 
 export type ProcessDetailsDialogProps = {
   state: Exclude<ProcessDetailsState, { kind: "closed" }>;

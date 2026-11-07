@@ -4,7 +4,8 @@ export type SettingsModuleId =
   | "forms"
   | "ai-evaluations"
   | "users"
-  | "institutional-catalog";
+  | "institutional-catalog"
+  | "collection-templates";
 
 export type SettingsModuleItem = {
   id: SettingsModuleId;
@@ -12,7 +13,7 @@ export type SettingsModuleItem = {
   description: string;
   href: string;
   badge: string;
-  iconName: "ListChecks" | "Bot" | "UsersRound" | "Building2";
+  iconName: "ListChecks" | "Bot" | "UsersRound" | "Building2" | "FileSpreadsheet";
   isAllowed: boolean;
   deniedReason?: string;
 };
@@ -22,6 +23,7 @@ export type SettingsSessionCapabilities = {
   canViewAiEvaluations: boolean;
   canManageUsers: boolean;
   canManageInstitutionalCatalog: boolean;
+  canManageCollectionTemplates?: boolean;
   user?: CurrentUser;
 };
 

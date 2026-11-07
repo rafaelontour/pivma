@@ -15,6 +15,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Settings,
+  UsersRound,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
@@ -27,9 +28,11 @@ import type {
   SessionState,
   SidebarProps,
 } from "@/types/AreaAutenticada";
-import { PROCESS_KANBAN_PERMISSION_CODES } from "@/types/Processo";
 import type { ApiMessage, ApiRecord } from "@/types/Servico";
 import type { CurrentUser } from "@/types/Usuario";
+import { hasProcessKanbanAccess } from "@/types/Processo";
+import { hasFormManagementAccess } from "@/components/configuracoes";
+import { GuidedOnboarding } from "./guided-onboarding";
 
 export function AuthenticatedShell({
   activePage,
@@ -116,23 +119,31 @@ export function AuthenticatedShell({
     return <SessionLoading />;
   }
 
-  const canViewProcesses = PROCESS_KANBAN_PERMISSION_CODES.some((permission) =>
-    session.user.permissions.includes(permission),
+  const canViewProcesses = hasProcessKanbanAccess(
+    session.user.permissions,
+    session.user.profiles,
   );
+  const canViewComposition = session.user.scopes?.some((scope) =>
+    scope.roles.includes("proponent") || scope.roles.includes("group_manager"),
+  ) ?? false;
   const canViewAiEvaluations = [
     "ai_evaluations.read",
     "ai_evaluations.manage",
   ].some((permission) => session.user.permissions.includes(permission));
-  const canManageForms =
-    session.user.isAdministrator ||
-    session.user.permissions.includes("rbac.read") ||
-    session.user.profiles.some((profile) => profile.name === "Grupo Gestor");
+  const canManageForms = hasFormManagementAccess(session.user);
+  const canUseSubmissionTutorial =
+    !canManageForms &&
+    (session.user.roles.includes("proponent") ||
+      session.user.profiles.some((profile) =>
+        profile.name.toLocaleLowerCase("pt-BR").includes("proponente"),
+      ));
   const canManageUsers = session.user.permissions.includes("users.read");
   const canManageInstitutionalCatalog = session.user.permissions.includes(
     "institutional.catalogs.manage",
   );
+  const canManageCollectionTemplates = session.user.isAdministrator || canManageInstitutionalCatalog;
   const canViewSettings =
-    canManageForms || canViewAiEvaluations || canManageUsers || canManageInstitutionalCatalog;
+    canManageForms || canViewAiEvaluations || canManageUsers || canManageInstitutionalCatalog || canManageCollectionTemplates;
   const headingKey = activePage === "ai-evaluations"
     ? "aiEvaluations"
     : activePage === "operational-observability"
@@ -141,7 +152,13 @@ export function AuthenticatedShell({
         ? "aiObservability"
         : activePage === "institutional-catalog"
           ? "institutionalCatalog"
-          : activePage;
+          : activePage === "collection-templates"
+            ? "collectionTemplates"
+            : activePage === "process-samples"
+              ? "processSamples"
+              : activePage === "sample-receipt"
+                ? "sampleReceipt"
+            : activePage;
   const heading = {
     eyebrow: t(`shell.headings.${headingKey}.eyebrow`),
     title: t(`shell.headings.${headingKey}.title`),
@@ -234,6 +251,7 @@ export function AuthenticatedShell({
 
       <Sidebar
         activePage={activePage}
+        canViewComposition={canViewComposition}
         canViewProcesses={canViewProcesses}
         canViewObservability={session.user.isAdministrator}
         canViewSettings={canViewSettings}
@@ -241,25 +259,26 @@ export function AuthenticatedShell({
         user={session.user}
       />
 
+      <GuidedOnboarding
+        activePage={activePage}
+        canManageForms={canManageForms}
+        canManageUsers={session.user.permissions.includes("users.read")}
+        canSubmit={canUseSubmissionTutorial}
+        userId={session.user.id}
+      />
+
       <section className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <div
+          data-tour-scroll-container
           className={`min-h-0 flex-1 ${
             activePage === "processes" ? "overflow-hidden" : "overflow-y-auto"
           }`}
         >
           <div
-            className={`mx-auto flex w-full flex-col px-5 py-6 sm:px-8 sm:py-9 lg:px-12 ${
+            className={`mx-auto flex w-full max-w-none flex-col px-5 py-6 sm:px-8 sm:py-9 lg:px-12 ${
               activePage === "processes"
-                ? "h-full min-h-0 max-w-[100rem]"
-                : activePage === "submissions" ||
-              activePage === "operational-observability" ||
-              activePage === "ai-observability" ||
-              activePage === "institutional-catalog" ||
-              activePage === "settings"
-                  ? "min-h-full max-w-none"
-                  : activePage === "forms"
-                    ? "min-h-full max-w-[100rem]"
-                    : "min-h-full max-w-6xl"
+                ? "h-full min-h-0"
+                : "min-h-full"
             }`}
           >
             <div className="flex shrink-0 items-start justify-between gap-5 border-b border-slate-300 pb-6">
@@ -296,6 +315,7 @@ export function AuthenticatedShell({
 
 function Sidebar({
   activePage,
+  canViewComposition,
   canViewProcesses,
   canViewObservability,
   canViewSettings,
@@ -337,10 +357,19 @@ function Sidebar({
         </Link>
 
         <Link
+          data-tour="shell-nav-submissions"
           aria-current={activePage === "submissions" ? "page" : undefined}
           aria-label={t("shell.navigation.submissions")}
           className={`mt-2 ${linkClassName(activePage === "submissions")}`}
           href="/submissoes"
+          onClick={() => {
+            try {
+              window.sessionStorage.setItem("pivma:onboarding:enter", "proponent-submission");
+            } catch {
+              // A navegação continua quando o navegador bloqueia o armazenamento.
+            }
+            window.dispatchEvent(new CustomEvent("pivma:onboarding-enter", { detail: "proponent-submission" }));
+          }}
         >
           <FilePenLine
             aria-hidden="true"
@@ -352,9 +381,9 @@ function Sidebar({
 
         {canViewProcesses && (
           <Link
-            aria-current={activePage === "processes" ? "page" : undefined}
+            aria-current={activePage === "processes" || activePage === "process-samples" || activePage === "sample-receipt" ? "page" : undefined}
             aria-label={t("shell.navigation.processes")}
-            className={`mt-2 ${linkClassName(activePage === "processes")}`}
+            className={`mt-2 ${linkClassName(activePage === "processes" || activePage === "process-samples" || activePage === "sample-receipt")}`}
             href="/processos"
           >
             <LayoutDashboard
@@ -366,14 +395,28 @@ function Sidebar({
           </Link>
         )}
 
+        {canViewComposition && (
+          <Link
+            aria-current={activePage === "process-composition" ? "page" : undefined}
+            aria-label={t("shell.navigation.composition")}
+            className={`mt-2 ${linkClassName(activePage === "process-composition")}`}
+            href="/processos/composicao"
+          >
+            <UsersRound aria-hidden="true" className="size-5 shrink-0" strokeWidth={2.2} />
+            {expanded && <span>{t("shell.navigation.composition")}</span>}
+          </Link>
+        )}
+
         {canViewSettings && (
           <Link
+            data-tour="shell-nav-settings"
             aria-current={
               activePage === "settings" ||
               activePage === "forms" ||
               activePage === "ai-evaluations" ||
               activePage === "users" ||
-              activePage === "institutional-catalog"
+              activePage === "institutional-catalog" ||
+              activePage === "collection-templates"
                 ? "page"
                 : undefined
             }
@@ -383,7 +426,8 @@ function Sidebar({
                 activePage === "forms" ||
                 activePage === "ai-evaluations" ||
                 activePage === "users" ||
-                activePage === "institutional-catalog",
+                activePage === "institutional-catalog" ||
+                activePage === "collection-templates",
             )}`}
             href="/configuracoes"
           >
@@ -516,5 +560,15 @@ function isCurrentUser(value: unknown): value is CurrentUser {
       user.preferred_locale === "en") &&
     Array.isArray(user.roles) &&
     user.roles.every((role) => typeof role === "string")
+    && (user.scopes === undefined || (Array.isArray(user.scopes) && user.scopes.every(isSessionAccessScope)))
   );
+}
+
+function isSessionAccessScope(value: unknown) {
+  if (!value || typeof value !== "object") return false;
+  const scope = value as ApiRecord;
+  return typeof scope.process_id === "string" &&
+    (scope.institution_id === null || typeof scope.institution_id === "string") &&
+    (scope.laboratory_id === null || typeof scope.laboratory_id === "string") &&
+    Array.isArray(scope.roles) && scope.roles.every((role) => typeof role === "string");
 }

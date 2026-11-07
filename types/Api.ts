@@ -21,6 +21,8 @@ export type SessionCookieWriter = {
 
 export type InternalApiErrorOptions = {
   code?: InternalApiErrorCode;
+  backendCode?: string;
+  backendMessage?: string;
   fallbackMessage: string;
   messages?: InternalApiErrorMessages;
   cookieStore?: SessionCookieWriter;

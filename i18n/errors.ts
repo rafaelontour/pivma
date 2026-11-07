@@ -21,10 +21,11 @@ export function getLocalizedApiError(
     : undefined;
 
   if (translationKey) {
-    return t(translationKey);
+    return `${t(translationKey)} (${code})`;
   }
 
-  return getStringProperty(payload, "message") ?? fallback;
+  const message = getStringProperty(payload, "message") ?? fallback;
+  return code ? `${message} (${code})` : message;
 }
 
 function getStringProperty(value: unknown, property: string) {

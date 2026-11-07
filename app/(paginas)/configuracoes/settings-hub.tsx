@@ -7,6 +7,8 @@ import {
   ArrowRight,
   Bot,
   Building2,
+  CircleHelp,
+  FileSpreadsheet,
   ListChecks,
   Lock,
   ShieldAlert,
@@ -67,7 +69,7 @@ export function SettingsHub({ initialCapabilities }: SettingsHubProps) {
       <section
         aria-busy="true"
         aria-live="polite"
-        className="flex flex-1 items-center justify-center py-16 text-sm text-slate-600"
+        className="flex w-full flex-1 items-center justify-center py-16 text-sm text-slate-600"
       >
         <span className="mr-3 size-3 animate-pulse rounded-full bg-teal-600" />
         {t("settings.loading")}
@@ -86,7 +88,10 @@ export function SettingsHub({ initialCapabilities }: SettingsHubProps) {
   const modules = getSettingsModules(effectiveCapabilities, t);
 
   return (
-    <section aria-label={t("settings.ariaLabel")} className="flex-1 py-6 sm:py-8">
+    <section
+      aria-label={t("settings.ariaLabel")}
+      className="w-full min-w-0 flex-1 py-6 sm:py-8"
+    >
       <div className="mb-8">
         <h2 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
           {t("settings.title")}
@@ -99,7 +104,7 @@ export function SettingsHub({ initialCapabilities }: SettingsHubProps) {
       {!hasAccess ? (
         <div
           aria-live="polite"
-          className="flex flex-col items-start gap-4 rounded-2xl border border-amber-200 bg-amber-50/80 p-6 sm:p-8"
+          className="flex w-full flex-col items-start gap-4 rounded-2xl border border-amber-200 bg-amber-50/80 p-6 sm:p-8"
         >
           <div className="flex items-center gap-3 text-amber-900">
             <ShieldAlert aria-hidden="true" className="size-6 shrink-0 text-amber-700" />
@@ -112,7 +117,7 @@ export function SettingsHub({ initialCapabilities }: SettingsHubProps) {
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid w-full grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
           {modules.map((module) => (
             <SettingsModuleCard key={module.id} module={module} />
           ))}
@@ -180,14 +185,56 @@ function SettingsModuleCard({ module }: SettingsModuleCardProps) {
       </div>
 
       <div className="mt-6 border-t border-slate-100 pt-4">
-        <Link
-          aria-label={t("settings.openLabel", { title: module.title })}
-          className="inline-flex items-center gap-2 text-sm font-semibold text-teal-700 outline-none transition group-hover:text-teal-900 group-hover:translate-x-0.5 focus-visible:ring-2 focus-visible:ring-teal-500"
-          href={module.href}
-        >
-          {t("settings.open")}
-          <ArrowRight aria-hidden="true" className="size-4" />
-        </Link>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Link
+            aria-label={t("settings.openLabel", { title: module.title })}
+            className="inline-flex items-center gap-2 text-sm font-semibold text-teal-700 outline-none transition group-hover:text-teal-900 group-hover:translate-x-0.5 focus-visible:ring-2 focus-visible:ring-teal-500"
+            href={module.href}
+            onClick={() => {
+              if (module.id !== "forms") return;
+              try {
+                window.sessionStorage.setItem("pivma:onboarding:enter", "bracvam-form");
+              } catch {
+                // A navegação continua quando o navegador bloqueia o armazenamento.
+              }
+            }}
+          >
+            {t("settings.open")}
+            <ArrowRight aria-hidden="true" className="size-4" />
+          </Link>
+          {module.id === "forms" && (
+            <Link
+              className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-teal-200 bg-teal-50 px-3 text-xs font-semibold text-teal-800 outline-none hover:bg-teal-100 focus-visible:ring-2 focus-visible:ring-teal-500"
+              href={`${module.href}#tutorial`}
+              onClick={() => {
+                try {
+                  window.sessionStorage.setItem("pivma:onboarding:replay", "bracvam-form");
+                } catch {
+                  // O acesso continua pelo link quando o navegador bloqueia o armazenamento.
+                }
+              }}
+            >
+              <CircleHelp aria-hidden="true" className="size-4" />
+              {t("onboarding.viewTutorial")}
+            </Link>
+          )}
+          {module.id === "users" && (
+            <Link
+              className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-teal-200 bg-teal-50 px-3 text-xs font-semibold text-teal-800 outline-none hover:bg-teal-100 focus-visible:ring-2 focus-visible:ring-teal-500"
+              href={`${module.href}#tutorial`}
+              onClick={() => {
+                try {
+                  window.sessionStorage.setItem("pivma:onboarding:replay", "user-directory");
+                } catch {
+                  // O acesso continua pelo link quando o navegador bloqueia o armazenamento.
+                }
+              }}
+            >
+              <CircleHelp aria-hidden="true" className="size-4" />
+              {t("onboarding.viewTutorial")}
+            </Link>
+          )}
+        </div>
       </div>
     </article>
   );
@@ -204,6 +251,10 @@ function ModuleIcon({ name, className }: ModuleIconProps) {
 
   if (name === "Building2") {
     return <Building2 aria-hidden="true" className={className} />;
+  }
+
+  if (name === "FileSpreadsheet") {
+    return <FileSpreadsheet aria-hidden="true" className={className} />;
   }
 
   return <UsersRound aria-hidden="true" className={className} />;

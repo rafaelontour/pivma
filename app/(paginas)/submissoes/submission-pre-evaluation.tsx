@@ -5,6 +5,7 @@ import { AlertCircle, Bot, CheckCircle2, Clock3, FilePenLine, LoaderCircle, Refr
 import { toast } from "sonner";
 import { getLocalizedApiError } from "@/i18n/errors";
 import { useTranslation } from "react-i18next";
+import Link from "next/link";
 import { useAccessibleDialog } from "@/components/accessible-dialog";
 import type { ProcessInstance } from "@/types/Processo";
 import type {
@@ -13,7 +14,9 @@ import type {
   SubmissionPreEvaluation,
   SubmissionPreEvaluationPanelProps,
   SubmissionTrackingCardProps,
+  SubmissionCompositionShortcutState,
 } from "@/types/Submissao";
+import type { ProcessCompositionSnapshot } from "@/types/ParticipacaoProcesso";
 import type { ApiRecord } from "@/types/Servico";
 
 const POLL_INTERVAL_MS = 5000;
@@ -24,6 +27,7 @@ export function SubmissionTrackingCard({ submission, templateName, onProcessChan
   const [evaluation, setEvaluation] = useState<SubmissionPreEvaluation | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [hasReturnReview, setHasReturnReview] = useState(false);
+  const [composition, setComposition] = useState<SubmissionCompositionShortcutState | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const inFlight = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
@@ -36,6 +40,16 @@ export function SubmissionTrackingCard({ submission, templateName, onProcessChan
     const controller = new AbortController();
     abortRef.current = controller;
     try {
+      if (
+        process.status === "PLANNING" &&
+        (!composition || Date.now() - composition.loadedAt > 30_000)
+      ) {
+        const compositionResponse = await fetch(`/api/processes/${process.id}/composition`, { cache: "no-store", signal: controller.signal });
+        const compositionPayload = await compositionResponse.json().catch(() => null);
+        if (compositionResponse.ok && isCompositionSnapshot(compositionPayload)) {
+          setComposition({ snapshot: compositionPayload, loadedAt: Date.now() });
+        }
+      }
       const evaluationResponse = await fetch(`/api/submissions/${process.id}/pre-evaluation`, { cache: "no-store", signal: controller.signal });
       const evaluationPayload = await evaluationResponse.json().catch(() => null);
       if (evaluationResponse.ok && isPreEvaluation(evaluationPayload)) {
@@ -67,7 +81,7 @@ export function SubmissionTrackingCard({ submission, templateName, onProcessChan
       if (!controller.signal.aborted) setIsRefreshing(false);
       inFlight.current = false;
     }
-  }, [onProcessChanged, process.awaiting_correction, process.has_been_submitted, process.id, process.status, t]);
+  }, [composition, onProcessChanged, process.awaiting_correction, process.has_been_submitted, process.id, process.status, t]);
 
   useEffect(() => {
     const initial = window.setTimeout(() => void refresh(), 0);
@@ -94,6 +108,7 @@ export function SubmissionTrackingCard({ submission, templateName, onProcessChan
       <p className="mt-1 text-sm leading-6 text-slate-600">{templateName}</p>
       {process.status === "AI_PRE_EVALUATION" && <div className="mt-4 flex items-center gap-2 rounded-xl bg-violet-50 p-3 text-xs font-semibold text-violet-900"><LoaderCircle aria-hidden="true" className="size-4 animate-spin" />{t("submissionTracking.inProgress")}</div>}
       {evaluation && <SubmissionPreEvaluationPanel compact evaluation={evaluation} />}
+      {process.status === "PLANNING" && composition && (composition.snapshot.capabilities.canAssignSponsor || composition.snapshot.capabilities.canAssignGroupManager || composition.snapshot.participants.some((participant) => participant.active)) && <div className="mt-4 rounded-xl border border-teal-200 bg-teal-50 p-3"><p className="text-xs font-semibold leading-5 text-teal-950">{composition.snapshot.capabilities.canAssignSponsor || composition.snapshot.capabilities.canAssignGroupManager ? t("participantComposition.submission.nextStep") : t("participantComposition.submission.teamProgress")}</p><Link className="mt-3 inline-flex min-h-9 items-center rounded-lg bg-teal-800 px-3 text-xs font-bold text-white outline-none hover:bg-teal-900 focus-visible:ring-2 focus-visible:ring-teal-500" href={`/processos/${process.id}/composicao`}>{t("participantComposition.actions.open")}</Link></div>}
       {!evaluation && process.status !== "AI_PRE_EVALUATION" && <p className="mt-4 rounded-xl bg-slate-50 p-3 text-xs leading-5 text-slate-600">{t("submissionTracking.noReport")}</p>}
       {canOpenCorrection && <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-3"><div className="flex items-start gap-2"><FilePenLine aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-amber-800" /><p className="text-xs font-semibold leading-5 text-amber-950">{t("submissionTracking.returnReviewAvailable")}</p></div><button className="mt-3 inline-flex min-h-9 items-center gap-2 rounded-lg bg-amber-800 px-3 text-xs font-bold text-white outline-none hover:bg-amber-900 focus-visible:ring-2 focus-visible:ring-amber-500" onClick={() => onOpenReturnReview(process)} type="button">{t("submissionTracking.openReturnReview")}</button></div>}
       {error && <p className="mt-3 text-xs leading-5 text-rose-700" role="alert">{error}</p>}
@@ -161,4 +176,5 @@ async function waitForTriage(processId: string) {
 function isPreEvaluation(value: unknown): value is SubmissionPreEvaluation { return isRecord(value) && typeof value.run_id === "string" && typeof value.correlation_id === "string" && typeof value.status === "string" && typeof value.started_at === "string" && isRecord(value.summary); }
 function isDirectReviewResult(value: unknown): value is DirectReviewResult { return isRecord(value) && typeof value.process_status === "string" && typeof value.direct_review_request_id === "string"; }
 function isProcess(value: unknown): value is ProcessInstance { return isRecord(value) && typeof value.id === "string" && typeof value.code === "string" && typeof value.title === "string" && typeof value.status === "string" && typeof value.template_key === "string" && typeof value.version_number === "number"; }
+function isCompositionSnapshot(value: unknown): value is ProcessCompositionSnapshot { return isRecord(value) && isRecord(value.capabilities) && Array.isArray(value.participants) && Array.isArray(value.tasks) && Array.isArray(value.invites) && Array.isArray(value.laboratories); }
 function isRecord(value: unknown): value is ApiRecord { return Boolean(value) && typeof value === "object" && !Array.isArray(value); }

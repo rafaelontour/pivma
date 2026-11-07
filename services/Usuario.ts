@@ -10,6 +10,7 @@ import type {
   UserList,
   UserListOptions,
   UserPublic,
+  UserProfileDetails,
   UpdateUserInput,
 } from "@/types/Usuario";
 
@@ -74,6 +75,45 @@ export async function updateUser(
   return { ok: true, data: response.data };
 }
 
+export async function getUserProfileDetails(
+  accessToken: string,
+  userId: string,
+): Promise<ServiceResult<UserProfileDetails>> {
+  const accountResult = await findUserById(accessToken, userId);
+  if (!accountResult.ok) return accountResult;
+
+  const [accessError, accessResponse] = await tryit(() =>
+    http.get<unknown>(`/rbac/users/${userId}/access`, {
+      headers: { Cookie: `access_token=${accessToken}` },
+    }),
+  )();
+  if (accessError) return { ok: false, status: getStatus(accessError) };
+
+  const access = normalizeUserAccess(accessResponse.data);
+  if (!access) return { ok: false };
+
+  return {
+    ok: true,
+    data: { account: { ...accountResult.data, profiles: access.profiles }, global_profiles: access.profiles, local_roles: [] },
+  };
+}
+
+async function findUserById(
+  accessToken: string,
+  userId: string,
+): Promise<ServiceResult<UserProfileDetails["account"]>> {
+  for (const active of [true, false]) {
+    for (let offset = 0; offset <= 10_000; offset += 100) {
+      const page = await listUsers(accessToken, { offset, limit: 100, active });
+      if (!page.ok) return page;
+      const user = page.data.items.find((item) => item.id === userId);
+      if (user) return { ok: true, data: { ...user, created_at: null } };
+      if (page.data.items.length < page.data.limit) break;
+    }
+  }
+  return { ok: false, status: 404 };
+}
+
 function getStatus(error: Error) {
   return isAxiosError(error) ? error.response?.status : undefined;
 }
@@ -95,4 +135,11 @@ function normalizeUserList(value: ExternalUserListResponse): UserList | null {
     limit: value.pagination.per_page,
     items: value.data,
   };
+}
+
+function normalizeUserAccess(value: unknown): { profiles: UserProfileDetails["global_profiles"] } | null {
+  if (!value || typeof value !== "object" || !Array.isArray((value as Record<string, unknown>).profiles)) return null;
+  const profiles = (value as Record<string, unknown>).profiles as unknown[];
+  if (!profiles.every((profile) => profile && typeof profile === "object" && typeof (profile as Record<string, unknown>).id === "string" && typeof (profile as Record<string, unknown>).name === "string" && typeof (profile as Record<string, unknown>).active === "boolean")) return null;
+  return { profiles: profiles as UserProfileDetails["global_profiles"] };
 }

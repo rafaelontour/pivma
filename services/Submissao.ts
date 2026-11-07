@@ -172,6 +172,27 @@ async function listProponentProcessesBySubmissionState(
     }
   } while (visited < total);
 
+  const listedProcessIds = new Set(processes.map((process) => process.id));
+  const missingScopedProcessIds = [...proponentProcessIds].filter(
+    (processId) => !listedProcessIds.has(processId),
+  );
+  const scopedProcesses = await Promise.all(
+    missingScopedProcessIds.map((processId) =>
+      getScopedProponentProcess(accessToken, processId),
+    ),
+  );
+  const failedScopedProcess = scopedProcesses.find(
+    (result) => !result.ok,
+  );
+  if (failedScopedProcess && !failedScopedProcess.ok) {
+    return { ok: false, status: failedScopedProcess.status };
+  }
+  processes.push(
+    ...scopedProcesses.flatMap((result) =>
+      result.ok && result.data ? [result.data] : [],
+    ),
+  );
+
   const matchingProcesses: ProcessInstance[] = [];
   for (
     let index = 0;
@@ -228,7 +249,41 @@ async function listProponentProcessesBySubmissionState(
     });
   }
 
+  if (isSubmitted) {
+    const returnReviews = await Promise.all(
+      matchingProcesses.map((process) =>
+        getSubmissionReturnReview(accessToken, process.id),
+      ),
+    );
+    matchingProcesses.forEach((process, index) => {
+      const review = returnReviews[index];
+      process.returned_by_bracvam =
+        review?.ok === true && review.data.source === "TRIAGE";
+    });
+  }
+
   return { ok: true, data: matchingProcesses };
+}
+
+async function getScopedProponentProcess(
+  accessToken: string,
+  processId: string,
+): Promise<ServiceResult<ProcessInstance | null>> {
+  const [error, response] = await tryit(() =>
+    http.get<unknown>(`/processes/${processId}`, {
+      headers: { Cookie: `access_token=${accessToken}` },
+    }),
+  )();
+
+  if (error) {
+    const status = getStatus(error);
+    return status === 404
+      ? { ok: true, data: null }
+      : { ok: false, status };
+  }
+
+  const process = normalizeProcessInstance(response.data);
+  return process ? { ok: true, data: process } : { ok: false };
 }
 
 async function hasSubmissionVersions(

@@ -15,7 +15,7 @@ export async function login(
   )();
 
   if (error) {
-    return { ok: false, status: getStatus(error) };
+    return { ok: false, status: getStatus(error), code: getBackendCode(error) };
   }
 
   return {
@@ -62,4 +62,14 @@ function getSetCookies(header: unknown) {
 
 function getStatus(error: Error) {
   return isAxiosError(error) ? error.response?.status : undefined;
+}
+
+function getBackendCode(error: Error) {
+  if (!isAxiosError(error)) return undefined;
+  const responseData = error.response?.data;
+  if (!responseData || typeof responseData !== "object") return undefined;
+  const detail = (responseData as Record<string, unknown>).detail;
+  if (!detail || typeof detail !== "object") return undefined;
+  const code = (detail as Record<string, unknown>).code;
+  return typeof code === "string" ? code : undefined;
 }

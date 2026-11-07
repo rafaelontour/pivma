@@ -26,17 +26,26 @@ export async function GET(
   const currentUser = await getCurrentUser(accessToken);
 
   if (!currentUser.ok) {
-    return processErrorResponse(currentUser.status, cookieStore);
+    return processErrorResponse(currentUser.status, cookieStore, currentUser.code);
   }
 
-  if (!canReadProcessKanban(currentUser.data.access.global_permissions)) {
+  if (!canReadProcessKanban(
+    currentUser.data.access.global_permissions,
+    currentUser.data.access.scopes,
+    currentUser.data.access.profiles,
+  )) {
     return NextResponse.json({ code: "FORBIDDEN", message: "Você não tem permissão para consultar este processo." }, { status: 403 });
   }
 
   const result = await getProcess(accessToken, processId);
 
   if (!result.ok) {
-    return processErrorResponse(result.status, cookieStore);
+    return processErrorResponse(
+      result.status,
+      cookieStore,
+      result.code,
+      result.message,
+    );
   }
 
   return NextResponse.json(result.data);
@@ -45,9 +54,13 @@ export async function GET(
 function processErrorResponse(
   status: number | undefined,
   cookieStore: Awaited<ReturnType<typeof cookies>>,
+  backendCode?: string,
+  backendMessage?: string,
 ) {
   return internalApiErrorResponse(status, {
     cookieStore,
+    backendCode,
+    backendMessage,
     fallbackMessage: "Não foi possível consultar o processo no momento.",
     messages: {
       403: "Você não tem permissão para consultar este processo.",

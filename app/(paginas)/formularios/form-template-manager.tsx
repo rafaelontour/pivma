@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import {
   AlertCircle,
   ArrowDown,
@@ -195,6 +195,27 @@ export function FormTemplateManager() {
     }
   }
 
+  const openFormFromTour = useEffectEvent((item: FormTemplateCatalogItem) => {
+    if (editor.kind !== "closed") return;
+    void selectForm(item);
+  });
+
+  useEffect(() => {
+    if (catalog.kind !== "ready" || catalog.items.length === 0) return;
+    const openReadOnlyPreview = () => openFormFromTour(catalog.items[0]);
+    const closeReadOnlyPreview = () => {
+      setEditor({ kind: "closed" });
+      setHasPendingChanges(false);
+      setIsConfirmDiscardOpen(false);
+    };
+    window.addEventListener("pivma:onboarding-open-form", openReadOnlyPreview);
+    window.addEventListener("pivma:onboarding-close-form", closeReadOnlyPreview);
+    return () => {
+      window.removeEventListener("pivma:onboarding-open-form", openReadOnlyPreview);
+      window.removeEventListener("pivma:onboarding-close-form", closeReadOnlyPreview);
+    };
+  }, [catalog]);
+
   function updateReadyEditor(
     update: (state: Extract<FormEditorState, { kind: "ready" }>) =>
       Extract<FormEditorState, { kind: "ready" }>,
@@ -358,7 +379,7 @@ export function FormTemplateManager() {
   if (editor.kind === "closed") {
     return (
       <div className="flex-1 pb-12 pt-2">
-        <div className="mb-6">
+        <div className="mb-6" data-tour="form-catalog">
           <p className="text-xs font-bold uppercase tracking-[0.14em] text-teal-700">
             {t("formBuilder.management")}
           </p>
@@ -396,7 +417,7 @@ export function FormTemplateManager() {
             />
           </div>
         ) : (
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3" data-tour="form-catalog-list">
             {catalog.items.map((item) => (
               <FormCatalogCard
                 item={item}
@@ -718,6 +739,7 @@ function FormEditor({
             </h2>
           </div>
           <button
+            data-tour="form-save"
             className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-teal-700 px-4 text-sm font-semibold text-white outline-none transition hover:bg-teal-800 focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-60"
             disabled={state.isSaving}
             onClick={onSave}
@@ -790,6 +812,7 @@ function FormEditor({
         ))}
 
         <button
+          data-tour="form-sections"
           className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-dashed border-teal-500 bg-teal-50 px-4 text-sm font-semibold text-teal-800 outline-none hover:bg-teal-100 focus-visible:ring-2 focus-visible:ring-teal-500 disabled:opacity-60"
           disabled={state.isSaving}
           onClick={onAddSection}
@@ -920,7 +943,7 @@ function FormFieldEditor({
   const inputId = `form-editor-${sectionId}-${fieldIndex}`;
 
   return (
-    <article className="rounded-xl border border-slate-200 bg-white p-4">
+    <article className="rounded-xl border border-slate-200 bg-white p-4" data-tour="form-fields">
       <div className="flex items-center justify-between gap-3">
         <p className="text-xs font-bold uppercase tracking-wide text-teal-700">
           {t("formBuilder.fieldNumber", { number: fieldIndex + 1 })}

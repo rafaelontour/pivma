@@ -1,5 +1,5 @@
 import type { ReactNode, RefObject } from "react";
-import type { CurrentUser, UserEditState, UserListItem } from "./Usuario";
+import type { CurrentUser, UserEditState, UserListItem, UserProfileDetails } from "./Usuario";
 import type { CreateProfileState } from "./Rbac";
 import type {
   PermissionDefinition,
@@ -20,7 +20,11 @@ export type AuthenticatedPage =
   | "settings"
   | "users"
   | "institutional-catalog"
+  | "collection-templates"
   | "processes"
+  | "process-composition"
+  | "process-samples"
+  | "sample-receipt"
   | "submissions"
   | "forms"
   | "ai-evaluations"
@@ -36,6 +40,7 @@ export type AuthenticatedShellProps = {
 export type SidebarProps = {
   activePage: AuthenticatedPage;
   canViewProcesses: boolean;
+  canViewComposition: boolean;
   canViewObservability: boolean;
   canViewSettings: boolean;
   expanded: boolean;
@@ -97,6 +102,12 @@ export type AccessibleDialogHandle = RefObject<HTMLDivElement | null>;
 export type DirectoryMessageProps = {
   message: string;
 };
+
+export type UserProfileDetailsProps = { userId: string };
+export type UserProfileDetailsState =
+  | { kind: "loading" }
+  | { kind: "error"; message: string }
+  | { kind: "ready"; profile: UserProfileDetails };
 
 export type WelcomeCardProps = {
   eyebrow: string;

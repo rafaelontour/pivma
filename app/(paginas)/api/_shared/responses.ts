@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import type {
   ForwardedApiErrorStatus,
   InternalApiErrorOptions,
-  InternalApiErrorCode,
   InternalApiErrorStatus,
 } from "@/types/Api";
 
@@ -25,16 +24,6 @@ const DEFAULT_MESSAGES: Record<InternalApiErrorStatus, string> = {
   502: "Não foi possível concluir a operação no momento.",
 };
 
-const DEFAULT_CODES: Record<InternalApiErrorStatus, InternalApiErrorCode> = {
-  401: "AUTH_REQUIRED",
-  403: "FORBIDDEN",
-  404: "NOT_FOUND",
-  409: "CONFLICT",
-  422: "VALIDATION_ERROR",
-  429: "RATE_LIMITED",
-  502: "UPSTREAM_UNAVAILABLE",
-};
-
 export function normalizeExternalApiStatus(
   status: number | undefined,
 ): InternalApiErrorStatus {
@@ -53,15 +42,24 @@ export function internalApiErrorResponse(
     options.cookieStore?.delete("access_token");
   }
 
-  const responseStatus = normalizeExternalApiStatus(status);
+  const normalizedStatus = normalizeExternalApiStatus(status);
+  const responseStatus = options.backendCode && status && status >= 400 && status <= 599
+    ? status
+    : normalizedStatus;
   const message =
-    options.messages?.[responseStatus] ??
-    (responseStatus === 502
+    options.backendMessage ??
+    options.messages?.[normalizedStatus] ??
+    (normalizedStatus === 502
       ? options.fallbackMessage
-      : DEFAULT_MESSAGES[responseStatus]);
+      : DEFAULT_MESSAGES[normalizedStatus]);
 
   return NextResponse.json(
-    { code: options.code ?? DEFAULT_CODES[responseStatus], message },
+    {
+      ...(options.backendCode || options.code
+        ? { code: options.backendCode ?? options.code }
+        : {}),
+      message,
+    },
     { status: responseStatus },
   );
 }

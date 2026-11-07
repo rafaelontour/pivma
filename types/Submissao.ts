@@ -1,4 +1,5 @@
 import type { ProcessInstance } from "./Processo";
+import type { ProcessCompositionSnapshot } from "./ParticipacaoProcesso";
 
 export type SubmissionTemplate = {
   id: string;
@@ -217,7 +218,7 @@ export type SubmitSubmissionResult = {
 export type SubmissionFormOperation = "idle" | "saving" | "submitting" | "responding";
 export type SubmissionSaveContext = "draft" | "response";
 
-export type SubmissionDialogIntent = "edit" | "return-review";
+export type SubmissionDialogIntent = "initial-draft" | "edit" | "return-review";
 
 export type SubmissionCatalogState =
   | { kind: "loading" }
@@ -351,6 +352,7 @@ export type DynamicFormValidationResult =
 export type SubmissionDialogContentProps = {
   processId: string;
   awaitingCorrection: boolean;
+  canSubmit: boolean;
   form: SubmissionForm;
   inputs: SubmissionFieldInputs;
   operation: SubmissionFormOperation;
@@ -374,6 +376,11 @@ export type SubmissionTrackingCardProps = {
   templateName: string;
   onProcessChanged: () => void;
   onOpenReturnReview: (submission: ProcessInstance) => void;
+};
+
+export type SubmissionCompositionShortcutState = {
+  snapshot: ProcessCompositionSnapshot;
+  loadedAt: number;
 };
 
 export type SubmissionPreEvaluationPanelProps = {

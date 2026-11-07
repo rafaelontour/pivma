@@ -1,5 +1,6 @@
 import type { AssignedPermissionProfile } from "./Rbac";
 import type { AppLocale } from "./I18n";
+import type { SessionAccessScope } from "./ParticipacaoEscopo";
 
 export type UserPublic = {
   id: string;
@@ -14,6 +15,7 @@ export type CurrentUser = UserPublic & {
   profiles: AssignedPermissionProfile[];
   isAdministrator: boolean;
   preferred_locale?: AppLocale;
+  scopes?: SessionAccessScope[];
 };
 
 export type CreateUserInput = {
@@ -30,6 +32,21 @@ export type UpdateUserInput = {
 export type UserListItem = UserPublic & {
   active: boolean;
   profiles: AssignedPermissionProfile[];
+};
+
+export type UserProfileDetails = {
+  account: UserListItem & { created_at?: string | null };
+  global_profiles: AssignedPermissionProfile[];
+  local_roles: UserProcessRole[];
+};
+
+export type UserProcessRole = {
+  process_id: string;
+  process_code?: string | null;
+  process_title?: string | null;
+  role_key: string;
+  assigned_at?: string | null;
+  active?: boolean | null;
 };
 
 export type UserList = {

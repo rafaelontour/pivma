@@ -79,16 +79,24 @@ function normalizeTask(value: unknown): ProcessTask | null {
     typeof phase.key !== "string" ||
     typeof phase.order !== "number" ||
     typeof value.title !== "string" ||
-    (value.assigned_role !== null && typeof value.assigned_role !== "string") ||
+    (value.assigned_role !== undefined &&
+      value.assigned_role !== null &&
+      typeof value.assigned_role !== "string") ||
     typeof value.status !== "string" ||
     !TASK_STATUSES.has(value.status as ProcessTaskStatus) ||
-    (value.due_date !== null && typeof value.due_date !== "string") ||
+    (value.due_date !== undefined &&
+      value.due_date !== null &&
+      typeof value.due_date !== "string") ||
     typeof value.can_act !== "boolean"
   ) {
     return null;
   }
 
-  return value as ProcessTask;
+  return {
+    ...value,
+    assigned_role: value.assigned_role ?? null,
+    due_date: value.due_date ?? null,
+  } as ProcessTask;
 }
 
 function isRecord(value: unknown): value is ApiRecord {

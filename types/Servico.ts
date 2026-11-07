@@ -1,6 +1,6 @@
 export type ServiceResult<T> =
   | { ok: true; data: T }
-  | { ok: false; status?: number };
+  | { ok: false; status?: number; code?: string; message?: string };
 
 export type ApiMessage = {
   code?: string;

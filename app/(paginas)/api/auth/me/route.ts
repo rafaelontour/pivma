@@ -45,5 +45,11 @@ export async function GET() {
         result.data.access.scopes.flatMap((scope) => scope.roles),
       ),
     ],
+    scopes: result.data.access.scopes.map((scope) => ({
+      process_id: scope.process_id,
+      institution_id: scope.institution_id,
+      laboratory_id: scope.laboratory_id,
+      roles: [...scope.roles],
+    })),
   });
 }

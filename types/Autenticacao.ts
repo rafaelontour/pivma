@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { AssignedPermissionProfile } from "./Rbac";
 import type { CurrentUser } from "./Usuario";
+import type { SessionAccessScope } from "./ParticipacaoEscopo";
 
 export type AuthMode = "login" | "register";
 
@@ -10,12 +11,7 @@ export type LoginResult = {
   setCookies: string[];
 };
 
-export type SessionAccessScope = {
-  process_id: string;
-  institution_id: string | null;
-  laboratory_id: string | null;
-  roles: string[];
-};
+export type { SessionAccessScope } from "./ParticipacaoEscopo";
 
 export type CurrentSessionUser = {
   id?: string;

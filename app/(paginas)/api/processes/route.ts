@@ -2,7 +2,12 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { internalApiErrorResponse } from "@/app/(paginas)/api/_shared/responses";
 import { getCurrentUser } from "@/services/Autenticacao";
-import { canReadProcessKanban, listProcesses } from "@/services/Processo";
+import {
+  canReadProcessKanban,
+  listProcesses,
+  listVisibleProcessesFallback,
+} from "@/services/Processo";
+import { hasProcessKanbanAccess } from "@/types/Processo";
 
 export const runtime = "nodejs";
 
@@ -29,21 +34,43 @@ export async function GET(request: Request) {
   const currentUser = await getCurrentUser(accessToken);
 
   if (!currentUser.ok) {
-    return processErrorResponse(currentUser.status, cookieStore);
+    return processErrorResponse(currentUser.status, cookieStore, currentUser.code);
   }
 
-  if (!canReadProcessKanban(currentUser.data.access.global_permissions)) {
+  if (!canReadProcessKanban(
+    currentUser.data.access.global_permissions,
+    currentUser.data.access.scopes,
+    currentUser.data.access.profiles,
+  )) {
     return NextResponse.json({ code: "FORBIDDEN", message: "Você não tem permissão para consultar processos." }, { status: 403 });
   }
 
-  const result = await listProcesses(accessToken, {
+  const options = {
     page,
     size,
     ...(status ? { status } : {}),
-  });
+  };
+  const result = await listProcesses(accessToken, options);
 
   if (!result.ok) {
-    return processErrorResponse(result.status, cookieStore);
+    if (result.code === "internal_error") {
+      const fallback = await listVisibleProcessesFallback(
+        accessToken,
+        currentUser.data.access.scopes,
+        hasProcessKanbanAccess(
+          currentUser.data.access.global_permissions,
+          currentUser.data.access.profiles,
+        ),
+        options,
+      );
+      if (fallback.ok) return NextResponse.json(fallback.data);
+    }
+    return processErrorResponse(
+      result.status,
+      cookieStore,
+      result.code,
+      result.message,
+    );
   }
 
   return NextResponse.json(result.data);
@@ -70,9 +97,13 @@ function readInteger(
 function processErrorResponse(
   status: number | undefined,
   cookieStore: Awaited<ReturnType<typeof cookies>>,
+  backendCode?: string,
+  backendMessage?: string,
 ) {
   return internalApiErrorResponse(status, {
     cookieStore,
+    backendCode,
+    backendMessage,
     fallbackMessage: "Não foi possível consultar os processos no momento.",
     messages: {
       403: "Você não tem permissão para consultar processos.",

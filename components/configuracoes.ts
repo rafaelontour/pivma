@@ -23,10 +23,7 @@ export function isCurrentUser(value: unknown): value is CurrentUser {
 export function getSettingsCapabilities(
   user: CurrentUser,
 ): SettingsSessionCapabilities {
-  const canManageForms =
-    user.isAdministrator ||
-    user.permissions.includes("rbac.read") ||
-    user.profiles.some((profile) => profile.name === "Grupo Gestor");
+  const canManageForms = hasFormManagementAccess(user);
 
   const canViewAiEvaluations = [
     "ai_evaluations.read",
@@ -37,14 +34,27 @@ export function getSettingsCapabilities(
   const canManageInstitutionalCatalog = user.permissions.includes(
     "institutional.catalogs.manage",
   );
+  const canManageCollectionTemplates = user.isAdministrator || canManageInstitutionalCatalog;
 
   return {
     canManageForms,
     canViewAiEvaluations,
     canManageUsers,
     canManageInstitutionalCatalog,
+    canManageCollectionTemplates,
     user,
   };
+}
+
+export function hasFormManagementAccess(user: CurrentUser): boolean {
+  return (
+    user.isAdministrator ||
+    user.permissions.includes("rbac.read") ||
+    user.profiles.some((profile) => {
+      const profileName = profile.name.toLocaleLowerCase("pt-BR");
+      return profileName.includes("grupo gestor") || profileName.includes("bracvam");
+    })
+  );
 }
 
 export function hasAnySettingsAccess(
@@ -54,7 +64,8 @@ export function hasAnySettingsAccess(
     capabilities.canManageForms ||
     capabilities.canViewAiEvaluations ||
     capabilities.canManageUsers ||
-    capabilities.canManageInstitutionalCatalog
+    capabilities.canManageInstitutionalCatalog ||
+    capabilities.canManageCollectionTemplates === true
   );
 }
 
@@ -102,6 +113,16 @@ export function getSettingsModules(
       iconName: "Building2",
       isAllowed: capabilities.canManageInstitutionalCatalog,
       deniedReason: t("settings.modules.institutionalCatalog.denied"),
+    },
+    {
+      id: "collection-templates",
+      title: t("settings.modules.collectionTemplates.title"),
+      description: t("settings.modules.collectionTemplates.description"),
+      href: "/templates-coleta",
+      badge: t("settings.modules.collectionTemplates.badge"),
+      iconName: "FileSpreadsheet",
+      isAllowed: capabilities.canManageCollectionTemplates === true,
+      deniedReason: t("settings.modules.collectionTemplates.denied"),
     },
   ];
 }

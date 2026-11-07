@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
+import Link from "next/link";
 import type { TFunction } from "i18next";
 import { useAccessibleDialog } from "@/components/accessible-dialog";
 import { getLocalizedApiError } from "@/i18n/errors";
@@ -30,6 +31,7 @@ import type {
 import type { ProcessInstance, ProcessList } from "@/types/Processo";
 import type { ProcessTask, ProcessTaskList } from "@/types/Tarefa";
 import type { ApiRecord } from "@/types/Servico";
+import type { ProcessCompositionSnapshot } from "@/types/ParticipacaoProcesso";
 
 const PROCESS_PAGE_SIZE = 100;
 const PAGE_BATCH_SIZE = 4;
@@ -209,7 +211,34 @@ export function ProcessKanban() {
         return;
       }
 
-      setDetails({ kind: "ready", process: payload });
+      let composition: ProcessCompositionSnapshot | null = null;
+      try {
+        const compositionResponse = await fetch(`/api/processes/${process.id}/composition`, {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        const compositionPayload = await compositionResponse.json().catch(() => null) as unknown;
+        if (compositionResponse.ok && isCompositionSnapshot(compositionPayload)) composition = compositionPayload;
+      } catch {
+        composition = null;
+      }
+      let structure: ApiRecord | null = null;
+      try {
+        const structureResponse = await fetch(`/api/processes/${process.id}/structure-approval`, { cache: "no-store", signal: controller.signal });
+        const structurePayload = await structureResponse.json().catch(() => null) as unknown;
+        if (structureResponse.ok && isRecord(structurePayload)) structure = structurePayload;
+      } catch {
+        structure = null;
+      }
+      let operationsPermissions: ApiRecord | null = null;
+      try {
+        const operationsResponse = await fetch(`/api/processes/${process.id}/operations/access`, { cache: "no-store", signal: controller.signal });
+        const operationsPayload = await operationsResponse.json().catch(() => null) as unknown;
+        if (operationsResponse.ok && isRecord(operationsPayload) && isRecord(operationsPayload.permissions)) operationsPermissions = operationsPayload.permissions;
+      } catch {
+        operationsPermissions = null;
+      }
+      if (!controller.signal.aborted) setDetails({ kind: "ready", process: payload, composition, structure, operationsPermissions });
     } catch {
       if (!controller.signal.aborted) {
         setDetails({
@@ -530,6 +559,7 @@ function ProcessDetailsDialog({
           )}
 
           {state.kind === "ready" && (
+            <>
             <dl className="grid gap-4 sm:grid-cols-2">
               <DetailItem label={t("processes.template")} value={state.process.template_key} />
               <DetailItem
@@ -557,6 +587,17 @@ function ProcessDetailsDialog({
                 </div>
               )}
             </dl>
+            {state.structure && <section className="mt-6 grid gap-2 border-t border-slate-200 pt-5" aria-labelledby="process-structure-status"><div className="flex flex-wrap items-center justify-between gap-3"><h3 className="text-base font-bold text-slate-900" id="process-structure-status">{t("processOperations.sections.structure")}</h3><div className="flex gap-3"><Link className="text-xs font-bold text-teal-800 underline underline-offset-4" href={`/processos/${state.process.id}/amostras`}>{t("processOperations.actions.openWorkspace")}</Link>{state.operationsPermissions?.canRegisterReceipt === true && <Link className="text-xs font-bold text-teal-800 underline underline-offset-4" href={`/processos/${state.process.id}/recebimento-amostras`}>{t("processOperations.sections.receipt")}</Link>}</div></div><p className="text-sm text-slate-700">{t("processOperations.structureStatus", { status: String(state.structure.status ?? "") })}{state.structure.run_number != null ? ` · ${t("processOperations.runNumber", { run: state.structure.run_number })}` : ""}{state.structure.blocked_reason ? ` · ${String(state.structure.blocked_reason)}` : ""}</p>{Array.isArray(state.structure.decisions) && state.structure.decisions[0] && isRecord(state.structure.decisions[0]) && <p className="text-xs text-slate-600">{t("processOperations.latestDecision", { outcome: t(`processOperations.outcomes.${String(state.structure.decisions[0].outcome ?? "").toLowerCase()}`), date: typeof state.structure.decisions[0].decided_at === "string" ? formatOptionalDateTime(state.structure.decisions[0].decided_at, locale, t("dynamicForm.notProvided")) : t("dynamicForm.notProvided") })}</p>}</section>}
+            {state.composition && (
+              <section aria-labelledby="process-composition-summary" className="mt-6 border-t border-slate-200 pt-5">
+                <div className="flex flex-wrap items-center justify-between gap-3"><h3 className="text-base font-bold text-slate-900" id="process-composition-summary">{t("participantComposition.details.title")}</h3><div className="flex gap-3">{(state.composition.capabilities.canAssignSponsor || state.composition.capabilities.canAssignGroupManager || state.composition.capabilities.canAssignLaboratories) && <Link className="text-xs font-bold text-teal-800 underline underline-offset-4" href={`/processos/${state.process.id}/composicao`}>{t("participantComposition.actions.open")}</Link>}<Link className="text-xs font-bold text-teal-800 underline underline-offset-4" href={`/processos/${state.process.id}/amostras`}>{t("processOperations.actions.openWorkspace")}</Link></div></div>
+                {state.composition.participants.filter((participant) => participant.active).length === 0 && state.composition.invites.filter((invite) => invite.status === "pending" && !invite.expired).length === 0 ? <p className="mt-3 text-sm text-slate-600">{t("participantComposition.details.empty")}</p> : (
+                  <ul className="mt-3 grid gap-2">{state.composition.participants.filter((participant) => participant.active).map((participant) => <li className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm" key={participant.id}><span className="font-semibold text-slate-900">{participant.user.full_name || participant.user.username}</span><span className="ml-2 text-slate-600">{t(`participantComposition.roleLabels.${participant.role_key}`, { defaultValue: participant.role_key })}</span>{participant.laboratory && <span className="mt-1 block text-xs text-slate-600">{participant.laboratory.institution.name} · {participant.laboratory.name}</span>}</li>)}{state.composition.invites.filter((invite) => invite.status === "pending" && !invite.expired).map((invite) => <li className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm" key={invite.id}><span className="font-semibold text-slate-900">{invite.email}</span><span className="ml-2 text-amber-900">{t("participantComposition.status.pending")} · {t(`participantComposition.roleLabels.${invite.role_key}`, { defaultValue: invite.role_key })}</span>{invite.laboratory && <span className="mt-1 block text-xs text-slate-700">{invite.laboratory.institution.name} · {invite.laboratory.name}</span>}</li>)}</ul>
+                )}
+                {state.composition.tasks.some((task) => task.status === "READY") && <p className="mt-3 text-xs text-slate-600">{t("participantComposition.details.pendingTasks", { count: new Intl.NumberFormat(locale).format(state.composition.tasks.filter((task) => task.status === "READY").length) })}</p>}
+              </section>
+            )}
+            </>
           )}
         </div>
       </div>
@@ -619,6 +660,10 @@ function ProcessAnalysisDialog({
     </div>,
     document.body,
   );
+}
+
+function isRecord(value: unknown): value is ApiRecord {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 function DetailItem({ label, value }: ProcessDetailItemProps) {
@@ -992,6 +1037,14 @@ function isProcessTask(value: unknown): value is ProcessTask {
     (task.status === "READY" || task.status === "COMPLETED" || task.status === "CANCELLED") &&
     typeof task.can_act === "boolean"
   );
+}
+
+function isCompositionSnapshot(value: unknown): value is ProcessCompositionSnapshot {
+  if (!value || typeof value !== "object") return false;
+  const snapshot = value as ApiRecord;
+  return Array.isArray(snapshot.participants) && Array.isArray(snapshot.invites) &&
+    Array.isArray(snapshot.tasks) && Array.isArray(snapshot.laboratories) &&
+    Boolean(snapshot.capabilities) && typeof snapshot.capabilities === "object";
 }
 
 function getApiMessage(value: unknown, fallback: string, t: TFunction) {

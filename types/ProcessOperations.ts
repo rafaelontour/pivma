@@ -1,0 +1,31 @@
+import type { ApiRecord } from "./Servico";
+
+export type ProcessOperationMethod = "get" | "post" | "patch" | "put" | "delete";
+export type ProcessOperationRouteContext = { params: Promise<{ processId: string }> };
+export type ProcessOperationItemRouteContext = { params: Promise<{ processId: string; itemId: string }> };
+export type SampleSubstanceRouteContext = { params: Promise<{ processId: string; substanceId: string }> };
+export type ProcessOperationCodeRouteContext = { params: Promise<{ processId: string; code: string }> };
+export type ReceiptPhotoRouteContext = { params: Promise<{ processId: string; photoId: string }> };
+export type SampleSubstanceRecord = ApiRecord & {
+  id: string;
+  chemical_name: string;
+  cas_number: string;
+  lot: string;
+  safe_handling_instructions: string;
+  reference_classification?: string | null;
+  blind_codes?: ApiRecord[];
+};
+export type SampleSubstanceListResponse = { activity_status: "BLOCKED" | "IN_PROGRESS" | "COMPLETED"; substances: SampleSubstanceRecord[] };
+export type StructureApprovalPanel = ApiRecord & { status: string; run_number: number | null; blocked_reason: string | null; points: ApiRecord[]; decisions: ApiRecord[] };
+export type SampleSubstanceCreateInput = { chemical_name: string; cas_number: string; lot: string; safe_handling_instructions: string; reference_classification: string; purity?: string | null; solubility?: string | null; storage_temperature_regime?: string | null; storage_temperature_min?: number | null; storage_temperature_max?: number | null; vial_nominal_quantity?: number | null; vial_unit?: string | null; packaging_type?: string | null; expiration_date?: string | null; reserve_vials_count?: number | null; ghs_hazard_pictograms?: string[] | null };
+export type StructureApprovalDecisionInput = { outcome: "APPROVED" | "REJECTED"; justification: string; rejected_points?: ApiRecord[] | null };
+export type SampleReceiptInput = { opened_at: string; temperature_celsius: number; package_state: "intact" | "damaged" | "violated"; notes?: string | null };
+export type NonconformityDecisionInput = { decision: "accept_with_caveat" | "resend" | "disqualify"; justification: string; lab_guidance?: string | null };
+export type LaboratoryWaiverInput = { laboratory_id: string; reason: string };
+export type LaboratoryReopenInput = { reason: string };
+export type LaboratoryWaiverRouteContext = { params: Promise<{ processId: string; phaseKey: string }> };
+export type LaboratoryReopenRouteContext = { params: Promise<{ processId: string; activityKey: string; laboratoryId: string }> };
+export type ProcessSamplesWorkspaceProps = { processId: string };
+export type ProcessSamplesPageProps = { params: Promise<{ processId: string }> };
+export type StructureRejectedPointInput = { activity_key: string; reason: string };
+export type ProcessOperationsFieldProps = { label: string; value: string; onChange: (value: string) => void; type?: string; required?: boolean };

@@ -9,10 +9,12 @@ import {
   Search,
   ShieldCheck,
   Trash2,
+  UserRound,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
+import Link from "next/link";
 import type { TFunction } from "i18next";
 import { getLocalizedApiError } from "@/i18n/errors";
 import type {
@@ -412,7 +414,7 @@ export function UserDirectory() {
     <section aria-labelledby="user-directory-title" className="flex flex-1 flex-col py-8">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <form className="grid flex-1 gap-3 sm:grid-cols-[minmax(16rem,1fr)_12rem_auto]" onSubmit={submitFilters}>
-          <label className="text-xs font-semibold text-slate-700">
+          <label className="text-xs font-semibold text-slate-700" data-tour="users-search">
             {t("users.searchLabel")}
             <input
               className={inputClassName}
@@ -422,7 +424,7 @@ export function UserDirectory() {
               value={searchInput}
             />
           </label>
-          <label className="text-xs font-semibold text-slate-700">
+          <label className="text-xs font-semibold text-slate-700" data-tour="users-status">
             {t("users.status")}
             <select
               className={inputClassName}
@@ -446,14 +448,14 @@ export function UserDirectory() {
         )}
       </div>
 
-      <p className="mt-5 text-sm font-semibold text-slate-700" id="user-directory-title">
+      <p className="mt-5 text-sm font-semibold text-slate-700" data-tour="users-count" id="user-directory-title">
         {t(users.length === 1 ? "users.listed" : "users.listed_other", {
           count: users.length,
           status: t(filters.active === "true" ? "users.active" : "users.inactive"),
         })}
       </p>
 
-      <div className="mt-3 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-400/15">
+      <div className="mt-3 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-400/15" data-tour="users-list">
         <div className="overflow-x-auto">
           <table className="w-full min-w-200 text-left text-sm">
             <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
@@ -463,7 +465,7 @@ export function UserDirectory() {
                 <th className="px-5 py-3 font-semibold">{t("users.email")}</th>
                 <th className="px-5 py-3 font-semibold">{t("users.profiles")}</th>
                 <th className="px-5 py-3 font-semibold">{t("users.status")}</th>
-                <th className="px-5 py-3 text-right font-semibold">{t("users.actions")}</th>
+                <th className="px-5 py-3 text-right font-semibold" data-tour="users-actions">{t("users.actions")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
@@ -486,6 +488,11 @@ export function UserDirectory() {
                   </td>
                   <td className="px-5 py-4">
                     <div className="flex justify-end gap-2">
+                      {canManageUsers && (
+                        <Link aria-label={t("users.openProfile", { username: user.username })} className={iconButtonClassName} href={`/usuarios/${user.id}`} title={t("users.openProfile", { username: user.username })}>
+                          <UserRound aria-hidden="true" className="size-4" />
+                        </Link>
+                      )}
                       {canManageUsers && (
                         <button aria-label={t("users.editNameLabel", { username: user.username })} className={iconButtonClassName} onClick={() => setEditState({ user, fullName: user.full_name ?? "", isSaving: false })} type="button">
                           <Pencil aria-hidden="true" className="size-4" />

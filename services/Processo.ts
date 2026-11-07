@@ -3,12 +3,15 @@ import "server-only";
 import { isAxiosError } from "axios";
 import { tryit } from "radash";
 import { http } from "./Http";
-import { PROCESS_KANBAN_PERMISSION_CODES } from "@/types/Processo";
+import { listCurrentTasks } from "./Tarefa";
+import { hasProcessKanbanAccess } from "@/types/Processo";
 import type {
   ProcessInstance,
   ProcessList,
   ProcessListOptions,
 } from "@/types/Processo";
+import type { AssignedPermissionProfile } from "@/types/Rbac";
+import type { SessionAccessScope } from "@/types/ParticipacaoEscopo";
 import type { ApiRecord, ServiceResult } from "@/types/Servico";
 
 export async function listProcesses(
@@ -27,7 +30,12 @@ export async function listProcesses(
   )();
 
   if (error) {
-    return { ok: false, status: getStatus(error) };
+    return {
+      ok: false,
+      status: getStatus(error),
+      code: getBackendCode(error),
+      message: getBackendMessage(error),
+    };
   }
 
   const data = normalizeProcessList(response.data);
@@ -49,7 +57,12 @@ export async function getProcess(
   )();
 
   if (error) {
-    return { ok: false, status: getStatus(error) };
+    return {
+      ok: false,
+      status: getStatus(error),
+      code: getBackendCode(error),
+      message: getBackendMessage(error),
+    };
   }
 
   const data = normalizeProcessInstance(response.data);
@@ -60,10 +73,68 @@ export async function getProcess(
   return { ok: true, data };
 }
 
-export function canReadProcessKanban(permissions: string[]) {
-  return PROCESS_KANBAN_PERMISSION_CODES.some((permission) =>
-    permissions.includes(permission),
-  );
+export function canReadProcessKanban(
+  permissions: string[],
+  scopes: SessionAccessScope[],
+  profiles: Pick<AssignedPermissionProfile, "name">[] = [],
+) {
+  const hasProcessParticipantScope = scopes.some((scope) => scope.roles.length > 0);
+  return hasProcessKanbanAccess(permissions, profiles) || hasProcessParticipantScope;
+}
+
+export async function listVisibleProcessesFallback(
+  accessToken: string,
+  scopes: SessionAccessScope[],
+  includeTaskProcesses: boolean,
+  options: ProcessListOptions,
+): Promise<ServiceResult<ProcessList>> {
+  const processIds = new Set(scopes.map((scope) => scope.process_id));
+
+  if (includeTaskProcesses) {
+    let taskPage = 1;
+    let visitedTasks = 0;
+    let totalTasks = 0;
+    do {
+      const tasks = await listCurrentTasks(accessToken, { page: taskPage, size: 100 });
+      if (!tasks.ok) return tasks;
+      tasks.data.items.forEach((task) => processIds.add(task.process.id));
+      visitedTasks += tasks.data.items.length;
+      totalTasks = tasks.data.total;
+      taskPage += 1;
+      if (tasks.data.items.length === 0) break;
+    } while (visitedTasks < totalTasks);
+  }
+
+  const processIdList = Array.from(processIds);
+  const processes: ProcessInstance[] = [];
+  const batchSize = 10;
+  for (let index = 0; index < processIdList.length; index += batchSize) {
+    const batch = await Promise.all(
+      processIdList.slice(index, index + batchSize).map((processId) =>
+        getProcess(accessToken, processId)),
+    );
+    const failed = batch.find((result) => !result.ok);
+    if (failed && !failed.ok) return failed;
+    processes.push(...batch.flatMap((result) => result.ok ? [result.data] : []));
+  }
+
+  const filtered = options.status
+    ? processes.filter((process) => process.status === options.status)
+    : processes;
+  filtered.sort((first, second) => first.code.localeCompare(second.code, "pt-BR", {
+    numeric: true,
+    sensitivity: "base",
+  }));
+  const offset = (options.page - 1) * options.size;
+  return {
+    ok: true,
+    data: {
+      items: filtered.slice(offset, offset + options.size),
+      total: filtered.length,
+      page: options.page,
+      size: options.size,
+    },
+  };
 }
 
 export function normalizeProcessList(value: unknown): ProcessList | null {
@@ -142,4 +213,24 @@ function isOptionalNullableString(value: unknown) {
 
 function getStatus(error: Error) {
   return isAxiosError(error) ? error.response?.status : undefined;
+}
+
+function getBackendCode(error: Error) {
+  if (!isAxiosError(error)) return undefined;
+  const responseData = error.response?.data;
+  if (!responseData || typeof responseData !== "object") return undefined;
+  const detail = (responseData as ApiRecord).detail;
+  if (!detail || typeof detail !== "object") return undefined;
+  const code = (detail as ApiRecord).code;
+  return typeof code === "string" ? code : undefined;
+}
+
+function getBackendMessage(error: Error) {
+  if (!isAxiosError(error)) return undefined;
+  const responseData = error.response?.data;
+  if (!responseData || typeof responseData !== "object") return undefined;
+  const detail = (responseData as ApiRecord).detail;
+  if (!detail || typeof detail !== "object") return undefined;
+  const message = (detail as ApiRecord).message;
+  return typeof message === "string" ? message : undefined;
 }
