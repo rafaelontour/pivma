@@ -201,6 +201,7 @@ export type CreateProcessDraftInput = {
 
 export type SaveSubmissionDraftInput = {
   values: Record<string, DynamicFormValue>;
+  title?: string;
 };
 
 export type SaveSubmissionDraftResult = {

@@ -29,11 +29,11 @@ Cada tipo terá um identificador técnico estável retornado pela API. A aplica�
 
 Alternativa considerada: ordenar e renomear os itens comparando os nomes atuais. Isso quebra com alterações de texto, tradução, acentuação e dados já existentes.
 
-### Título capturado uma vez e mantido nos valores do formulário
+### Formulário completo aberto diretamente em Rascunhos
 
-O título será solicitado na etapa de identificação anterior à criação do processo. Ao abrir o formulário, o valor será enviado no campo configurado para identificação do método, mas esse campo não será apresentado novamente como uma segunda pergunta; o título permanece visível no cabeçalho do formulário. Assim o valor atende ao contrato do formulário sem duplicar a edição.
+Ao selecionar um tipo, a interface muda para Rascunhos, cria a instância necessária para carregar o formulário e abre imediatamente o formulário completo em popup. Não há diálogo intermediário dedicado somente ao título. O campo de título faz parte do formulário dinâmico e é preenchido/alterado ali. Como a API exige um título na criação da instância, a interface envia inicialmente o nome do tipo e, ao salvar o formulário, atualiza também o título do processo pelo `PATCH /processes/{id}`.
 
-Alternativa considerada: preencher apenas `ProcessInstance.title`. O formulário pode exigir a resposta como parte do dossiê e não necessariamente consegue ler metadados do processo.
+Alternativa considerada: pedir o título em um modal separado antes de abrir o formulário. Isso interrompe a escolha do tipo e duplica o contexto antes do preenchimento.
 
 ### Associação versionada entre tipo e formulário
 

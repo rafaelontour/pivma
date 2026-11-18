@@ -7,7 +7,8 @@ A página Submissões usa nomes e explicações que não refletem a terminologia
 - Reordenar o catálogo para apresentar Método Novo, Método Novo – Dossiê Completo, Extensão do Domínio de Aplicação e Método Similar, com os textos institucionais fornecidos.
 - Retirar Prova de Conceito das novas opções sem remover nem invalidar processos já existentes.
 - Remover a classificação de Fitness for Purpose Validation como tipo independente e explicar sua consideração na avaliação da relevância e confiabilidade do método.
-- Solicitar o título do método uma única vez e reaproveitá-lo no formulário associado à submissão.
+- Ao selecionar um tipo, abrir a aba Rascunhos e apresentar diretamente o formulário completo associado, sem uma etapa intermediária que peça somente o título.
+- Capturar o título no campo correspondente do formulário e salvá-lo entre os valores da submissão.
 - Incorporar o formulário de submissão do BraCVAM na gestão de formulários e vinculá-lo ao tipo de submissão para que seja aberto após a identificação do método.
 - Explicar o conteúdo enviado, a função e disponibilidade de eventual pré-avaliação automatizada, o acesso ao processo, a responsabilidade de análise e os próximos passos.
 - Esclarecer o estado “Nenhum relatório” e informar como o código do processo é atribuído, após confirmação da regra no backend.

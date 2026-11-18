@@ -35,12 +35,12 @@ O catálogo MUST NOT classificar Fitness for Purpose Validation como um tipo ou 
 
 ### Requirement: Criação imediata do rascunho
 
-O sistema SHALL solicitar uma única vez o título do método antes de criar o processo. A identificação MUST usar o rótulo e orientação “Informe o título do método novo.” no fluxo Método Novo; o título informado MUST ser reaproveitado no processo e no campo correspondente do formulário, sem exigir que a pessoa o digite novamente. O processo MUST ser criado antes de carregar o formulário, pois os campos dependem da instância persistida. O valor do título MUST permanecer recuperável quando a carga do formulário falhar e a pessoa tentar novamente.
+Ao selecionar um tipo de submissão, o sistema SHALL mudar para a aba Rascunhos, criar a instância necessária para carregar o formulário e abrir diretamente o formulário completo em popup. MUST NOT abrir um modal intermediário que solicite somente o título. O campo de título, quando definido pelo formulário, SHALL ser apresentado dentro do formulário completo. Como a API exige título ao criar a instância, o sistema SHALL usar inicialmente o nome do tipo; a pessoa poderá informar o título definitivo no formulário. O processo MUST ser criado antes de carregar o formulário. O rascunho criado MUST permanecer recuperável quando a carga falhar, permitindo tentar novamente sem criar outro processo.
 
-#### Scenario: Identificação única do método
+#### Scenario: Selecionar tipo abre formulário completo
 
-- **WHEN** a pessoa confirma o título ao iniciar um tipo de submissão
-- **THEN** o processo é criado e o formulário é aberto com o mesmo título já preenchido no campo vinculado, sem uma segunda solicitação de título
+- **WHEN** a pessoa seleciona um tipo de submissão
+- **THEN** a interface abre a aba Rascunhos e apresenta diretamente o formulário completo associado, sem modal exclusivo de título
 
 #### Scenario: Retomada sem repetir o título
 

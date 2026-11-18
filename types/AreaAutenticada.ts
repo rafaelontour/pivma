@@ -1,5 +1,6 @@
 import type { ReactNode, RefObject } from "react";
 import type { CurrentUser, UserEditState, UserListItem, UserProfileDetails } from "./Usuario";
+import type { ProcessParticipantRole } from "./ParticipacaoProcesso";
 import type { CreateProfileState } from "./Rbac";
 import type {
   PermissionDefinition,
@@ -35,6 +36,15 @@ export type AuthenticatedPage =
 export type AuthenticatedShellProps = {
   activePage: AuthenticatedPage;
   children: ReactNode;
+};
+
+export type AuthenticatedModule = ProcessParticipantRole
+  | "bracvam"
+  | "administration"
+  | "platform";
+
+export type ModuleIndicatorProps = {
+  module: AuthenticatedModule;
 };
 
 export type SidebarProps = {

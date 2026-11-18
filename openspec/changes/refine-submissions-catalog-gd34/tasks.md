@@ -17,8 +17,8 @@
 - [ ] 3.1 Apresentar Método Novo, Método Novo – Dossiê Completo, Extensão do Domínio de Aplicação e Método Similar na ordem aprovada.
 - [ ] 3.2 Substituir nomes e descrições pelas versões institucionais em pt-BR e en, incluindo orientação sobre Fitness for Purpose sem classificá-lo como abordagem independente.
 - [ ] 3.3 Remover Prova de Conceito das novas opções e verificar que rascunhos e submissões anteriores continuam acessíveis.
-- [x] 3.4 Solicitar o título do método uma única vez, reutilizá-lo no processo e nos valores do formulário e remover a pergunta duplicada.
-- [x] 3.5 Abrir o formulário associado ao tipo selecionado somente após a criação bem-sucedida do processo; permitir retentar sua carga sem duplicar processo ou título.
+- [x] 3.4 Abrir o formulário completo diretamente ao selecionar um tipo, sem modal intermediário exclusivo para título; apresentar o campo de título dentro do formulário.
+- [x] 3.5 Abrir o formulário associado na aba Rascunhos após criar a instância; permitir retentar sua carga sem duplicar processo.
 - [x] 3.6 Na primeira abertura do formulário, apresentar somente Salvar rascunho e disponibilizar Enviar para análise apenas ao retomar o rascunho salvo.
 
 ## 4. Envio e acompanhamento

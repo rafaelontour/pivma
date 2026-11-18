@@ -215,15 +215,26 @@ export function getPendingSubmissionCorrectionField(
   return [...form.fields]
     .sort((first, second) => first.order_index - second.order_index)
     .find((field) => {
-      const review = form.reviews[field.field_key];
-      const requiresCorrection =
-        review?.status === "NEEDS_REVISION" || review?.status === "REJECTED";
-
       return (
-        requiresCorrection &&
+        isActionableSubmissionCorrection(form, field) &&
         !isSubmissionCorrectionFieldChanged(form, inputs, field.field_key)
       );
     });
+}
+
+export function isActionableSubmissionCorrection(
+  form: SubmissionForm,
+  field: DynamicFormField,
+) {
+  const status = form.reviews[field.field_key]?.status;
+  if (status !== "NEEDS_REVISION" && status !== "REJECTED") return false;
+  if (field.is_required) return true;
+
+  const value = form.correction_baseline_values?.[field.field_key] ?? form.values[field.field_key];
+  if (field.field_type === "file_upload") {
+    return Boolean(field.attachment) || hasDynamicFormFileReference(value);
+  }
+  return typeof value === "string" ? value.trim().length > 0 : value != null;
 }
 
 export function isSubmissionCorrectionFieldChanged(

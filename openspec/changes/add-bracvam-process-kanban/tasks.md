@@ -29,6 +29,7 @@
 - [x] 4.8 Ocultar encerramento e motivo nos detalhes de processos não terminais.
 - [x] 4.9 Reutilizar o workspace de triagem em modal de 85% da viewport, abrir diretamente o processo do cartão e remover Triagem da barra lateral.
 - [x] 4.10 Omitir do Kanban processos cuja submissão inicial ainda esteja em rascunho.
+- [x] 4.11 Adicionar a cada cartão uma ação compacta e confirmada para a equipe BraCVAM apagar a submissão em qualquer estado, usando rota interna server-only.
 - [x] 4.11 Fazer o modal de análise ocupar 85% reais da viewport, expandir o workspace interno e manter a decisão Aprovado/Correção/Reprovado visível.
 - [x] 4.12 Corrigir o carregamento incorporado sob Strict Mode e transformar timeout em erro recuperável, evitando “Carregando proposta” infinito.
 

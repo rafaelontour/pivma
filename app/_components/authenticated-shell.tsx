@@ -14,6 +14,7 @@ import {
   LogOut,
   PanelLeftClose,
   PanelLeftOpen,
+  PanelsTopLeft,
   Settings,
   UsersRound,
 } from "lucide-react";
@@ -24,12 +25,18 @@ import { normalizeLocale } from "@/i18n/config";
 import { getLocalizedApiError } from "@/i18n/errors";
 import { useSessionLocale } from "@/i18n/provider";
 import type {
+  AuthenticatedModule,
   AuthenticatedShellProps,
+  ModuleIndicatorProps,
   SessionState,
   SidebarProps,
 } from "@/types/AreaAutenticada";
 import type { ApiMessage, ApiRecord } from "@/types/Servico";
 import type { CurrentUser } from "@/types/Usuario";
+import {
+  PROCESS_PARTICIPANT_ROLES,
+  type ProcessParticipantRole,
+} from "@/types/ParticipacaoProcesso";
 import { hasProcessKanbanAccess } from "@/types/Processo";
 import { hasFormManagementAccess } from "@/components/configuracoes";
 import { GuidedOnboarding } from "./guided-onboarding";
@@ -94,6 +101,17 @@ export function AuthenticatedShell({
     desktopViewport.addEventListener("change", followViewport);
     return () => desktopViewport.removeEventListener("change", followViewport);
   }, []);
+
+  const activeModule: AuthenticatedModule = session.kind === "ready"
+    ? getActiveModule(session.user)
+    : "platform";
+
+  useEffect(() => {
+    document.documentElement.dataset.moduleTheme = activeModule;
+    return () => {
+      delete document.documentElement.dataset.moduleTheme;
+    };
+  }, [activeModule]);
 
   async function handleLogout() {
     setIsLoggingOut(true);
@@ -168,7 +186,7 @@ export function AuthenticatedShell({
   };
 
   return (
-    <main className="grid h-dvh min-w-0 grid-cols-[auto_minmax(0,1fr)] grid-rows-[4.5rem_minmax(0,1fr)] overflow-hidden bg-[#efeef1] text-slate-800">
+    <main className="grid h-dvh min-w-0 grid-cols-[auto_minmax(0,1fr)] grid-rows-[4.5rem_minmax(0,1fr)] overflow-hidden bg-[#efeef1] text-slate-800" data-module-theme={activeModule}>
       <header className="col-span-full flex h-18 items-center justify-between gap-4 border-b border-slate-200 bg-white/95 px-5 shadow-[0_12px_28px_-24px_rgba(15,23,42,0.18)] sm:px-6">
         <div className="flex min-w-0 items-center gap-3 sm:gap-4">
           <button
@@ -225,6 +243,7 @@ export function AuthenticatedShell({
               width={842}
             />
           </div>
+          <ModuleIndicator module={activeModule} />
         </div>
 
         <div className="flex items-center gap-2">
@@ -310,6 +329,21 @@ export function AuthenticatedShell({
         </div>
       </section>
     </main>
+  );
+}
+
+function ModuleIndicator({ module }: ModuleIndicatorProps) {
+  const { t } = useTranslation();
+
+  return (
+    <div
+      className="inline-flex min-h-9 shrink-0 items-center gap-2 rounded-full border border-teal-200 bg-teal-50 px-3 py-1.5 text-xs font-bold text-teal-900 shadow-sm"
+    >
+      <span className="grid size-6 place-items-center rounded-full bg-teal-600 text-white shadow-sm">
+        <PanelsTopLeft aria-hidden="true" className="size-3.5" strokeWidth={2.4} />
+      </span>
+      <span className="whitespace-nowrap">{t(`shell.modules.${module}`)}</span>
+    </div>
   );
 }
 
@@ -513,6 +547,57 @@ function SessionLoading() {
 
 function getInitials(username: string) {
   return username.trim().slice(0, 2).toUpperCase() || "PV";
+}
+
+function getActiveModule(user: CurrentUser): AuthenticatedModule {
+  const profileNames = user.profiles.map((profile) =>
+    normalizeModuleName(profile.name),
+  );
+  if (profileNames.some((name) => name.includes("bracvam"))) return "bracvam";
+  if (profileNames.some((name) => name.includes("proponente") || name.includes("proponent"))) return "proponent";
+  if (profileNames.some((name) => name.includes("administr"))) return "administration";
+
+  const profileRole = PROCESS_PARTICIPANT_ROLES.find((role) =>
+    profileNames.some((name) => matchesParticipantRole(name, role)),
+  );
+  if (profileRole) return profileRole;
+
+  const sessionRoles = [
+    ...user.roles,
+    ...(user.scopes?.flatMap((scope) => scope.roles) ?? []),
+  ];
+  const participantRole = sessionRoles.find((role) =>
+    PROCESS_PARTICIPANT_ROLES.includes(role as ProcessParticipantRole),
+  ) as ProcessParticipantRole | undefined;
+  if (participantRole) return participantRole;
+  if (user.isAdministrator) return "administration";
+  return "platform";
+}
+
+function normalizeModuleName(value: string) {
+  return value
+    .normalize("NFD")
+    .replaceAll(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("pt-BR")
+    .replaceAll(/[-_]/g, " ");
+}
+
+function matchesParticipantRole(name: string, role: ProcessParticipantRole) {
+  const aliases: Record<ProcessParticipantRole, string[]> = {
+    proponent: ["proponente", "proponent"],
+    sponsor: ["patrocinador", "sponsor"],
+    group_manager: ["grupo gestor", "group manager", "management group"],
+    study_manager: ["gestor do estudo", "gerente do estudo", "study manager"],
+    statistician: ["estatistico", "statistician"],
+    adhoc_evaluator: ["avaliador ad hoc", "ad hoc evaluator"],
+    peer_reviewer: ["revisor por pares", "peer reviewer"],
+    lead_laboratory: ["laboratorio lider", "laboratorio responsavel", "lead laboratory"],
+    participating_laboratory: ["laboratorio participante", "participating laboratory"],
+    sample_selection_group: ["grupo de selecao de amostras", "sample selection group"],
+    regulatory_observer: ["observador regulatorio", "regulatory observer"],
+    collaborator: ["colaborador", "collaborator"],
+  };
+  return aliases[role].some((alias) => name.includes(alias));
 }
 
 function formatRoles(roles: string[], locale: string, emptyLabel: string) {

@@ -58,7 +58,21 @@ export type ProcessKanbanState =
 export type ProcessCardProps = {
   item: ProcessKanbanItem;
   onAnalyze: (process: ProcessInstance) => void;
+  onDelete: (process: ProcessInstance) => void;
   onViewDetails: (process: ProcessInstance) => void;
+  isDeleting: boolean;
+};
+
+export type ProcessDeletionState =
+  | { kind: "closed" }
+  | { kind: "confirming"; process: ProcessInstance }
+  | { kind: "deleting"; process: ProcessInstance }
+  | { kind: "error"; process: ProcessInstance; message: string };
+
+export type ProcessDeletionDialogProps = {
+  state: Exclude<ProcessDeletionState, { kind: "closed" }>;
+  onClose: () => void;
+  onConfirm: () => void;
 };
 
 export type ProcessAnalysisDialogProps = {

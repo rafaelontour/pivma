@@ -32,7 +32,7 @@ Alternativa considerada: acrescentar `page: "processes"` e toda a lógica do qua
 
 ### Tipos e integração separados por domínio
 
-Os contratos de processo e os estados do quadro ficarão em `types/Processo.ts` e `types/Kanban.ts`. `services/Processo.ts` encapsulará exclusivamente as consultas externas necessárias ao quadro e aos detalhes. Route Handlers sob `/api/processes` validarão a sessão, parâmetros e respostas antes de expor dados ao cliente.
+Os contratos de processo e os estados do quadro ficarão em `types/Processo.ts` e `types/Kanban.ts`. `services/Processo.ts` encapsulará as consultas externas e a exclusão administrativa. Route Handlers sob `/api/processes` validarão a sessão, parâmetros, perfil BraCVAM e respostas antes de expor dados ou encaminhar a exclusão.
 
 Alternativa considerada: declarar tipos junto aos componentes. Isso viola a convenção do projeto e acopla a representação da API ao comportamento visual.
 
@@ -65,6 +65,8 @@ Alternativa considerada: atualizar os cartões individualmente. O endpoint atual
 ### Cartões semanticamente não arrastáveis
 
 Cada cartão será implementado como conteúdo consultável com uma ação explícita para abrir detalhes. Não serão aplicados atributos draggable, alças, cursores de arraste ou bibliotecas de drag-and-drop. Alterações de coluna usarão a identidade estável do processo durante a reconciliação para evitar que a atualização seja interpretada como uma operação do usuário.
+
+Cada cartão também apresentará uma ação compacta para apagar a submissão. A ação abrirá uma confirmação própria com código e título, será autorizada no servidor somente para a equipe BraCVAM e encaminhará `DELETE /processes/{id}` independentemente do estado atual. Após `204`, o quadro removerá o processo e suas tarefas do snapshot local.
 
 Alternativa considerada: manter suporte de drag desabilitado para uso futuro. Mesmo inativo, esse código comunicaria uma possibilidade de edição que não pertence ao produto e adicionaria dependência sem necessidade.
 

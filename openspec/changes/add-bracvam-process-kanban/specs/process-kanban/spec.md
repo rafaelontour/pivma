@@ -92,12 +92,17 @@ O sistema SHALL obter as fases correntes dos processos em andamento e SHALL ofer
 
 ### Requirement: Identificação e consulta do processo
 
-Cada cartão SHALL exibir pelo menos o código e o título do processo e MUST possuir uma ação acessível para consultar seus detalhes. O cartão MUST NOT depender somente de cor para comunicar o estado.
+Cada cartão SHALL exibir pelo menos o código e o título do processo, MUST possuir uma ação acessível para consultar seus detalhes e SHALL apresentar uma ação pequena para apagar a submissão, independentemente do estado. A exclusão MUST solicitar confirmação com código e título e MUST ser encaminhada somente para uma sessão BraCVAM autorizada. O cartão MUST NOT depender somente de cor para comunicar o estado.
 
 #### Scenario: Processo é apresentado no quadro
 
 - **WHEN** uma coluna contém um processo
 - **THEN** o cartão apresenta seu código e título e permite abrir a consulta do processo
+
+#### Scenario: BraCVAM apaga uma submissão em qualquer estado
+
+- **WHEN** a pessoa autorizada aciona Apagar submissão em qualquer coluna e confirma a operação
+- **THEN** o sistema solicita a exclusão à API, remove o cartão após sucesso e atualiza as contagens
 
 #### Scenario: Navegação sem percepção de cores
 
@@ -169,7 +174,7 @@ O Kanban SHALL distribuir todas as colunas configuradas por toda a largura horiz
 
 ### Requirement: Kanban sem alteração manual de estado
 
-O Kanban SHALL ser uma visualização somente leitura dos estados dos processos. O sistema MUST NOT oferecer drag-and-drop, seletor de estado ou qualquer outra ação que permita à equipe BraCVAM ou a outra pessoa alterar manualmente o estado de um processo pelo quadro.
+O Kanban SHALL ser uma visualização somente leitura dos estados dos processos. O sistema MUST NOT oferecer drag-and-drop, seletor de estado ou qualquer outra ação que altere manualmente o estado de um processo pelo quadro. A exclusão administrativa confirmada é uma operação própria e não representa mudança de estado.
 
 #### Scenario: Pessoa interage com um cartão
 

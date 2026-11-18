@@ -75,7 +75,7 @@ export async function PUT(
     | SaveSubmissionDraftInput
     | null;
 
-  if (!isUuid(processId) || !isValidValues(payload?.values)) {
+  if (!isUuid(processId) || !isValidValues(payload?.values) || (payload.title !== undefined && (payload.title.trim().length < 3 || payload.title.trim().length > 255))) {
     return NextResponse.json({ code: "VALIDATION_ERROR", message: "Informe valores de rascunho válidos." }, { status: 400 });
   }
 

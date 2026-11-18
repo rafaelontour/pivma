@@ -189,6 +189,7 @@ export function DynamicFormFieldControl({
           <span>
             {field.label}
             {field.is_required && <span className="ml-1 text-rose-700">*</span>}
+            {!field.is_required && <span className="ml-1 text-xs font-normal text-slate-500">({t("dynamicForm.optional")})</span>}
           </span>
         </label>
         <FieldHelp field={field} helpId={helpId} />
@@ -284,6 +285,7 @@ function FieldLabel({ field, fieldId }: DynamicFormFieldLabelProps) {
     <label className="text-sm font-semibold text-slate-800" htmlFor={fieldId}>
       {field.label}
       {field.is_required && <span className="ml-1 text-rose-700">*</span>}
+      {!field.is_required && <span className="ml-1 text-xs font-normal text-slate-500">({t("dynamicForm.optional")})</span>}
       {field.ai_evaluation_enabled && <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-violet-100 px-2 py-0.5 text-[0.65rem] font-bold text-violet-800"><Bot aria-hidden="true" className="size-3" />{t("dynamicForm.aiPreEvaluation")}</span>}
     </label>
   );

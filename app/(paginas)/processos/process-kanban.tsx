@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import Link from "next/link";
 import type { TFunction } from "i18next";
+import { toast } from "sonner";
 import { useAccessibleDialog } from "@/components/accessible-dialog";
 import { getLocalizedApiError } from "@/i18n/errors";
 import { TriageWorkspace } from "@/app/(paginas)/triagem/triage-workspace";
@@ -14,6 +15,7 @@ import {
   FileStack,
   LoaderCircle,
   RefreshCw,
+  Trash2,
   X,
 } from "lucide-react";
 import type {
@@ -23,6 +25,8 @@ import type {
   ProcessDetailsDialogProps,
   ProcessDetailsState,
   ProcessDetailItemProps,
+  ProcessDeletionDialogProps,
+  ProcessDeletionState,
   ProcessKanbanColumn,
   ProcessKanbanItem,
   ProcessKanbanState,
@@ -51,12 +55,14 @@ export function ProcessKanban() {
   const [state, setState] = useState<ProcessKanbanState>({ kind: "loading" });
   const [details, setDetails] = useState<ProcessDetailsState>({ kind: "closed" });
   const [analysisProcess, setAnalysisProcess] = useState<ProcessInstance | null>(null);
+  const [deletion, setDeletion] = useState<ProcessDeletionState>({ kind: "closed" });
   const [phaseFilter, setPhaseFilter] = useState("all");
   const [headerActionsTarget, setHeaderActionsTarget] =
     useState<HTMLElement | null>(null);
   const isRefreshingRef = useRef(false);
   const boardControllerRef = useRef<AbortController | null>(null);
   const detailsControllerRef = useRef<AbortController | null>(null);
+  const isDeletingRef = useRef(false);
 
   useEffect(() => {
     setHeaderActionsTarget(
@@ -256,6 +262,44 @@ export function ProcessKanban() {
     setDetails({ kind: "closed" });
   }
 
+  async function deleteSelectedProcess() {
+    if (deletion.kind === "closed" || isDeletingRef.current) return;
+    const process = deletion.process;
+    isDeletingRef.current = true;
+    setDeletion({ kind: "deleting", process });
+
+    try {
+      const response = await fetch(`/api/processes/${process.id}`, { method: "DELETE" });
+      const payload = response.status === 204
+        ? null
+        : await response.json().catch(() => null) as unknown;
+      if (!response.ok) {
+        setDeletion({
+          kind: "error",
+          process,
+          message: getApiMessage(payload, t("processes.deleteFailed"), t),
+        });
+        return;
+      }
+
+      setState((current) => current.kind === "ready"
+        ? {
+            ...current,
+            processes: current.processes.filter((item) => item.id !== process.id),
+            tasks: current.tasks.filter((task) => task.process.id !== process.id),
+          }
+        : current);
+      if (details.kind !== "closed" && details.process.id === process.id) closeDetails();
+      if (analysisProcess?.id === process.id) setAnalysisProcess(null);
+      setDeletion({ kind: "closed" });
+      toast.success(t("processes.deleted", { code: process.code }));
+    } catch {
+      setDeletion({ kind: "error", process, message: t("processes.deleteFailed") });
+    } finally {
+      isDeletingRef.current = false;
+    }
+  }
+
   if (state.kind === "loading") {
     return (
       <KanbanMessage
@@ -396,9 +440,11 @@ export function ProcessKanban() {
                 ) : (
                   column.items.map((item) => (
                     <ProcessCard
+                      isDeleting={deletion.kind === "deleting" && deletion.process.id === item.process.id}
                       item={item}
                       key={item.process.id}
                       onAnalyze={setAnalysisProcess}
+                      onDelete={(process) => setDeletion({ kind: "confirming", process })}
                       onViewDetails={(selectedProcess) =>
                         void openDetails(selectedProcess)
                       }
@@ -429,11 +475,21 @@ export function ProcessKanban() {
           process={analysisProcess}
         />
       )}
+
+      {deletion.kind !== "closed" && (
+        <ProcessDeletionDialog
+          onClose={() => {
+            if (deletion.kind !== "deleting") setDeletion({ kind: "closed" });
+          }}
+          onConfirm={() => void deleteSelectedProcess()}
+          state={deletion}
+        />
+      )}
     </div>
   );
 }
 
-function ProcessCard({ item, onAnalyze, onViewDetails }: ProcessCardProps) {
+function ProcessCard({ item, isDeleting, onAnalyze, onDelete, onViewDetails }: ProcessCardProps) {
   const { t } = useTranslation();
   const { process } = item;
 
@@ -443,9 +499,23 @@ function ProcessCard({ item, onAnalyze, onViewDetails }: ProcessCardProps) {
         <span className="min-w-0 break-all font-mono text-[11px] font-bold uppercase tracking-wide text-teal-700">
           {process.code}
         </span>
-        <span className={`max-w-full rounded-md px-2 py-1 text-[10px] font-semibold ${getReviewStateTone(item.reviewState)}`}>
-          {t(`processes.reviewStates.${item.reviewState}`)}
-        </span>
+        <div className="flex items-center gap-1.5">
+          <span className={`max-w-full rounded-md px-2 py-1 text-[10px] font-semibold ${getReviewStateTone(item.reviewState)}`}>
+            {t(`processes.reviewStates.${item.reviewState}`)}
+          </span>
+          <button
+            aria-label={t("processes.deleteLabel", { code: process.code, title: process.title })}
+            className="grid size-7 shrink-0 place-items-center rounded-md text-rose-600 outline-none transition hover:bg-rose-50 hover:text-rose-800 focus-visible:ring-2 focus-visible:ring-rose-500 disabled:cursor-wait disabled:text-slate-400"
+            disabled={isDeleting}
+            onClick={() => onDelete(process)}
+            title={t("processes.delete")}
+            type="button"
+          >
+            {isDeleting
+              ? <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" />
+              : <Trash2 aria-hidden="true" className="size-3.5" />}
+          </button>
+        </div>
       </div>
       <h3 className="mt-3 min-w-0 break-words text-sm font-bold leading-5 text-slate-900">
         {process.title}
@@ -497,6 +567,49 @@ function ProcessCard({ item, onAnalyze, onViewDetails }: ProcessCardProps) {
         )}
       </div>
     </article>
+  );
+}
+
+function ProcessDeletionDialog({ state, onClose, onConfirm }: ProcessDeletionDialogProps) {
+  const { t } = useTranslation();
+  const isDeleting = state.kind === "deleting";
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape" && !isDeleting) onClose();
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [isDeleting, onClose]);
+
+  return (
+    <div className="fixed inset-0 z-[60] grid place-items-center bg-slate-950/55 p-4 backdrop-blur-sm" role="presentation">
+      <div aria-describedby="process-delete-description" aria-labelledby="process-delete-title" aria-modal="true" className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl" role="dialog">
+        <div className="grid size-10 place-items-center rounded-xl bg-rose-100 text-rose-700">
+          <Trash2 aria-hidden="true" className="size-5" />
+        </div>
+        <h2 className="mt-4 text-xl font-bold text-slate-900" id="process-delete-title">
+          {t("processes.deleteTitle")}
+        </h2>
+        <p className="mt-2 text-sm leading-6 text-slate-600" id="process-delete-description">
+          {t("processes.deleteDescription", { code: state.process.code, title: state.process.title })}
+        </p>
+        {state.kind === "error" && (
+          <p className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800" role="alert">
+            {state.message}
+          </p>
+        )}
+        <div className="mt-6 flex justify-end gap-3">
+          <button className="min-h-10 rounded-lg border border-slate-300 px-4 text-sm font-bold text-slate-700 outline-none focus-visible:ring-2 focus-visible:ring-teal-500 disabled:opacity-60" disabled={isDeleting} onClick={onClose} type="button">
+            {t("common.cancel")}
+          </button>
+          <button className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-rose-700 px-4 text-sm font-bold text-white outline-none transition hover:bg-rose-800 focus-visible:ring-2 focus-visible:ring-rose-500 disabled:cursor-wait disabled:bg-slate-400" disabled={isDeleting} onClick={onConfirm} type="button">
+            {isDeleting ? <LoaderCircle aria-hidden="true" className="size-4 animate-spin" /> : <Trash2 aria-hidden="true" className="size-4" />}
+            {isDeleting ? t("processes.deleting") : t("processes.confirmDelete")}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

@@ -12,8 +12,9 @@ A equipe BraCVAM precisa acompanhar todos os processos da plataforma e identific
 - Exibir datas e motivo de encerramento nos detalhes somente para processos efetivamente encerrados.
 - Permitir filtrar a coluna Em andamento pela fase corrente do processo.
 - Exibir em cada cartão a identificação essencial do processo e disponibilizar acesso aos seus detalhes sem carregar dados sensíveis desnecessários.
+- Disponibilizar em cada cartão uma ação pequena de exclusão administrativa, com confirmação explícita, independentemente do estado do processo.
 - Carregar todos os processos acessíveis, respeitando a paginação do serviço externo, e representar estados vazios, falhas e ausência de autorização.
-- Manter o Kanban estritamente em modo de consulta, sem permitir que a equipe BraCVAM ou qualquer outra pessoa mova cartões ou altere estados pela interface.
+- Manter o posicionamento dos cartões em modo de consulta, sem permitir movimentação ou alteração manual de estados; a equipe BraCVAM poderá excluir um processo por uma ação administrativa confirmada.
 - Atualizar o posicionamento dos cartões quando uma nova consulta informar que o fluxo do sistema alterou o estado do processo.
 - Distribuir as colunas por toda a largura disponível do quadro, sem rolagem horizontal.
 - Adicionar as rotas internas, serviços e tipos necessários, mantendo a URL da API externa e a credencial de sessão exclusivamente no servidor.

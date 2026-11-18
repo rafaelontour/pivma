@@ -39,7 +39,65 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+/*
+ * A paleta teal é a cor primária da interface. Dentro da área autenticada,
+ * ela assume a identidade do ator da sessão sem alterar cores neutras ou
+ * semânticas, como vermelho de erro e âmbar de atenção.
+ */
+:root[data-module-theme] {
+  --color-teal-50: oklch(97.2% 0.024 var(--module-hue));
+  --color-teal-100: oklch(93.8% 0.05 var(--module-hue));
+  --color-teal-200: oklch(88.5% 0.085 var(--module-hue));
+  --color-teal-300: oklch(80.8% 0.13 var(--module-hue));
+  --color-teal-400: oklch(70.8% 0.17 var(--module-hue));
+  --color-teal-500: oklch(62.2% 0.2 var(--module-hue));
+  --color-teal-600: oklch(54.2% 0.2 var(--module-hue));
+  --color-teal-700: oklch(46.5% 0.175 var(--module-hue));
+  --color-teal-800: oklch(39.8% 0.135 var(--module-hue));
+  --color-teal-900: oklch(35.2% 0.105 var(--module-hue));
+  --color-teal-950: oklch(24.5% 0.07 var(--module-hue));
+}
+
+:root[data-module-theme="proponent"] { --module-hue: 252; }
+:root[data-module-theme="bracvam"] { --module-hue: 160; }
+:root[data-module-theme="administration"] { --module-hue: 305; }
+:root[data-module-theme="group_manager"] { --module-hue: 82; }
+:root[data-module-theme="study_manager"] { --module-hue: 275; }
+:root[data-module-theme="statistician"] { --module-hue: 292; }
+:root[data-module-theme="adhoc_evaluator"] { --module-hue: 18; }
+:root[data-module-theme="peer_reviewer"] { --module-hue: 325; }
+:root[data-module-theme="lead_laboratory"] { --module-hue: 205; }
+:root[data-module-theme="participating_laboratory"] { --module-hue: 225; }
+:root[data-module-theme="sponsor"] { --module-hue: 55; }
+:root[data-module-theme="sample_selection_group"] { --module-hue: 125; }
+:root[data-module-theme="regulatory_observer"] { --module-hue: 245; }
+:root[data-module-theme="collaborator"] { --module-hue: 345; }
+:root[data-module-theme="platform"] { --module-hue: 190; }
+
 button,
 input {
   font: inherit;
+}
+
+@keyframes backdrop-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes dialog-enter {
+  from { opacity: 0; transform: translateY(14px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes panel-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
 }

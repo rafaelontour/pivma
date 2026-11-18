@@ -26,7 +26,7 @@ import {
   buildDynamicFormInputs,
   buildDynamicFormValues,
   getPendingSubmissionCorrectionField,
-  hasDynamicFormFileReference,
+  isActionableSubmissionCorrection,
   isSubmissionCorrectionFieldChanged,
   validateDynamicFormValues,
 } from "@/components/formulario";
@@ -34,7 +34,6 @@ import type { ProcessInstance } from "@/types/Processo";
 import type { ApiMessage, ApiRecord } from "@/types/Servico";
 import type {
   DynamicFormField,
-  DynamicFormReview,
   SaveSubmissionDraftResult,
   SubmissionCatalogMessageProps,
   SubmissionCatalogState,
@@ -50,7 +49,6 @@ import type {
   SubmissionForm,
   SubmissionFormDialogProps,
   SubmissionFormOperation,
-  SubmissionIdentificationDialogProps,
   SubmissionTab,
   SubmissionTemplate,
   SubmissionTemplateCardProps,
@@ -86,9 +84,6 @@ export function SubmissionCatalog() {
   const [openingDraftId, setOpeningDraftId] = useState<string | null>(null);
   const [draftDeletion, setDraftDeletion] =
     useState<SubmissionDraftDeletionState>({ kind: "closed" });
-  const [identificationTemplate, setIdentificationTemplate] =
-    useState<SubmissionTemplate | null>(null);
-  const [submissionTitle, setSubmissionTitle] = useState("");
   const isCreatingRef = useRef(false);
   const isOpeningRef = useRef(false);
   const isDeletingRef = useRef(false);
@@ -137,19 +132,6 @@ export function SubmissionCatalog() {
   async function selectTemplate(template: SubmissionTemplate) {
     if (isCreatingRef.current || isOpeningRef.current) return;
     setActiveTab("drafts");
-    setSubmissionTitle("");
-    setIdentificationTemplate(template);
-  }
-
-  async function createIdentifiedSubmission() {
-    const template = identificationTemplate;
-    if (isCreatingRef.current || isOpeningRef.current) {
-      return;
-    }
-    if (!template || submissionTitle.trim().length < 3 || submissionTitle.trim().length > 255) {
-      toast.error(t("submissions.titleValidation"));
-      return;
-    }
 
     isCreatingRef.current = true;
     setCreatingTemplateKey(template.key);
@@ -158,7 +140,7 @@ export function SubmissionCatalog() {
       const createResponse = await fetch("/api/submissions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ templateKey: template.key, title: submissionTitle.trim() }),
+        body: JSON.stringify({ templateKey: template.key, title: template.name }),
       });
       const createPayload = (await createResponse.json().catch(() => null)) as unknown;
 
@@ -170,7 +152,6 @@ export function SubmissionCatalog() {
       }
 
       toast.success(t("submissions.created", { code: createPayload.code }));
-      setIdentificationTemplate(null);
       setActiveTab("drafts");
       refreshDrafts();
       await loadForm(template, createPayload, "initial-draft");
@@ -449,6 +430,15 @@ export function SubmissionCatalog() {
           )}
         </div>
 
+        {creatingTemplateKey && (
+          <div className="mb-4 flex items-center gap-3 rounded-2xl border border-teal-200 bg-gradient-to-r from-teal-50 to-white px-4 py-3 text-sm text-teal-900 shadow-sm motion-safe:animate-[panel-enter_220ms_ease-out]" role="status">
+            <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-teal-100 text-teal-800">
+              <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
+            </span>
+            <span>{t("submissions.creatingDraft")}</span>
+          </div>
+        )}
+
         {draftsState.kind === "loading" ? (
           <div className="flex min-h-32 items-center justify-center gap-3 rounded-2xl border border-slate-200 bg-white text-sm text-slate-600">
             <LoaderCircle aria-hidden="true" className="size-5 animate-spin text-teal-700" />
@@ -595,7 +585,7 @@ export function SubmissionCatalog() {
           <>
           <div aria-label={t("submissions.submittedFiltersLabel")} className="mb-5 flex flex-wrap gap-2" role="group">
             <button aria-pressed={submittedFilter === "sent"} className={`inline-flex min-h-10 items-center gap-2 rounded-lg px-4 text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-teal-500 ${submittedFilter === "sent" ? "bg-teal-800 text-white" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50"}`} onClick={() => setSubmittedFilter("sent")} type="button">{t("submissions.sentFilter")}<span className={`grid size-6 place-items-center rounded-full text-xs font-bold ${submittedFilter === "sent" ? "bg-white text-teal-900" : "bg-teal-100 text-teal-900"}`}>{submittedState.submissions.filter((item) => !isReturnedSubmission(item)).length}</span></button>
-            <button aria-pressed={submittedFilter === "returned"} className={`inline-flex min-h-10 items-center gap-2 rounded-lg px-4 text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-amber-500 ${submittedFilter === "returned" ? "bg-amber-800 text-white" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50"}`} onClick={() => setSubmittedFilter("returned")} type="button">{t("submissions.returnedFilter")}<span className={`grid size-6 place-items-center rounded-full text-xs font-bold ${submittedFilter === "returned" ? "bg-white text-amber-900" : "bg-amber-100 text-amber-900"}`}>{submittedState.submissions.filter(isReturnedSubmission).length}</span></button>
+            <button aria-pressed={submittedFilter === "returned"} className={`inline-flex min-h-10 items-center gap-2 rounded-lg px-4 text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-teal-500 ${submittedFilter === "returned" ? "bg-teal-800 text-white" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50"}`} onClick={() => setSubmittedFilter("returned")} type="button">{t("submissions.returnedFilter")}<span className={`grid size-6 place-items-center rounded-full text-xs font-bold ${submittedFilter === "returned" ? "bg-white text-teal-900" : "bg-teal-100 text-teal-900"}`}>{submittedState.submissions.filter(isReturnedSubmission).length}</span></button>
           </div>
           <p className="-mt-3 mb-5 text-sm leading-6 text-slate-600">{t(submittedFilter === "returned" ? "submissions.returnedFilterDescription" : "submissions.sentFilterDescription")}</p>
           {submittedState.submissions.filter((item) => submittedFilter === "returned" ? isReturnedSubmission(item) : !isReturnedSubmission(item)).length === 0 ? (
@@ -744,17 +734,6 @@ export function SubmissionCatalog() {
         />
       )}
 
-      {identificationTemplate && (
-        <SubmissionIdentificationDialog
-          isCreating={creatingTemplateKey !== null}
-          onClose={() => setIdentificationTemplate(null)}
-          onConfirm={() => void createIdentifiedSubmission()}
-          onTitleChange={setSubmissionTitle}
-          template={identificationTemplate}
-          title={submissionTitle}
-        />
-      )}
-
       {draftDeletion.kind !== "closed" && (
         <SubmissionDraftDeletionDialog
           onClose={() => {
@@ -804,29 +783,6 @@ function SubmissionTemplateCard({
         {isCreating ? t("submissions.creatingDraft") : t("submissions.startSubmission")}
       </button>
     </article>
-  );
-}
-
-function SubmissionIdentificationDialog({
-  template,
-  title,
-  isCreating,
-  onTitleChange,
-  onClose,
-  onConfirm,
-}: SubmissionIdentificationDialogProps) {
-  const { t } = useTranslation();
-
-  return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/50 p-4" role="presentation">
-      <div aria-labelledby="submission-identification-title" aria-modal="true" className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl" role="dialog">
-        <FilePlus2 aria-hidden="true" className="size-8 text-teal-700" />
-        <h2 className="mt-3 text-xl font-bold text-slate-900" id="submission-identification-title">{t("submissions.identifyTitle")}</h2>
-        <p className="mt-2 text-sm leading-6 text-slate-600">{t("submissions.identifyDescription", { template: template.name })}</p>
-        <label className="mt-4 grid gap-1.5 text-sm font-semibold text-slate-800">{t("submissions.titleLabel")}<input data-tour="submission-identification-field" autoFocus className="min-h-11 rounded-xl border border-slate-300 px-3 font-normal outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20" disabled={isCreating} maxLength={255} minLength={3} onChange={(event) => onTitleChange(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") onConfirm(); }} placeholder={t("submissions.titlePlaceholder")} value={title} /></label>
-        <div className="mt-5 flex justify-end gap-3"><button className="min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-bold text-slate-700 outline-none focus-visible:ring-2 focus-visible:ring-teal-500" disabled={isCreating} onClick={onClose} type="button">{t("common.cancel")}</button><button className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-teal-700 px-4 text-sm font-bold text-white outline-none focus-visible:ring-2 focus-visible:ring-teal-500 disabled:opacity-60" disabled={isCreating || title.trim().length < 3} onClick={onConfirm} type="button">{isCreating && <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />}{t("submissions.createAndOpen")}</button></div>
-      </div>
-    </div>
   );
 }
 
@@ -1065,7 +1021,7 @@ function SubmissionFormDialog({
     state.kind === "ready" &&
       (state.process.awaiting_correction ||
         state.returnReview ||
-        Object.values(state.form.reviews).some(isCorrectableReview)),
+        state.form.fields.some((field) => isActionableSubmissionCorrection(state.form, field))),
   );
 
   function updateField(fieldKey: string, value: string | boolean) {
@@ -1091,6 +1047,7 @@ function SubmissionFormDialog({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           values: buildDynamicFormValues(form.fields, inputs, false),
+          title: getSubmissionTitle(form.fields, inputs, state.process.title),
         }),
       });
       const payload = (await response.json().catch(() => null)) as unknown;
@@ -1134,7 +1091,7 @@ function SubmissionFormDialog({
       return;
     }
 
-    const isCorrectionMode = Object.values(form.reviews).some(isCorrectableReview);
+    const isCorrectionMode = form.fields.some((field) => isActionableSubmissionCorrection(form, field));
 
     operationRef.current = "saving";
     setOperation("saving");
@@ -1145,6 +1102,7 @@ function SubmissionFormDialog({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           values: buildDynamicFormValues(form.fields, inputs, false),
+          title: getSubmissionTitle(form.fields, inputs, state.process.title),
         }),
       });
       const payload = (await response.json().catch(() => null)) as
@@ -1183,11 +1141,11 @@ function SubmissionFormDialog({
       return;
     }
 
-    const isCorrectionMode = Object.values(form.reviews).some(isCorrectableReview);
+    const isCorrectionMode = form.fields.some((field) => isActionableSubmissionCorrection(form, field));
     const unsavedCorrectionField = isCorrectionMode
       ? form.fields.find(
           (field) =>
-            isCorrectableReview(form.reviews[field.field_key]) &&
+            isActionableSubmissionCorrection(form, field) &&
             !savedCorrectionFieldKeys.has(field.field_key),
         )
       : undefined;
@@ -1311,10 +1269,10 @@ function SubmissionFormDialog({
     <div
       aria-labelledby="submission-form-title"
       aria-modal="true"
-      className="fixed inset-0 z-50 grid place-items-center bg-slate-950/50 p-3 backdrop-blur-[2px] sm:p-6"
+      className="fixed inset-0 z-50 grid place-items-center bg-slate-950/55 p-3 backdrop-blur-sm motion-safe:animate-[backdrop-enter_180ms_ease-out] sm:p-6"
       role="dialog"
     >
-      <div className={`flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl ${hasCorrectionContext ? "h-[92dvh] w-[85vw] max-w-none" : "max-h-[94dvh] w-full max-w-3xl"}`}>
+      <div className={`flex flex-col overflow-hidden rounded-3xl border border-white/70 bg-white shadow-[0_24px_80px_-20px_rgba(15,23,42,0.55)] motion-safe:animate-[dialog-enter_240ms_cubic-bezier(0.16,1,0.3,1)] ${hasCorrectionContext ? "h-[92dvh] w-[85vw] max-w-none" : "max-h-[94dvh] w-full max-w-3xl"}`}>
         <header className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200 px-5 py-4 sm:px-6">
           <div className="min-w-0">
             <p className="font-mono text-xs font-bold uppercase tracking-wide text-teal-700">
@@ -1403,13 +1361,12 @@ function SubmissionDialogContent({
 }: SubmissionDialogContentProps) {
   const { t, i18n } = useTranslation();
   const orderedFields = form.fields
-    .filter((field) => !isSubmissionTitleField(field))
     .sort((first, second) => first.order_index - second.order_index);
   const defaultSection = t("submissions.generalSection");
   const sections = getSubmissionFormSections(orderedFields, defaultSection);
   const hasSectionTabs = sections.length > 1;
   const awaitingReturnResponse = Boolean(returnReview && form.is_submitted);
-  const hasCorrectionFields = Object.values(form.reviews).some(isCorrectableReview);
+  const hasCorrectionFields = form.fields.some((field) => isActionableSubmissionCorrection(form, field));
   const isCorrectionMode = hasCorrectionFields && (Boolean(returnReview) || !form.is_submitted);
   const hasCorrectionContext = Boolean(
     awaitingCorrection || returnReview || isCorrectionMode,
@@ -1420,18 +1377,9 @@ function SubmissionDialogContent({
   const correctionFormIsValid = isCorrectionMode
     ? validateDynamicFormValues(form.fields, inputs, t).valid
     : true;
-  const submissionFormIsValid =
-    validateDynamicFormValues(form.fields, inputs, t).valid &&
-    form.fields.every((field) => {
-      const value = inputs[field.field_key];
-      if (field.field_type === "boolean") return typeof value === "boolean";
-      if (field.field_type === "file_upload") {
-        return hasDynamicFormFileReference(value);
-      }
-      return typeof value === "string" && value.trim().length > 0;
-    });
+  const submissionFormIsValid = validateDynamicFormValues(form.fields, inputs, t).valid;
   const correctionFields = orderedFields.filter((field) =>
-    isCorrectableReview(form.reviews[field.field_key]),
+    isActionableSubmissionCorrection(form, field),
   );
   const pendingCorrectionFields = correctionFields.filter(
     (field) => !savedCorrectionFieldKeys.has(field.field_key),
@@ -1541,12 +1489,12 @@ function SubmissionDialogContent({
               const sectionCorrectionCount = orderedFields.filter(
                 (field) =>
                   getSubmissionFieldSection(field, defaultSection) === section &&
-                  isCorrectableReview(form.reviews[field.field_key]),
+                  isActionableSubmissionCorrection(form, field),
               ).length;
               const reviewedCount = orderedFields.filter(
                 (field) =>
                   getSubmissionFieldSection(field, defaultSection) === section &&
-                  isCorrectableReview(form.reviews[field.field_key]) &&
+                  isActionableSubmissionCorrection(form, field) &&
                   !savedCorrectionFieldKeys.has(field.field_key),
               ).length;
 
@@ -1600,7 +1548,7 @@ function SubmissionDialogContent({
                   )
                   .map((field) => {
                     const review = form.reviews[field.field_key];
-                    const isCorrectionField = isCorrectableReview(review);
+                    const isCorrectionField = isActionableSubmissionCorrection(form, field);
                     const isLockedDuringCorrection = Boolean(
                       isCorrectionMode && !isCorrectionField,
                     );
@@ -1616,7 +1564,7 @@ function SubmissionDialogContent({
                       : false;
 
                     return <div className={isCorrectionField ? "rounded-xl border-2 border-amber-400 bg-amber-50/60 p-4" : undefined} key={field.field_key}>
-                      {review && <div className="mb-4 border-b border-amber-200 pb-3"><p className="text-xs font-bold uppercase tracking-wide text-amber-900">{t("submissions.fieldReviewed", { status: t(`submissions.reviewStatuses.${review.status}`, { defaultValue: review.status }) })}</p>{review.comments && <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-amber-950">{review.comments}</p>}</div>}
+                      {review && (field.is_required || isCorrectionField || review.status === "APPROVED") && <div className="mb-4 border-b border-amber-200 pb-3"><p className="text-xs font-bold uppercase tracking-wide text-amber-900">{t("submissions.fieldReviewed", { status: t(`submissions.reviewStatuses.${review.status}`, { defaultValue: review.status }) })}</p>{review.comments && <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-amber-950">{review.comments}</p>}</div>}
                       {isLockedDuringCorrection && <div className="mb-3 flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600"><LockKeyhole aria-hidden="true" className="size-3.5 shrink-0" />{t("submissions.fieldLockedDuringCorrection")}</div>}
                       <DynamicFormFieldControl
                         disabled={isSavedCorrection || form.is_submitted || operation !== "idle" || isLockedDuringCorrection}
@@ -1690,15 +1638,10 @@ function getSubmissionFormSections(
   return [
     ...new Set(
       fields
-        .filter((field) => !isSubmissionTitleField(field))
         .sort((first, second) => first.order_index - second.order_index)
         .map((field) => getSubmissionFieldSection(field, defaultSection)),
     ),
   ];
-}
-
-function isCorrectableReview(review: DynamicFormReview | undefined) {
-  return review?.status === "NEEDS_REVISION" || review?.status === "REJECTED";
 }
 
 function getPersistedCorrectionFieldKeys(form: SubmissionForm) {
@@ -1717,7 +1660,7 @@ function getFirstReviewedSectionIndex(form: SubmissionForm, defaultSection: stri
   const reviewedField = form.fields.find(
     (field) =>
       !isSubmissionTitleField(field) &&
-      isCorrectableReview(form.reviews[field.field_key]),
+      isActionableSubmissionCorrection(form, field),
   );
   return reviewedField ? Math.max(sections.indexOf(getSubmissionFieldSection(reviewedField, defaultSection)), 0) : 0;
 }
@@ -1738,6 +1681,18 @@ function applyProcessTitleToSubmissionForm(
       [titleField.field_key]: processTitle,
     },
   };
+}
+
+function getSubmissionTitle(
+  fields: DynamicFormField[],
+  inputs: SubmissionFieldInputs,
+  fallback: string,
+) {
+  const titleField = fields.find(isSubmissionTitleField);
+  const title = titleField ? inputs[titleField.field_key] : undefined;
+  return typeof title === "string" && title.trim().length >= 3
+    ? title.trim().slice(0, 255)
+    : fallback;
 }
 
 function isSubmissionTitleField(field: DynamicFormField) {

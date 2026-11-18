@@ -2,7 +2,7 @@ import "server-only";
 
 import { isAxiosError } from "axios";
 import { tryit } from "radash";
-import { http } from "./Http";
+import { getApiOrigin, http } from "./Http";
 import { listCurrentTasks } from "./Tarefa";
 import { hasProcessKanbanAccess } from "@/types/Processo";
 import type {
@@ -71,6 +71,31 @@ export async function getProcess(
   }
 
   return { ok: true, data };
+}
+
+export async function deleteProcess(
+  accessToken: string,
+  processId: string,
+): Promise<ServiceResult<null>> {
+  const [error] = await tryit(() =>
+    http.delete<void>(`/processes/${processId}`, {
+      headers: {
+        Cookie: `access_token=${accessToken}`,
+        Origin: getApiOrigin(),
+      },
+    }),
+  )();
+
+  if (error) {
+    return {
+      ok: false,
+      status: getStatus(error),
+      code: getBackendCode(error),
+      message: getBackendMessage(error),
+    };
+  }
+
+  return { ok: true, data: null };
 }
 
 export function canReadProcessKanban(

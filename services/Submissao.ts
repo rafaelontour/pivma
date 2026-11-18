@@ -449,6 +449,17 @@ export async function saveSubmissionDraft(
     return { ok: false, status: getStatus(error) };
   }
 
+  if (input.title) {
+    const [titleError] = await tryit(() =>
+      http.patch<unknown>(
+        `/processes/${processId}`,
+        { title: input.title },
+        { headers: { Cookie: `access_token=${accessToken}`, Origin: getApiOrigin() } },
+      ),
+    )();
+    if (titleError) return { ok: false, status: getStatus(titleError) };
+  }
+
   if (!isSaveResult(response.data)) {
     return { ok: false };
   }
