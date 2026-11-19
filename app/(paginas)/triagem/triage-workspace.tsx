@@ -1,6 +1,7 @@
 "use client";
 
 import type { FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertCircle, ArrowLeft, Bot, CalendarDays, CheckCircle2, ClipboardCheck, History, Info, LoaderCircle, RefreshCw, Save } from "lucide-react";
 import { toast } from "sonner";
@@ -36,6 +37,7 @@ export function TriageWorkspace({
   initialProcess,
   onCompleted,
 }: TriageWorkspaceProps = {}) {
+  const router = useRouter();
   const { i18n, t } = useTranslation();
   const [queue, setQueue] = useState<TriageQueueState>(
     initialProcess
@@ -180,6 +182,7 @@ export function TriageWorkspace({
       toast.error(t("triage.correctionFieldRequired"));
       return false;
     }
+    const decidedProcessId = workspace.snapshot.process.id;
     updateReady((current) => ({ ...current, isSavingReviews: true, isDeciding: true }));
     try {
       if (completedReviews.length > 0) {
@@ -203,6 +206,7 @@ export function TriageWorkspace({
       setWorkspace({ kind: "closed" });
       setReloadKey((value) => value + 1);
       onCompleted?.();
+      if (input.outcome === "APPROVED") router.push(`/processos/${decidedProcessId}/composicao`);
       return true;
     } catch { toast.error(t("triage.connectionFailed")); return false; }
     finally { updateReady((current) => ({ ...current, isSavingReviews: false, isDeciding: false })); }

@@ -1,120 +1,152 @@
 ## Purpose
 
-Permitir que participantes autorizados componham os papéis e laboratórios do processo após a aprovação da triagem, preservando a autorização por escopo local e o avanço controlado pelo backend.
+Permitir que a BraCVAM componha, após a aprovação, o grupo gestor e o patrocinador de um processo em uma jornada rastreável, usando contas existentes ou convites por e-mail.
 
 ## ADDED Requirements
 
-### Requirement: Definição pós-aprovação pelo proponente
+### Requirement: Linha do tempo da composição pós-aprovação
 
-O sistema SHALL permitir que a pessoa com papel local `proponent` defina um patrocinador e uma pessoa responsável pelo grupo gestor quando as tarefas `assign_sponsor` e `assign_group_manager` estiverem acionáveis. Cada designação MUST usar respectivamente os papéis técnicos `sponsor` e `group_manager`, e o sistema MUST permitir que a mesma pessoa acumule papéis quando a API aceitar essa composição.
+O sistema SHALL levar a pessoa autorizada da BraCVAM à composição do processo depois da aprovação da submissão e SHALL apresentar uma linha do tempo retomável. A linha do tempo MUST ordenar **Definir grupo gestor** antes de **Definir patrocinador** e MUST obter o estado de cada etapa da API.
 
-#### Scenario: Tarefas de composição disponíveis
+#### Scenario: Aprovação abre a composição
 
-- **WHEN** a triagem foi aprovada e as tarefas de patrocinador e grupo gestor estão acionáveis para o proponente
-- **THEN** o sistema apresenta as duas designações pendentes e permite tratá-las independentemente
-
-#### Scenario: Uma designação já foi concluída
-
-- **WHEN** somente uma das tarefas de composição permanece acionável
-- **THEN** o sistema mantém a designação concluída identificada e oferece ação apenas para a tarefa pendente
-
-#### Scenario: Papel acumulado
-
-- **WHEN** o proponente informa para um segundo papel uma pessoa já participante do processo e a API permite o acúmulo
-- **THEN** o sistema registra a nova designação sem remover o papel anterior
-
-### Requirement: Designação por convite de e-mail
-
-O sistema SHALL coletar um e-mail válido para convidar o patrocinador, o grupo gestor e a pessoa responsável por um laboratório, sem exigir que o ator tenha permissão administrativa para listar usuários. O sistema MUST informar se a designação está pendente de aceite ou já está ativa e MUST NOT revelar se um endereço pertence previamente a uma conta fora do resultado seguro publicado pela API.
-
-#### Scenario: Convite criado
-
-- **WHEN** uma pessoa autorizada informa um e-mail válido e confirma uma designação
-- **THEN** o sistema cria o convite com o papel correto, confirma a operação e atualiza o estado da composição
-
-#### Scenario: Convite pendente
-
-- **WHEN** a API registra um convite que ainda precisa ser aceito
-- **THEN** o sistema identifica a designação como pendente sem apresentá-la como participante ativo
-
-#### Scenario: Convite inválido ou conflitante
-
-- **WHEN** a API rejeita o convite por formato, duplicidade, conflito de estado ou falta de autorização
-- **THEN** o sistema preserva os dados da interação e apresenta uma mensagem segura sem simular a designação
-
-### Requirement: Composição de laboratórios pelo grupo gestor
-
-O sistema SHALL permitir que uma pessoa com papel local efetivo `group_manager` selecione laboratórios ativos e atribua a cada um uma pessoa com o papel `participating_laboratory`. Cada designação MUST conter o identificador do laboratório e uma pessoa identificada ou convidada por e-mail; o sistema MUST NOT criar uma designação de laboratório sem responsável.
-
-#### Scenario: Laboratório participante atribuído
-
-- **WHEN** o grupo gestor seleciona um laboratório ativo, informa um e-mail válido e confirma
-- **THEN** o sistema cria a designação `participating_laboratory` associada à pessoa e ao laboratório escolhidos
-
-#### Scenario: Laboratório sem responsável
-
-- **WHEN** o grupo gestor seleciona um laboratório sem informar uma pessoa válida
-- **THEN** o sistema não envia a designação e indica que a pessoa responsável é obrigatória
-
-#### Scenario: Laboratório inativo
-
-- **WHEN** um laboratório está inativo ou deixa de estar disponível antes da confirmação
-- **THEN** o sistema não conclui sua designação e solicita a atualização da lista
-
-#### Scenario: Designação duplicada
-
-- **WHEN** já existe uma designação ativa ou um convite pendente equivalente para a pessoa e o laboratório
-- **THEN** o sistema não apresenta sucesso duplicado e informa o estado já existente
-
-### Requirement: Acompanhamento da composição do processo
-
-O sistema SHALL listar separadamente participantes ativos e convites pendentes do processo, mostrando papéis com rótulos localizados e laboratórios quando aplicáveis. Após cada operação, o sistema MUST reconciliar participantes, convites e tarefas atuais com a API, que permanece a fonte de verdade para o avanço do fluxo.
+- **WHEN** a BraCVAM aprova uma submissão e a API aceita a decisão
+- **THEN** o sistema abre a composição do mesmo processo com a etapa de grupo gestor em evidência
 
 #### Scenario: Composição retomada
 
-- **WHEN** uma pessoa autorizada reabre um processo com designações anteriores
-- **THEN** o sistema apresenta participantes ativos, convites pendentes e tarefas ainda acionáveis sem depender de estado temporário do navegador
+- **WHEN** uma pessoa autorizada reabre um processo cuja composição não terminou
+- **THEN** o sistema apresenta as etapas, participantes e convites já persistidos e retoma a primeira etapa ainda incompleta
 
-#### Scenario: API avança a fase
+#### Scenario: Etapa posterior ainda indisponível
 
-- **WHEN** uma designação satisfaz uma tarefa e a API avança ou desbloqueia o processo
-- **THEN** o sistema atualiza a composição e as tarefas sem enviar uma alteração manual de estado
+- **WHEN** a etapa do grupo gestor ainda não satisfaz as condições publicadas pela API
+- **THEN** o sistema mantém a definição do patrocinador identificada como etapa posterior sem simular sua liberação
 
-#### Scenario: Atualização falha após operação
+### Requirement: Grupo gestor formado por participantes do processo
 
-- **WHEN** a operação é aceita, mas a reconciliação posterior falha
-- **THEN** o sistema informa que o estado precisa ser atualizado e oferece nova consulta sem repetir automaticamente a mutação
+O sistema SHALL representar o grupo gestor como uma coleção de uma ou mais contas individuais vinculadas ao processo com o papel local `group_manager`. O sistema MUST NOT criar conta coletiva, entidade paralela ou plataforma separada para o grupo e MUST NOT substituir integrantes ativos ao adicionar outra pessoa.
 
-### Requirement: Autorização por papel local
+#### Scenario: Primeiro integrante adicionado
 
-O sistema MUST autorizar a composição conforme os papéis e tarefas do processo: somente o `proponent` com tarefa acionável pode definir patrocinador e grupo gestor, e somente o `group_manager` efetivo pode atribuir laboratórios participantes. Perfis globais MUST NOT substituir a participação local exigida pelo processo.
+- **WHEN** a BraCVAM designa uma conta válida como `group_manager`
+- **THEN** o sistema inclui essa pessoa entre os participantes ativos do grupo gestor
 
-#### Scenario: Proponente de outro processo
+#### Scenario: Integrantes adicionais
 
-- **WHEN** um proponente tenta compor um processo fora dos seus escopos locais
-- **THEN** o sistema recusa a operação sem revelar participantes, convites ou laboratórios associados ao processo
+- **WHEN** já existe um integrante ativo e a BraCVAM adiciona outra conta válida
+- **THEN** o sistema mantém os integrantes anteriores e acrescenta uma nova designação `group_manager`
 
-#### Scenario: Grupo gestor sem escopo no processo
+#### Scenario: Conclusão do grupo gestor
 
-- **WHEN** uma pessoa sem papel local `group_manager` tenta atribuir um laboratório participante
-- **THEN** o sistema recusa a operação e não cria convite nem designação
+- **WHEN** existe ao menos um integrante ativo e a BraCVAM solicita a conclusão da etapa
+- **THEN** o sistema usa a operação autoritativa da API e atualiza a linha do tempo conforme o resultado retornado
 
-#### Scenario: URL acessada diretamente
+### Requirement: Seleção de usuários existentes
 
-- **WHEN** uma pessoa sem papel aplicável acessa diretamente a interface de composição
-- **THEN** o sistema não apresenta os dados protegidos nem controles de mutação
+O sistema SHALL permitir que a BraCVAM pesquise contas ativas da plataforma e selecione uma identidade persistida para o grupo gestor ou para o patrocinador. A confirmação MUST permanecer indisponível enquanto nenhum resultado válido estiver selecionado e MUST NOT tratar texto livre como identidade.
 
-### Requirement: Integração interna e localizada
+#### Scenario: Conta existente selecionada
 
-O navegador MUST usar somente Route Handlers internos para consultar tarefas, participantes, convites e laboratórios e para criar as designações. Todo conteúdo controlado pela aplicação MUST existir em português do Brasil e inglês, enquanto nomes de pessoas, instituições e laboratórios recebidos da API MUST permanecer inalterados.
+- **WHEN** a pesquisa retorna uma conta ativa e a BraCVAM seleciona essa conta
+- **THEN** o sistema permite confirmar a designação usando o identificador persistido da pessoa
 
-#### Scenario: Operação protegida
+#### Scenario: Pesquisa sem correspondência
 
-- **WHEN** a interface consulta ou altera a composição de um processo
-- **THEN** a requisição do navegador usa uma rota interna sem receber a URL externa ou o cookie da API
+- **WHEN** nenhuma conta corresponde à pesquisa
+- **THEN** o sistema apresenta estado vazio e oferece separadamente a opção de convidar por e-mail
 
-#### Scenario: Idioma alternado
+#### Scenario: Conta deixa de estar disponível
 
-- **WHEN** a pessoa troca o idioma durante a composição
-- **THEN** rótulos, validações, estados e mensagens mudam para o locale ativo sem traduzir nomes e e-mails retornados pela API
+- **WHEN** a conta selecionada fica inativa ou inválida antes da confirmação
+- **THEN** o sistema rejeita a designação, preserva a pesquisa e solicita uma nova seleção
 
+### Requirement: Convite por e-mail
+
+O sistema SHALL permitir convidar para `group_manager` ou `sponsor` uma pessoa não selecionada no diretório, usando um e-mail válido e o canal de entrega por e-mail. O sistema MUST distinguir o estado do convite da situação de sua entrega e MUST NOT revelar, por respostas diferentes, se o endereço já pertence a uma conta.
+
+#### Scenario: Convite criado para entrega por e-mail
+
+- **WHEN** a BraCVAM informa um e-mail válido, escolhe o cargo e confirma o convite
+- **THEN** o sistema solicita o envio por e-mail, confirma a criação e mostra o estado de entrega retornado pela API
+
+#### Scenario: Convite permanece pendente
+
+- **WHEN** o convite ainda não foi aceito ou a pessoa ainda não possui uma conta vinculada
+- **THEN** o sistema apresenta a pessoa como convite pendente e não como participante ativo
+
+#### Scenario: Entrega falha
+
+- **WHEN** a API informa falha no envio do e-mail
+- **THEN** o sistema mostra a falha de entrega sem afirmar que o convite chegou e sem repetir automaticamente a mutação
+
+#### Scenario: Convite aceito
+
+- **WHEN** a API registra o aceite e publica a designação correspondente
+- **THEN** o sistema remove a pendência da apresentação corrente e passa a mostrar a pessoa como participante ativo
+
+### Requirement: Definição do patrocinador
+
+O sistema SHALL permitir definir uma pessoa com o papel local `sponsor` depois da etapa do grupo gestor, por seleção de conta existente ou convite por e-mail. O sistema MUST apresentar a designação ativa, o convite pendente ou a ausência de patrocinador conforme a API.
+
+#### Scenario: Patrocinador existente designado
+
+- **WHEN** a BraCVAM seleciona uma conta ativa e confirma a designação de patrocinador
+- **THEN** o sistema cria a designação `sponsor` e reconcilia a linha do tempo
+
+#### Scenario: Patrocinador convidado
+
+- **WHEN** a BraCVAM informa um e-mail válido na opção de convite do patrocinador
+- **THEN** o sistema cria um convite `sponsor` e mantém a etapa pendente até o aceite e a designação autoritativa
+
+### Requirement: Consulta mínima do participante
+
+O sistema SHALL permitir abrir um modal para um participante ativo e SHALL mostrar somente os dados autorizados e efetivamente retornados pela API. Nesta entrega, o modal MUST apresentar nome, data de entrada no processo e cargo localizado e MUST omitir foto e outros campos ausentes do contrato.
+
+#### Scenario: Modal de integrante ativo
+
+- **WHEN** a BraCVAM seleciona uma pessoa ativa do grupo gestor ou o patrocinador
+- **THEN** o sistema abre um modal com nome, data de entrada localizada e cargo localizado
+
+#### Scenario: Informação não publicada
+
+- **WHEN** a API não fornece foto ou outro dado de perfil
+- **THEN** o sistema omite esse campo sem criar valor, imagem ou conteúdo substituto que pareça um dado real
+
+#### Scenario: Convite pendente selecionado
+
+- **WHEN** a BraCVAM consulta um convite ainda pendente
+- **THEN** o sistema mostra somente os dados e estados do convite e não o apresenta como perfil de participante ativo
+
+### Requirement: Autorização da composição
+
+O sistema MUST restringir a composição inicial à capacidade BraCVAM autorizada pelo backend e MUST repetir a autorização no servidor em cada leitura e mutação. Perfis globais ou papéis locais com nomes semelhantes MUST NOT substituir a decisão autoritativa da API.
+
+#### Scenario: Sessão BraCVAM autorizada
+
+- **WHEN** a sessão possui a capacidade publicada para compor o processo
+- **THEN** o sistema permite consultar a linha do tempo e executar somente as ações liberadas pela API
+
+#### Scenario: Sessão sem autorização
+
+- **WHEN** uma pessoa sem a capacidade exigida acessa diretamente a página ou uma Route Handler
+- **THEN** o sistema recusa a operação sem revelar usuários, participantes ou convites protegidos
+
+### Requirement: Reconciliação e integração interna
+
+Após cada designação, convite ou conclusão de etapa, o sistema MUST reconciliar tarefas, participantes e convites com a API e MUST NOT simular avanço local. O navegador MUST usar somente Route Handlers internos, e todo conteúdo controlado pela aplicação MUST existir em português do Brasil e inglês.
+
+#### Scenario: API avança a composição
+
+- **WHEN** uma operação satisfaz as condições de uma etapa e a API atualiza tarefas ou processo
+- **THEN** o sistema reflete o novo estado retornado sem enviar alteração manual de fase
+
+#### Scenario: Atualização falha após operação aceita
+
+- **WHEN** a mutação é aceita, mas a reconciliação posterior falha
+- **THEN** o sistema informa que o estado pode estar desatualizado e oferece nova consulta sem repetir a mutação
+
+#### Scenario: Operação protegida e localizada
+
+- **WHEN** a interface consulta ou altera a composição
+- **THEN** usa uma rota interna, não expõe URL externa, cookie ou token de convite e localiza rótulos e datas sem traduzir nomes próprios

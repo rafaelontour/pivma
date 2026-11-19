@@ -2,20 +2,19 @@
 
 ### Requirement: Composição na consulta do processo
 
-O sistema SHALL apresentar na consulta somente leitura do processo a composição atual de patrocinador, grupo gestor e laboratórios participantes, além das tarefas pendentes da fase de atribuição. O Kanban MUST continuar sem controles de alteração manual de estado, e ações de composição MUST aparecer somente quando a própria sessão tiver papel e tarefa aplicáveis.
+O sistema SHALL apresentar na consulta somente leitura do processo o grupo gestor, o patrocinador, os convites pendentes e o estado das etapas da composição. O Kanban MUST continuar sem movimentação manual de estados e MUST oferecer acesso à composição somente para uma sessão BraCVAM autorizada.
 
-#### Scenario: Equipe BraCVAM consulta a composição
+#### Scenario: BraCVAM consulta a composição
 
-- **WHEN** uma pessoa autorizada abre os detalhes de um processo após a triagem
-- **THEN** o sistema apresenta participantes ativos, convites pendentes identificáveis e tarefas de atribuição sem permitir mover o processo manualmente
+- **WHEN** uma pessoa autorizada abre os detalhes de um processo aprovado
+- **THEN** o sistema apresenta integrantes ativos, patrocinador, convites pendentes e a etapa corrente da composição
 
-#### Scenario: Ator do processo possui ação aplicável
+#### Scenario: BraCVAM retoma uma ação
 
-- **WHEN** a sessão possui papel local e tarefa acionável para uma designação exibida nos detalhes
-- **THEN** o sistema oferece acesso à composição protegida sem transformar o cartão ou a coluna em controle de estado
+- **WHEN** a composição possui uma etapa incompleta e a sessão pode atuar
+- **THEN** os detalhes oferecem acesso à linha do tempo protegida sem transformar o cartão em controle de workflow
 
 #### Scenario: Composição altera o fluxo
 
-- **WHEN** a API atualiza tarefas ou fase após uma designação
-- **THEN** a próxima revalidação reposiciona ou atualiza o processo conforme o estado retornado pela API
-
+- **WHEN** a API atualiza tarefas ou processo após uma designação ou aceite
+- **THEN** a próxima revalidação atualiza os detalhes e o posicionamento conforme o estado retornado pela API

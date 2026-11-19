@@ -27,6 +27,7 @@ export async function getProcessComposition(
   accessToken: string,
   processId: string,
   scopes: CurrentSessionUser["access"]["scopes"],
+  canReview = false,
 ): Promise<ServiceResult<ProcessCompositionSnapshot>> {
   const processResult = await getProcess(accessToken, processId);
   if (!processResult.ok) return processResult;
@@ -52,10 +53,11 @@ export async function getProcessComposition(
       tasks: taskItems,
       laboratories: laboratories.ok ? laboratories.data.filter((laboratory) => laboratory.active) : [],
       capabilities: {
-        canAssignSponsor: canActOnAssignment(taskItems, "assign_sponsor", roles),
-        canAssignGroupManager: canActOnAssignment(taskItems, "assign_group_manager", roles),
+        canAssignSponsor: canActOnAssignment(taskItems, "assign_sponsor", roles, canReview),
+        canAssignGroupManager: canActOnAssignment(taskItems, "assign_group_manager", roles, canReview),
         canAssignLaboratories: isGroupManager,
-        canManageParticipants: isGroupManager || roles.includes("proponent"),
+        canManageParticipants: isGroupManager || roles.includes("proponent") || canReview,
+        canCompleteRoles: canReview,
       },
     },
   };
@@ -64,16 +66,23 @@ export async function getProcessComposition(
 export async function listCompositionIndex(
   accessToken: string,
   scopes: CurrentSessionUser["access"]["scopes"],
+  permissions: string[] = [],
 ): Promise<ServiceResult<ProcessCompositionIndexItem[]>> {
   const relevantScopes = scopes.filter((scope) => scope.roles.length > 0);
-  const processIds = new Set(relevantScopes.map((scope) => scope.process_id));
-  if (processIds.size === 0) return { ok: true, data: [] };
-
-  const [tasks, processResults] = await Promise.all([
-    listAllTasks(accessToken),
-    Promise.all(Array.from(processIds, (processId) => getProcess(accessToken, processId))),
-  ]);
+  const tasks = await listAllTasks(accessToken);
   if (!tasks.ok) return tasks;
+  const canManageParticipants = permissions.includes("process.participants.manage");
+  const compositionTasks = tasks.data.filter((task) =>
+    task.activity_key === "assign_group_manager" || task.activity_key === "assign_sponsor",
+  );
+  const processIds = new Set(canManageParticipants ? [] : relevantScopes.map((scope) => scope.process_id));
+  if (canManageParticipants) {
+    for (const task of compositionTasks) {
+      if (task.assigned_role === "bracvam") processIds.add(task.process.id);
+    }
+  }
+  if (processIds.size === 0) return { ok: true, data: [] };
+  const processResults = await Promise.all(Array.from(processIds, (processId) => getProcess(accessToken, processId)));
   const failedProcess = processResults.find((result) => !result.ok);
   if (failedProcess && !failedProcess.ok) return failedProcess;
   const processes = processResults.flatMap((result) => result.ok ? [result.data] : []);
@@ -90,7 +99,7 @@ export async function listCompositionIndex(
     data: processes
       .map((process) => ({
         process,
-        roles: rolesForProcess(relevantScopes, process.id),
+        roles: canManageParticipants ? ["bracvam", ...rolesForProcess(relevantScopes, process.id)] : rolesForProcess(relevantScopes, process.id),
         actionableTasks: (byProcessTasks.get(process.id) ?? []).filter(
           (task) => task.status === "READY" && task.can_act,
         ),
@@ -211,9 +220,11 @@ export function canActOnAssignment(
   tasks: ProcessTask[],
   activityKey: "assign_sponsor" | "assign_group_manager",
   roles: string[],
+  canReview = false,
 ) {
-  return roles.includes("proponent") && tasks.some((task) =>
-    task.activity_key === activityKey && task.status === "READY" && task.can_act && task.assigned_role === "proponent",
+  return tasks.some((task) =>
+    task.activity_key === activityKey && task.status === "READY" && task.can_act &&
+    (roles.includes(task.assigned_role ?? "") || (canReview && task.assigned_role === "bracvam")),
   );
 }
 
@@ -373,6 +384,10 @@ function normalizeInvite(value: unknown): ProcessParticipantInvite | null {
     created_at: value.created_at,
     accepted_at: value.accepted_at,
     revoked_at: value.revoked_at,
+    delivery: isRecord(value.delivery) &&
+      (value.delivery.status === "pending" || value.delivery.status === "sent" || value.delivery.status === "failed" || value.delivery.status === "cancelled")
+      ? { status: value.delivery.status, sent_at: typeof value.delivery.sent_at === "string" ? value.delivery.sent_at : null }
+      : null,
   };
 }
 

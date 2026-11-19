@@ -14,7 +14,11 @@ export async function GET() {
   const session = await getCurrentUser(accessToken);
   if (!session.ok) return internalApiErrorResponse(session.status, { cookieStore, fallbackMessage: "Não foi possível carregar os processos disponíveis para composição." });
 
-  const result = await listCompositionIndex(accessToken, session.data.access.scopes);
+  const result = await listCompositionIndex(
+    accessToken,
+    session.data.access.scopes,
+    session.data.access.global_permissions,
+  );
   if (!result.ok) return internalApiErrorResponse(result.status, { cookieStore, fallbackMessage: "Não foi possível carregar os processos disponíveis para composição." });
   return NextResponse.json(result.data);
 }

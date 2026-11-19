@@ -7,7 +7,6 @@ import { ArrowRight, LoaderCircle, MailPlus, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import { getLocalizedApiError } from "@/i18n/errors";
-import { PROCESS_PARTICIPANT_ROLES } from "@/types/ParticipacaoProcesso";
 import type {
   ProcessCompositionIndexItem,
   ProcessCompositionIndexState,
@@ -21,9 +20,11 @@ import type {
   ProcessCompositionState,
   ProcessCompositionWorkspaceProps,
   ProcessParticipantHistoryItem,
+  ProcessParticipant,
   ProcessParticipantUiAction,
   ProcessParticipantRole,
   ProcessParticipantAssignmentInput,
+  ProcessCompositionUserOption,
 } from "@/types/ParticipacaoProcesso";
 import type { ApiRecord } from "@/types/Servico";
 
@@ -33,7 +34,19 @@ export function CompositionWorkspace({ processId }: ProcessCompositionWorkspaceP
   const [compositionState, setCompositionState] = useState<ProcessCompositionState>({ kind: "loading" });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [history, setHistory] = useState<ProcessParticipantHistoryItem[] | null>(null);
+  const [selectedParticipant, setSelectedParticipant] = useState<ProcessParticipant | null>(null);
   const isSubmittingRef = useRef(false);
+  const participantTriggerRef = useRef<HTMLElement | null>(null);
+
+  function openParticipant(participant: ProcessParticipant) {
+    participantTriggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setSelectedParticipant(participant);
+  }
+
+  function closeParticipant() {
+    setSelectedParticipant(null);
+    window.setTimeout(() => participantTriggerRef.current?.focus(), 0);
+  }
 
   const refresh = useCallback(async (preserve = false) => {
     if (!processId) {
@@ -80,6 +93,15 @@ export function CompositionWorkspace({ processId }: ProcessCompositionWorkspaceP
     const timeout = window.setTimeout(() => void refresh(), 0);
     return () => window.clearTimeout(timeout);
   }, [refresh]);
+
+  useEffect(() => {
+    if (!selectedParticipant) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeParticipant();
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [selectedParticipant]);
 
   async function invite(input: ProcessCompositionInviteInput) {
     if (!processId || isSubmittingRef.current) return false;
@@ -208,13 +230,23 @@ export function CompositionWorkspace({ processId }: ProcessCompositionWorkspaceP
 
       {compositionState.isStale && <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900" role="status">{t("participantComposition.errors.stale")}</p>}
 
-      <div className="grid gap-5 xl:grid-cols-2">
-        {PROCESS_PARTICIPANT_ROLES.map((role) => {
+      <ol aria-label={t("participantComposition.timeline.title")} className="grid gap-3 md:grid-cols-2">
+        {(["group_manager", "sponsor"] as const).map((role, index) => {
+          const taskKey = role === "group_manager" ? "assign_group_manager" : "assign_sponsor";
+          const task = snapshot.tasks.find((item) => item.activity_key === taskKey);
+          const done = task?.status === "COMPLETED" || snapshot.participants.some((participant) => participant.role_key === role && participant.active);
+          const current = roleCanAct(snapshot, role);
+          return <li className={`rounded-xl border p-4 ${current ? "border-teal-500 bg-teal-50" : done ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-white"}`} key={`step-${role}`}><p className="text-xs font-bold uppercase tracking-wide text-slate-500">{t("participantComposition.timeline.step", { number: index + 1 })}</p><p className="mt-1 font-bold text-slate-900">{t(`participantComposition.roles.${role}.title`)}</p><p className="mt-1 text-sm text-slate-600">{t(done ? "participantComposition.timeline.done" : current ? "participantComposition.timeline.current" : "participantComposition.timeline.waiting")}</p></li>;
+        })}
+      </ol>
+      <div className="grid gap-5">
+        {(["group_manager", "sponsor"] as const).map((role) => {
           const roleCanAssign = role === "sponsor" ? canAssignSponsor
             : role === "group_manager" ? canAssignGroupManager
               : Boolean(snapshot.capabilities.canManageParticipants || snapshot.capabilities.canAssignLaboratories);
           return <CompositionRoleCard
             key={role}
+            processId={processId}
             description={t(`participantComposition.roles.${role}.description`)}
             invites={snapshot.invites}
             laboratories={snapshot.laboratories}
@@ -228,9 +260,12 @@ export function CompositionWorkspace({ processId }: ProcessCompositionWorkspaceP
             onParticipantAction={participantAction}
             onCompleteRole={completeRole}
             canManage={Boolean(snapshot.capabilities.canManageParticipants || snapshot.capabilities.canAssignLaboratories)}
+            onViewParticipant={openParticipant}
           />;
         })}
       </div>
+
+      {selectedParticipant && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/50 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) closeParticipant(); }}><section aria-labelledby="participant-profile-title" aria-modal="true" className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl" role="dialog"><h3 className="text-lg font-bold text-slate-900" id="participant-profile-title">{selectedParticipant.user.full_name || selectedParticipant.user.username}</h3><dl className="mt-4 grid gap-3 text-sm"><div><dt className="font-semibold text-slate-500">{t("participantComposition.profile.role")}</dt><dd className="mt-1 text-slate-900">{t(`participantComposition.roleLabels.${selectedParticipant.role_key}`, { defaultValue: selectedParticipant.role_key })}</dd></div><div><dt className="font-semibold text-slate-500">{t("participantComposition.profile.assignedAt")}</dt><dd className="mt-1 text-slate-900">{new Intl.DateTimeFormat(i18n.resolvedLanguage, { dateStyle: "medium", timeStyle: "short" }).format(new Date(selectedParticipant.assigned_at))}</dd></div></dl><button autoFocus className="mt-6 min-h-10 rounded-lg bg-teal-700 px-4 text-sm font-bold text-white" onClick={closeParticipant} type="button">{t("common.close")}</button></section></div>}
 
       <section className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex flex-wrap items-center justify-between gap-3"><h3 className="font-bold text-slate-900">{t("participantComposition.history.title")}</h3><button type="button" onClick={() => void loadHistory()} className="min-h-9 rounded-lg border border-slate-300 px-3 text-sm font-semibold">{t("participantComposition.history.load")}</button></div>{history?.map((item, index) => { const assignment = isRecord(item.assignment) ? item.assignment : null; const user = assignment && isRecord(assignment.user) ? assignment.user : null; const roleKey = typeof assignment?.role_key === "string" ? assignment.role_key : ""; const assignedAt = typeof assignment?.assigned_at === "string" ? new Intl.DateTimeFormat(i18n.resolvedLanguage, { dateStyle: "medium", timeStyle: "short" }).format(new Date(assignment.assigned_at)) : ""; return <article className="rounded-lg bg-slate-50 p-3 text-sm" key={`${String(assignment?.id ?? index)}-${index}`}><p className="font-semibold">{String(user?.full_name ?? user?.username ?? t("participantComposition.history.unknownPerson"))} · {t(`participantComposition.roleLabels.${roleKey}`, { defaultValue: roleKey })}</p><p className="mt-1 text-xs text-slate-600">{t("participantComposition.history.assignedAt", { date: assignedAt })}{assignment?.active === false ? ` · ${t("participantComposition.history.revoked")}` : ""}{assignment?.effective === false ? ` · ${t("participantComposition.status.notEffective")}` : ""}</p>{Array.isArray(item.declarations) && item.declarations.filter(isRecord).map((declaration, declarationIndex) => <p className="mt-1 text-xs text-slate-600" key={`${String(declaration.id ?? declarationIndex)}-${declarationIndex}`}>{t("participantComposition.history.conflictDeclared", { date: typeof declaration.declared_at === "string" ? new Intl.DateTimeFormat(i18n.resolvedLanguage, { dateStyle: "medium", timeStyle: "short" }).format(new Date(declaration.declared_at)) : "" })}: {String(declaration.justification ?? "")}</p>)}</article>; })}</section>
 
@@ -243,37 +278,41 @@ export function CompositionWorkspace({ processId }: ProcessCompositionWorkspaceP
   );
 }
 
-function CompositionRoleCard({ title, description, role, participants, invites, laboratories, showForm, busy, onSubmit, onAssign, canManage, onParticipantAction, onCompleteRole }: ProcessCompositionRoleCardProps) {
+function CompositionRoleCard({ processId, title, description, role, participants, invites, laboratories, showForm, busy, onSubmit, onAssign, canManage, onParticipantAction, onCompleteRole, onViewParticipant }: ProcessCompositionRoleCardProps) {
   const { t } = useTranslation();
   const hasPendingInvite = invites.some((invite) => invite.role_key === role && invite.status === "pending" && !invite.expired);
+  const hasActiveParticipant = participants.some((participant) => participant.role_key === role && participant.active);
   return (
     <section aria-labelledby={`composition-${role}-title`} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <h3 className="text-lg font-bold text-slate-900" id={`composition-${role}-title`}>{title}</h3>
       <p className="mt-1 text-sm leading-6 text-slate-600">{description}</p>
-      <ProcessCompositionParticipantList invites={invites} participants={participants} role={role} canManage={canManage} busy={busy} onAction={onParticipantAction} />
-      {canManage && <button type="button" disabled={busy} onClick={() => void onCompleteRole(role)} className="mt-3 min-h-9 rounded-lg border border-teal-700 px-3 text-xs font-bold text-teal-800 disabled:opacity-50">{t("participantComposition.actions.completeRole")}</button>}
-      {showForm ? <div className="mt-4 border-t border-slate-200 pt-4"><ProcessCompositionInviteForm busy={busy} invites={invites} laboratories={laboratories} onSubmit={onSubmit} onAssign={onAssign} role={role} /></div> : hasPendingInvite ? <p className="mt-4 text-xs font-medium text-amber-900" role="status">{t("participantComposition.roles.waitingAcceptance")}</p> : null}
+      <ProcessCompositionParticipantList invites={invites} participants={participants} role={role} canManage={canManage} busy={busy} onAction={onParticipantAction} onViewParticipant={onViewParticipant} />
+      {canManage && showForm && <button type="button" disabled={busy || !hasActiveParticipant} onClick={() => void onCompleteRole(role)} className="mt-3 min-h-9 rounded-lg border border-teal-700 px-3 text-xs font-bold text-teal-800 disabled:opacity-50">{t("participantComposition.actions.completeRole")}</button>}
+      {showForm ? <div className="mt-4 border-t border-slate-200 pt-4"><ProcessCompositionInviteForm processId={processId} busy={busy} invites={invites} participants={participants} laboratories={laboratories} onSubmit={onSubmit} onAssign={onAssign} role={role} /></div> : hasPendingInvite ? <p className="mt-4 text-xs font-medium text-amber-900" role="status">{t("participantComposition.roles.waitingAcceptance")}</p> : null}
     </section>
   );
 }
 
-function ProcessCompositionParticipantList({ participants, invites, role, canManage, busy, onAction }: ProcessCompositionParticipantListProps) {
+function ProcessCompositionParticipantList({ participants, invites, role, canManage, busy, onAction, onViewParticipant }: ProcessCompositionParticipantListProps) {
   const { t } = useTranslation();
   const assigned = participants.filter((participant) => participant.role_key === role && participant.active);
   const roleInvites = invites.filter((invite) => invite.role_key === role);
   if (assigned.length === 0 && roleInvites.length === 0) return <p className="mt-4 rounded-lg bg-slate-50 p-3 text-sm text-slate-600">{t("participantComposition.roles.unassigned")}</p>;
   return (
     <ul className="mt-4 grid gap-2">
-      {assigned.map((participant) => <li className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3" key={participant.id}><span className="text-sm font-semibold text-slate-900">{participant.user.full_name || participant.user.username}{participant.laboratory ? ` · ${participant.laboratory.name}` : ""}<span className="ml-2 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-800">{participant.effective ? t("participantComposition.status.effective") : t("participantComposition.status.notEffective")}</span>{participant.has_conflict === true && <span className="ml-2 rounded-full bg-rose-100 px-2.5 py-1 text-xs font-bold text-rose-800">{t("participantComposition.status.conflict")}</span>}</span>{canManage && <div className="flex gap-2"><button type="button" disabled={busy} onClick={() => void onAction("conflict", participant.id)} className="text-xs font-semibold underline">{t("participantComposition.actions.declareConflict")}</button><button type="button" disabled={busy} onClick={() => void onAction("revoke-assignment", participant.id)} className="text-xs font-semibold text-rose-800 underline">{t("participantComposition.actions.revoke")}</button></div>}</li>)}
-      {roleInvites.map((invite) => <li className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3" key={invite.id}><span className="text-sm font-semibold text-slate-900">{invite.email}{invite.laboratory ? ` · ${invite.laboratory.name}` : ""}</span><span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-900">{t(invite.status === "accepted" ? "participantComposition.status.acceptedInvite" : invite.status === "revoked" ? "participantComposition.status.revokedInvite" : invite.expired ? "participantComposition.status.expiredInvite" : "participantComposition.status.pending")}</span>{canManage && invite.status === "pending" && !invite.expired && <div className="flex gap-2"><button type="button" disabled={busy} onClick={() => void onAction("resend-invite", invite.id)} className="text-xs font-semibold underline">{t("participantComposition.actions.resend")}</button><button type="button" disabled={busy} onClick={() => void onAction("revoke-invite", invite.id)} className="text-xs font-semibold text-rose-800 underline">{t("participantComposition.actions.revoke")}</button></div>}</li>)}
+      {assigned.map((participant) => <li className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3" key={participant.id}><span className="flex flex-wrap items-center gap-2"><button type="button" onClick={() => onViewParticipant(participant)} className="text-sm font-semibold text-slate-900 underline underline-offset-2">{participant.user.full_name || participant.user.username}</button><span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-800">{participant.effective ? t("participantComposition.status.effective") : t("participantComposition.status.notEffective")}</span>{participant.has_conflict === true && <span className="rounded-full bg-rose-100 px-2.5 py-1 text-xs font-bold text-rose-800">{t("participantComposition.status.conflict")}</span>}</span>{canManage && <div className="flex gap-2"><button type="button" disabled={busy} onClick={() => void onAction("conflict", participant.id)} className="text-xs font-semibold underline">{t("participantComposition.actions.declareConflict")}</button><button type="button" disabled={busy} onClick={() => void onAction("revoke-assignment", participant.id)} className="text-xs font-semibold text-rose-800 underline">{t("participantComposition.actions.revoke")}</button></div>}</li>)}
+      {roleInvites.map((invite) => <li className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3" key={invite.id}><span className="text-sm font-semibold text-slate-900">{invite.email}{invite.laboratory ? ` · ${invite.laboratory.name}` : ""}</span><span className="grid justify-items-end gap-1"><span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-900">{t(invite.status === "accepted" ? "participantComposition.status.acceptedInvite" : invite.status === "revoked" ? "participantComposition.status.revokedInvite" : invite.expired ? "participantComposition.status.expiredInvite" : "participantComposition.status.pending")}</span>{invite.delivery && <span className="text-xs text-slate-600">{t(`participantComposition.delivery.${invite.delivery.status}`)}</span>}</span>{canManage && invite.status === "pending" && !invite.expired && <div className="flex gap-2"><button type="button" disabled={busy} onClick={() => void onAction("resend-invite", invite.id)} className="text-xs font-semibold underline">{t("participantComposition.actions.resend")}</button><button type="button" disabled={busy} onClick={() => void onAction("revoke-invite", invite.id)} className="text-xs font-semibold text-rose-800 underline">{t("participantComposition.actions.revoke")}</button></div>}</li>)}
     </ul>
   );
 }
 
-function ProcessCompositionInviteForm({ role, laboratories, invites, busy, onSubmit, onAssign }: ProcessCompositionInviteFormProps) {
+function ProcessCompositionInviteForm({ processId, role, laboratories, invites, participants, busy, onSubmit, onAssign }: ProcessCompositionInviteFormProps) {
   const { t } = useTranslation();
   const [email, setEmail] = useState("");
   const [userId, setUserId] = useState("");
+  const [userSearch, setUserSearch] = useState("");
+  const [users, setUsers] = useState<ProcessCompositionUserOption[]>([]);
+  const [isSearchingUsers, setIsSearchingUsers] = useState(false);
   const [assignmentMode, setAssignmentMode] = useState<"invite" | "assign">("invite");
   const [laboratoryId, setLaboratoryId] = useState("");
   const normalizedEmail = email.trim();
@@ -283,6 +322,20 @@ function ProcessCompositionInviteForm({ role, laboratories, invites, busy, onSub
   const duplicateInvite = invites.some((invite) => (invite.status === "accepted" || (invite.status === "pending" && !invite.expired)) && invite.role_key === role && invite.email.toLocaleLowerCase("en-US") === normalizedEmail.toLocaleLowerCase("en-US") && (!needsLaboratory || invite.laboratory?.id === laboratoryId));
   const valid = emailValid && laboratoryValid && !duplicateInvite;
   const userIdValid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId.trim());
+
+  useEffect(() => {
+    if (assignmentMode !== "assign" || userSearch.trim().length < 2) return;
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => {
+      setIsSearchingUsers(true);
+      void fetch(`/api/processes/${processId}/composition/users?search=${encodeURIComponent(userSearch.trim())}`, { cache: "no-store", signal: controller.signal })
+        .then(async (response) => response.ok ? await response.json() as ProcessCompositionUserOption[] : null)
+        .then((payload) => setUsers(Array.isArray(payload) ? payload.filter((user) => !participants.some((participant) => participant.active && participant.role_key === role && participant.user.id === user.id)) : []))
+        .catch(() => { if (!controller.signal.aborted) setUsers([]); })
+        .finally(() => { if (!controller.signal.aborted) setIsSearchingUsers(false); });
+    }, 250);
+    return () => { window.clearTimeout(timeout); controller.abort(); };
+  }, [assignmentMode, participants, processId, role, userSearch]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -308,7 +361,7 @@ function ProcessCompositionInviteForm({ role, laboratories, invites, busy, onSub
   return (
     <form className="grid gap-3" onSubmit={(event) => void submit(event)}>
       <label className="grid gap-1.5 text-sm font-semibold text-slate-800" htmlFor={`composition-${role}-mode`}>{t("participantComposition.fields.assignmentMode")}<select id={`composition-${role}-mode`} value={assignmentMode} onChange={(event) => setAssignmentMode(event.target.value as "invite" | "assign")} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3"><option value="invite">{t("participantComposition.actions.inviteByEmail")}</option><option value="assign">{t("participantComposition.actions.assignExisting")}</option></select></label>
-      {assignmentMode === "assign" ? <label className="grid gap-1.5 text-sm font-semibold text-slate-800" htmlFor={`composition-${role}-user`}>{t("participantComposition.fields.userId")}<input id={`composition-${role}-user`} value={userId} onChange={(event) => setUserId(event.target.value)} required className="min-h-11 rounded-lg border border-slate-300 px-3 font-mono font-normal" /></label> : <label className="grid gap-1.5 text-sm font-semibold text-slate-800" htmlFor={`composition-${role}-email`}>{t("participantComposition.fields.email")}
+      {assignmentMode === "assign" ? <div className="grid gap-2"><label className="grid gap-1.5 text-sm font-semibold text-slate-800" htmlFor={`composition-${role}-user-search`}>{t("participantComposition.fields.searchUser")}<input id={`composition-${role}-user-search`} value={userSearch} onChange={(event) => { setUserSearch(event.target.value); setUserId(""); if (event.target.value.trim().length < 2) setUsers([]); }} disabled={busy} className="min-h-11 rounded-lg border border-slate-300 px-3 font-normal" autoComplete="off" /></label>{isSearchingUsers && <p className="text-xs text-slate-500" role="status">{t("participantComposition.fields.searchingUsers")}</p>}<label className="grid gap-1.5 text-sm font-semibold text-slate-800" htmlFor={`composition-${role}-user`}>{t("participantComposition.fields.selectUser")}<select id={`composition-${role}-user`} value={userId} onChange={(event) => setUserId(event.target.value)} required disabled={busy || users.length === 0} className="min-h-11 rounded-lg border border-slate-300 px-3 font-normal"><option value="">{t("participantComposition.fields.chooseUser")}</option>{users.map((user) => <option key={user.id} value={user.id}>{user.full_name || user.username} · {user.email}</option>)}</select></label></div> : <label className="grid gap-1.5 text-sm font-semibold text-slate-800" htmlFor={`composition-${role}-email`}>{t("participantComposition.fields.email")}
         <input autoComplete="email" className="min-h-11 rounded-lg border border-slate-300 px-3 font-normal outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-600/20 disabled:bg-slate-100" disabled={busy} id={`composition-${role}-email`} maxLength={254} onChange={(event) => setEmail(event.target.value)} placeholder={t("participantComposition.fields.emailPlaceholder")} required type="email" value={email} />
       </label>}
       {needsLaboratory && (
@@ -370,4 +423,8 @@ function isProcess(value: unknown) {
 
 function isRecord(value: unknown): value is ApiRecord {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function roleCanAct(snapshot: ProcessCompositionSnapshot, role: "group_manager" | "sponsor") {
+  return role === "group_manager" ? snapshot.capabilities.canAssignGroupManager : snapshot.capabilities.canAssignSponsor;
 }

@@ -1,14 +1,17 @@
 ## Why
 
-Depois da aprovação da triagem, o processo avança para tarefas de definição do patrocinador e do grupo gestor, mas o frontend ainda não oferece uma jornada para concluí-las. Sem essas designações, a pessoa responsável pelo grupo gestor também não consegue cadastrar os laboratórios participantes e o processo fica interrompido no início da fase de planejamento.
+Depois que uma submissão é aprovada pela BraCVAM, a equipe precisa iniciar a composição das pessoas que atuarão no processo. Sem uma jornada ordenada para formar o grupo gestor e definir o patrocinador, o processo não consegue avançar de maneira rastreável para as etapas seguintes.
 
 ## What Changes
 
-- Adicionar ao acompanhamento da submissão aprovada uma etapa de composição inicial na qual o proponente define uma pessoa como patrocinador e outra como responsável pelo grupo gestor.
-- Usar convites por e-mail para essas designações, pois o proponente não possui `users.read`, mantendo a API responsável por vincular uma conta existente ou concluir o convite de uma nova pessoa.
-- Exibir o estado de cada designação, permitir retomar tarefas incompletas e refletir automaticamente o avanço produzido pela API.
-- Disponibilizar à pessoa com papel local `group_manager` um espaço do processo para selecionar laboratórios ativos e convidar ou vincular uma pessoa responsável a cada laboratório com o papel `participating_laboratory`.
-- Listar as designações ativas do processo e impedir duplicidade, associação sem laboratório ou uso de laboratório inativo.
+- Levar a pessoa autorizada da BraCVAM, após aprovar a submissão, para uma página de composição do processo apresentada como uma linha do tempo retomável.
+- Iniciar a linha do tempo com duas etapas ordenadas: primeiro **Definir grupo gestor** e depois **Definir patrocinador**, mantendo a estrutura preparada para receber futuramente etapas como definição de estatístico sem incluí-las nesta entrega.
+- Representar o grupo gestor como uma coleção de usuários da própria plataforma vinculados ao processo com o papel local `group_manager`, sem criar uma conta, entidade ou plataforma separada para o grupo.
+- Permitir adicionar ao grupo gestor pessoas que já possuem conta, por pesquisa e seleção no diretório autorizado de usuários.
+- Permitir convidar por e-mail uma pessoa ainda não localizada na plataforma, solicitando ao backend o envio do convite e exibindo a designação como pendente até que o convite seja aceito e exista uma conta vinculada.
+- Permitir definir o patrocinador por seleção de uma conta existente ou por convite, usando o papel local `sponsor`.
+- Exibir separadamente participantes ativos, convites pendentes e a situação de entrega do convite, sem inferir localmente se um e-mail já possui conta.
+- Permitir abrir um modal de participante com somente as informações efetivamente publicadas pela API, inicialmente nome, data de entrada no processo e cargo. Foto ou qualquer outro dado ausente não será simulado.
 - Manter URL externa, credenciais e cookies exclusivamente no servidor por meio de serviços e Route Handlers internos.
 - Criar simultaneamente toda a interface, validação e feedback em português do Brasil e inglês.
 
@@ -16,18 +19,20 @@ Depois da aprovação da triagem, o processo avança para tarefas de definição
 
 ### New Capabilities
 
-- `process-participant-assignments`: composição pós-aprovação do patrocinador, grupo gestor e laboratórios participantes, com autorização por papel local, convites, retomada e acompanhamento do avanço do processo.
+- `process-participant-assignments`: composição pós-aprovação, em linha do tempo, do grupo gestor e do patrocinador, incluindo seleção de contas existentes, convites, estados pendentes, consulta dos participantes e retomada do fluxo.
 
 ### Modified Capabilities
 
-- `dynamic-process-forms`: o acompanhamento de uma submissão aprovada passa a apresentar e abrir as tarefas pós-triagem que competem ao proponente.
-- `authenticated-navigation`: pessoas com tarefas acionáveis como grupo gestor passam a encontrar o espaço de composição do processo pela área autenticada.
-- `process-kanban`: os detalhes do processo passam a apresentar a composição e as tarefas da fase de atribuição sem permitir movimentação manual do quadro.
+- `dynamic-process-forms`: a aprovação da submissão pela BraCVAM passa a abrir a composição do processo e o acompanhamento reflete o andamento dessas etapas.
+- `authenticated-navigation`: a equipe BraCVAM autorizada pode retomar composições pendentes sem criar uma área separada para integrantes do grupo gestor.
+- `process-kanban`: os detalhes do processo passam a apresentar grupo gestor, patrocinador, convites e etapas pendentes sem permitir movimentação manual do quadro.
 
 ## Impact
 
-- Novos contratos em `types/` para participantes, convites, laboratórios, tarefas pós-aprovação e estados da interface.
-- Novos serviços server-only e Route Handlers internos para `/processes/{process_id}/participants`, convites de participantes e `/institutional/laboratories`.
-- Alterações em `/submissoes`, no shell autenticado e nos detalhes do Kanban; possível criação de uma página autenticada específica para composição do processo.
-- Uso dos papéis publicados `sponsor`, `group_manager` e `participating_laboratory`; a designação de laboratório sempre inclui uma pessoa e um `laboratory_id`, conforme o contrato atual.
-- Nenhuma nova dependência de frontend e nenhuma alteração direta no ciclo de vida: a API permanece autoritativa para concluir tarefas e avançar fases.
+- Revisão da página `/processos/[processId]/composicao`, do desfecho de aprovação da triagem, do shell autenticado e dos detalhes do Kanban.
+- Contratos em `types/`, serviços server-only e Route Handlers internos para tarefas, usuários, participantes, convites e perfis mínimos de participantes.
+- Uso de `GET /users`, `GET/POST /processes/{process_id}/participants`, `GET/POST /processes/{process_id}/participants/invites` e operações de conclusão de papel publicadas pela API.
+- Dependência de alinhamento do backend: em 18/11/2026, as tarefas `assign_group_manager` e `assign_sponsor` são retornadas para `proponent`, embora a jornada definida nesta change seja conduzida pela BraCVAM.
+- Dependência de backend para cadastro por convite: o contrato atual permite pré-visualizar e aceitar um convite apenas com sessão autenticada, mas não permite criar a conta e aceitar o convite de forma transacional.
+- O contrato atual não publica foto de perfil; a interface não apresentará avatar fotográfico enquanto esse campo não existir.
+- Laboratórios participantes, estatístico e demais cargos posteriores ficam fora desta entrega.

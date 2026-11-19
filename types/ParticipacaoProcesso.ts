@@ -47,6 +47,7 @@ export type ProcessParticipantInvite = {
   created_at: string;
   accepted_at: string | null;
   revoked_at: string | null;
+  delivery?: { status: "pending" | "sent" | "failed" | "cancelled"; sent_at: string | null } | null;
 };
 
 export type ProcessLaboratory = {
@@ -76,6 +77,12 @@ export type ProcessCompositionSnapshot = {
 
 export type ProcessParticipantHistoryItem = Record<string, unknown>;
 export type ProcessParticipantAssignmentInput = { user_id: string; role_key: ProcessParticipantRole; laboratory_id?: string | null };
+export type ProcessCompositionUserOption = {
+  id: string;
+  username: string;
+  full_name: string | null;
+  email: string;
+};
 export type ProcessParticipantConflictInput = { has_conflict: boolean; justification: string };
 export type ProcessParticipantRoleKeyInput = { role_key: ProcessParticipantRole };
 export type ProcessParticipantActionInput = ProcessParticipantAssignmentInput | ProcessParticipantConflictInput | ProcessParticipantRoleKeyInput;
@@ -105,7 +112,9 @@ export type ProcessCompositionInviteInput = {
 export type ProcessCompositionWorkspaceProps = { processId?: string };
 
 export type ProcessCompositionInviteFormProps = {
+  processId: string;
   role: ProcessParticipantRole;
+  participants: ProcessParticipant[];
   laboratories: ProcessLaboratory[];
   invites: ProcessParticipantInvite[];
   busy: boolean;
@@ -114,6 +123,7 @@ export type ProcessCompositionInviteFormProps = {
 };
 
 export type ProcessCompositionRoleCardProps = {
+  processId: string;
   title: string;
   description: string;
   role: ProcessParticipantRole;
@@ -127,6 +137,7 @@ export type ProcessCompositionRoleCardProps = {
   onParticipantAction: (action: ProcessParticipantUiAction, id: string) => Promise<void>;
   onCompleteRole: (role: ProcessParticipantRole) => Promise<void>;
   canManage: boolean;
+  onViewParticipant: (participant: ProcessParticipant) => void;
 };
 
 export type CompositionProcessCardProps = {
@@ -160,6 +171,7 @@ export type ProcessCompositionParticipantListProps = {
   canManage: boolean;
   busy: boolean;
   onAction: (action: ProcessParticipantUiAction, id: string) => Promise<void>;
+  onViewParticipant: (participant: ProcessParticipant) => void;
 };
 export type ProcessParticipantUiAction = "resend-invite" | "revoke-invite" | "revoke-assignment" | "conflict";
 

@@ -1,21 +1,25 @@
 ## ADDED Requirements
 
-### Requirement: Acesso à composição dos próprios processos
+### Requirement: Retomada da composição pela BraCVAM
 
-O sistema SHALL disponibilizar uma entrada autenticada para a composição de processos às pessoas que possuam tarefa acionável ou papel local aplicável em ao menos um processo. O destino MUST filtrar os processos pela sessão e MUST indicar estado ativo na navegação aberta, recolhida e móvel.
+O sistema SHALL permitir que pessoas autorizadas da BraCVAM retomem composições pendentes pela área autenticada. O destino MUST limitar os processos conforme a sessão e MUST NOT criar uma área, conta ou navegação separada para o grupo gestor.
 
-#### Scenario: Grupo gestor encontra seus processos
+#### Scenario: BraCVAM possui composição pendente
 
-- **WHEN** a sessão possui o papel local `group_manager` em um processo
-- **THEN** a navegação oferece acesso à composição e o destino lista somente processos visíveis à sessão
+- **WHEN** a sessão BraCVAM pode atuar em ao menos uma composição incompleta
+- **THEN** a navegação oferece acesso ao destino que lista somente processos autorizados
 
-#### Scenario: Proponente possui tarefa pós-aprovação
+#### Scenario: Composição aberta após aprovação
 
-- **WHEN** a sessão possui uma tarefa acionável de definição do patrocinador ou grupo gestor
-- **THEN** a pessoa consegue abrir a composição pelo acompanhamento da submissão e pela entrada autenticada correspondente
+- **WHEN** a BraCVAM acabou de aprovar uma submissão
+- **THEN** o sistema abre diretamente a composição desse processo sem exigir que a pessoa a encontre novamente no menu
 
-#### Scenario: Sessão sem processo aplicável
+#### Scenario: Integrante do grupo gestor entra na plataforma
 
-- **WHEN** a sessão não possui tarefa acionável nem papel local relacionado à composição
-- **THEN** o sistema não apresenta uma entrada de navegação sem utilidade e recusa o acesso direto a dados protegidos
+- **WHEN** uma pessoa possui o papel local `group_manager` em um processo
+- **THEN** ela continua usando sua conta individual e as interfaces autorizadas da plataforma, sem receber uma plataforma coletiva do grupo
 
+#### Scenario: Sessão sem acesso
+
+- **WHEN** a sessão não possui capacidade BraCVAM para consultar a composição
+- **THEN** o sistema não apresenta a entrada administrativa e recusa acesso direto aos dados protegidos

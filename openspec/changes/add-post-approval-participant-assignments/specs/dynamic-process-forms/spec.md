@@ -1,21 +1,20 @@
 ## ADDED Requirements
 
-### Requirement: Ações pós-aprovação no acompanhamento da submissão
+### Requirement: Transição da aprovação para a composição
 
-O sistema SHALL apresentar ao proponente, no acompanhamento de uma submissão aprovada, as tarefas acionáveis para definir patrocinador e grupo gestor. O acompanhamento MUST abrir a composição do mesmo processo e MUST continuar exibindo o processo após a conclusão dessas tarefas.
+O sistema SHALL abrir para a pessoa autorizada da BraCVAM a composição do mesmo processo depois que a API aceitar a aprovação da submissão. O acompanhamento da submissão MUST refletir o andamento da composição sem oferecer ao proponente controles reservados à BraCVAM.
 
-#### Scenario: Aprovação desbloqueia a composição
+#### Scenario: Aprovação confirmada
 
-- **WHEN** uma submissão aprovada retorna as tarefas `assign_sponsor` ou `assign_group_manager` acionáveis para o proponente
-- **THEN** o cartão da submissão apresenta o próximo passo e uma ação para abrir a composição
+- **WHEN** a BraCVAM confirma a aprovação e a API aceita a decisão
+- **THEN** o sistema navega para a linha do tempo de composição do processo aprovado
 
-#### Scenario: Composição parcialmente concluída
+#### Scenario: Aprovação não confirmada
 
-- **WHEN** apenas uma das duas designações iniciais foi concluída
-- **THEN** o acompanhamento informa qual definição ainda está pendente e permite retomá-la
+- **WHEN** a API rejeita ou não conclui a aprovação
+- **THEN** o sistema mantém a pessoa no contexto da revisão, apresenta o erro seguro e não abre a composição como se estivesse disponível
 
-#### Scenario: Composição inicial concluída
+#### Scenario: Proponente acompanha o processo
 
-- **WHEN** patrocinador e grupo gestor foram definidos e a API avançou o fluxo
-- **THEN** a submissão permanece no acompanhamento com o estado atualizado e sem oferecer novamente tarefas concluídas
-
+- **WHEN** o proponente consulta a submissão depois da aprovação
+- **THEN** o sistema apresenta o estado atualizado devolvido pela API sem disponibilizar pesquisa, convite ou designação de participantes

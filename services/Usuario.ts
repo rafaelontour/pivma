@@ -8,6 +8,7 @@ import type {
   CreateUserInput,
   ExternalUserListResponse,
   UserList,
+  UserListItem,
   UserListOptions,
   UserPublic,
   UserProfileDetails,
@@ -96,6 +97,20 @@ export async function getUserProfileDetails(
     ok: true,
     data: { account: { ...accountResult.data, profiles: access.profiles }, global_profiles: access.profiles, local_roles: [] },
   };
+}
+
+export async function findActiveUserById(
+  accessToken: string,
+  userId: string,
+): Promise<ServiceResult<UserListItem>> {
+  for (let offset = 0; offset <= 10_000; offset += 100) {
+    const page = await listUsers(accessToken, { offset, limit: 100, active: true });
+    if (!page.ok) return page;
+    const user = page.data.items.find((item) => item.id === userId);
+    if (user) return { ok: true, data: user };
+    if (page.data.items.length < page.data.limit) break;
+  }
+  return { ok: false, status: 404 };
 }
 
 async function findUserById(

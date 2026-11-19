@@ -14,7 +14,7 @@ export async function GET(_request: Request, context: ProcessCompositionRouteCon
 
   const authorization = await authorizeProcessComposition(processId, "read");
   if (!authorization.ok) return authorization.response;
-  const result = await getProcessComposition(authorization.accessToken, processId, authorization.session.access.scopes);
+  const result = await getProcessComposition(authorization.accessToken, processId, authorization.session.access.scopes, authorization.session.access.global_permissions.includes("triage.review"));
   if (!result.ok) return compositionError(result.status, authorization.cookieStore, result.code, result.message);
   return NextResponse.json(result.data);
 }
@@ -25,15 +25,15 @@ export async function POST(request: Request, context: ProcessCompositionRouteCon
 
   const input = validateProcessCompositionInvite(await request.json().catch(() => null));
   if (!input.valid) return validationError(input.message);
-  const operation = input.input.role_key === "sponsor" || input.input.role_key === "group_manager" ? "proponent" : "group_manager";
+  const operation = input.input.role_key === "sponsor" || input.input.role_key === "group_manager" ? "triage" : "group_manager";
   const authorization = await authorizeProcessComposition(processId, operation);
   if (!authorization.ok) return authorization.response;
 
-  if (operation === "proponent") {
+  if (operation === "triage") {
     const tasks = await listProcessTasks(authorization.accessToken, processId);
     if (!tasks.ok) return compositionError(tasks.status, authorization.cookieStore, tasks.code, tasks.message);
     const taskKey = input.input.role_key === "sponsor" ? "assign_sponsor" : "assign_group_manager";
-    if (!canActOnAssignment(tasks.data, taskKey, authorization.roles)) {
+    if (!canActOnAssignment(tasks.data, taskKey, authorization.roles, authorization.session.access.global_permissions.includes("triage.review"))) {
       return NextResponse.json({ code: "CONFLICT", message: "Esta definição não está disponível para este processo no momento." }, { status: 409 });
     }
   } else if (input.input.role_key === "participating_laboratory" || input.input.role_key === "lead_laboratory") {

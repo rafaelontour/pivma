@@ -143,7 +143,7 @@ export function AuthenticatedShell({
   );
   const canViewComposition = session.user.scopes?.some((scope) =>
     scope.roles.includes("proponent") || scope.roles.includes("group_manager"),
-  ) ?? false;
+  ) || session.user.permissions.includes("process.participants.manage");
   const canViewAiEvaluations = [
     "ai_evaluations.read",
     "ai_evaluations.manage",
