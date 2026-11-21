@@ -44,17 +44,41 @@ O sistema SHALL representar o grupo gestor como uma coleção de uma ou mais con
 
 ### Requirement: Seleção de usuários existentes
 
-O sistema SHALL permitir que a BraCVAM pesquise contas ativas da plataforma e selecione uma identidade persistida para o grupo gestor ou para o patrocinador. A confirmação MUST permanecer indisponível enquanto nenhum resultado válido estiver selecionado e MUST NOT tratar texto livre como identidade.
+O sistema SHALL permitir que a BraCVAM pesquise contas ativas da plataforma pelo nome completo, nome de usuário ou e-mail e selecione uma identidade persistida para o grupo gestor ou para o patrocinador. A confirmação MUST permanecer indisponível enquanto nenhum resultado válido estiver selecionado e MUST NOT tratar texto livre como identidade.
+
+A pesquisa MUST NOT ocultar contas por perfil global, cargo local ou participação já existente. A validade da nova designação SHALL ser decidida na confirmação pela API autoritativa.
+
+A composição MUST abrir com o modo de designação de conta existente selecionado, deixando o campo de pesquisa visível sem interação adicional. O modo de convite por e-mail permanece disponível no seletor.
+
+Quando a pessoa alternar entre convite e designação de conta existente, o sistema MUST limpar o texto, a seleção e os resultados da pesquisa; ao retornar à designação, o campo estará vazio e pronto para uma nova busca.
 
 #### Scenario: Conta existente selecionada
 
 - **WHEN** a pesquisa retorna uma conta ativa e a BraCVAM seleciona essa conta
 - **THEN** o sistema permite confirmar a designação usando o identificador persistido da pessoa
 
+#### Scenario: Conta já possui cargo no processo
+
+- **WHEN** a pesquisa encontra uma conta que já possui qualquer cargo local no processo
+- **THEN** o sistema mantém a conta nos resultados sem filtrar pelo cargo e deixa a API validar a designação solicitada
+
+#### Scenario: Busca pelo nome da pessoa
+
+- **WHEN** a BraCVAM pesquisa pelo nome completo ou por parte do nome da pessoa
+- **THEN** o sistema usa a mesma rota interna paginada do diretório de usuários e apresenta as contas ativas devolvidas pela busca da API visivelmente abaixo do campo
+
+#### Scenario: Resultados e formulário em duas colunas
+
+- **WHEN** a composição é exibida em uma tela larga
+- **THEN** cada resultado identifica visualmente a pessoa pelo nome completo, nome de usuário e e-mail, e o formulário posiciona a escolha do modo à esquerda e a pesquisa à direita em telas largas
+
 #### Scenario: Pesquisa sem correspondência
 
 - **WHEN** nenhuma conta corresponde à pesquisa
 - **THEN** o sistema apresenta estado vazio e oferece separadamente a opção de convidar por e-mail
+
+- **WHEN** a consulta falha, é cancelada por uma nova busca ou excede o tempo limite
+- **THEN** o sistema encerra o indicador de carregamento e informa o estado vazio ou a falha sem deixar a busca presa em andamento
 
 #### Scenario: Conta deixa de estar disponível
 

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import type { FormEvent } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowRight, LoaderCircle, MailPlus, RefreshCw } from "lucide-react";
+import { ArrowRight, Check, LoaderCircle, MailPlus, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import { getLocalizedApiError } from "@/i18n/errors";
@@ -27,6 +27,7 @@ import type {
   ProcessCompositionUserOption,
 } from "@/types/ParticipacaoProcesso";
 import type { ApiRecord } from "@/types/Servico";
+import type { UserList } from "@/types/Usuario";
 
 export function CompositionWorkspace({ processId }: ProcessCompositionWorkspaceProps) {
   const { i18n, t } = useTranslation();
@@ -246,7 +247,6 @@ export function CompositionWorkspace({ processId }: ProcessCompositionWorkspaceP
               : Boolean(snapshot.capabilities.canManageParticipants || snapshot.capabilities.canAssignLaboratories);
           return <CompositionRoleCard
             key={role}
-            processId={processId}
             description={t(`participantComposition.roles.${role}.description`)}
             invites={snapshot.invites}
             laboratories={snapshot.laboratories}
@@ -278,7 +278,7 @@ export function CompositionWorkspace({ processId }: ProcessCompositionWorkspaceP
   );
 }
 
-function CompositionRoleCard({ processId, title, description, role, participants, invites, laboratories, showForm, busy, onSubmit, onAssign, canManage, onParticipantAction, onCompleteRole, onViewParticipant }: ProcessCompositionRoleCardProps) {
+function CompositionRoleCard({ title, description, role, participants, invites, laboratories, showForm, busy, onSubmit, onAssign, canManage, onParticipantAction, onCompleteRole, onViewParticipant }: ProcessCompositionRoleCardProps) {
   const { t } = useTranslation();
   const hasPendingInvite = invites.some((invite) => invite.role_key === role && invite.status === "pending" && !invite.expired);
   const hasActiveParticipant = participants.some((participant) => participant.role_key === role && participant.active);
@@ -288,7 +288,7 @@ function CompositionRoleCard({ processId, title, description, role, participants
       <p className="mt-1 text-sm leading-6 text-slate-600">{description}</p>
       <ProcessCompositionParticipantList invites={invites} participants={participants} role={role} canManage={canManage} busy={busy} onAction={onParticipantAction} onViewParticipant={onViewParticipant} />
       {canManage && showForm && <button type="button" disabled={busy || !hasActiveParticipant} onClick={() => void onCompleteRole(role)} className="mt-3 min-h-9 rounded-lg border border-teal-700 px-3 text-xs font-bold text-teal-800 disabled:opacity-50">{t("participantComposition.actions.completeRole")}</button>}
-      {showForm ? <div className="mt-4 border-t border-slate-200 pt-4"><ProcessCompositionInviteForm processId={processId} busy={busy} invites={invites} participants={participants} laboratories={laboratories} onSubmit={onSubmit} onAssign={onAssign} role={role} /></div> : hasPendingInvite ? <p className="mt-4 text-xs font-medium text-amber-900" role="status">{t("participantComposition.roles.waitingAcceptance")}</p> : null}
+      {showForm ? <div className="mt-4 border-t border-slate-200 pt-4"><ProcessCompositionInviteForm busy={busy} invites={invites} laboratories={laboratories} onSubmit={onSubmit} onAssign={onAssign} role={role} /></div> : hasPendingInvite ? <p className="mt-4 text-xs font-medium text-amber-900" role="status">{t("participantComposition.roles.waitingAcceptance")}</p> : null}
     </section>
   );
 }
@@ -306,14 +306,15 @@ function ProcessCompositionParticipantList({ participants, invites, role, canMan
   );
 }
 
-function ProcessCompositionInviteForm({ processId, role, laboratories, invites, participants, busy, onSubmit, onAssign }: ProcessCompositionInviteFormProps) {
+function ProcessCompositionInviteForm({ role, laboratories, invites, busy, onSubmit, onAssign }: ProcessCompositionInviteFormProps) {
   const { t } = useTranslation();
   const [email, setEmail] = useState("");
   const [userId, setUserId] = useState("");
   const [userSearch, setUserSearch] = useState("");
   const [users, setUsers] = useState<ProcessCompositionUserOption[]>([]);
   const [isSearchingUsers, setIsSearchingUsers] = useState(false);
-  const [assignmentMode, setAssignmentMode] = useState<"invite" | "assign">("invite");
+  const [userSearchFailed, setUserSearchFailed] = useState(false);
+  const [assignmentMode, setAssignmentMode] = useState<"invite" | "assign">("assign");
   const [laboratoryId, setLaboratoryId] = useState("");
   const normalizedEmail = email.trim();
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail) && normalizedEmail.length <= 254;
@@ -324,18 +325,44 @@ function ProcessCompositionInviteForm({ processId, role, laboratories, invites, 
   const userIdValid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId.trim());
 
   useEffect(() => {
-    if (assignmentMode !== "assign" || userSearch.trim().length < 2) return;
+    const search = userSearch.trim();
+    if (assignmentMode !== "assign" || search.length < 2) return;
     const controller = new AbortController();
+    let timedOut = false;
     const timeout = window.setTimeout(() => {
       setIsSearchingUsers(true);
-      void fetch(`/api/processes/${processId}/composition/users?search=${encodeURIComponent(userSearch.trim())}`, { cache: "no-store", signal: controller.signal })
-        .then(async (response) => response.ok ? await response.json() as ProcessCompositionUserOption[] : null)
-        .then((payload) => setUsers(Array.isArray(payload) ? payload.filter((user) => !participants.some((participant) => participant.active && participant.role_key === role && participant.user.id === user.id)) : []))
-        .catch(() => { if (!controller.signal.aborted) setUsers([]); })
-        .finally(() => { if (!controller.signal.aborted) setIsSearchingUsers(false); });
+      setUserSearchFailed(false);
+      const requestTimeout = window.setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, 15_000);
+      const query = new URLSearchParams({ search, active: "true", offset: "0", limit: "100" });
+      void fetch(`/api/users?${query}`, { cache: "no-store", signal: controller.signal })
+        .then(async (response) => {
+          if (!response.ok) throw new Error("USER_SEARCH_FAILED");
+          return await response.json() as UserList;
+        })
+        .then((payload) => {
+          if (controller.signal.aborted) return;
+          setUsers(Array.isArray(payload?.items) ? payload.items.map(({ id, username, full_name, email }) => ({ id, username, full_name, email })) : []);
+        })
+        .catch(() => {
+          if (!controller.signal.aborted || timedOut) {
+            setUsers([]);
+            setUserSearchFailed(true);
+          }
+        })
+        .finally(() => {
+          window.clearTimeout(requestTimeout);
+          if (!controller.signal.aborted || timedOut) setIsSearchingUsers(false);
+        });
     }, 250);
-    return () => { window.clearTimeout(timeout); controller.abort(); };
-  }, [assignmentMode, participants, processId, role, userSearch]);
+    return () => {
+      window.clearTimeout(timeout);
+      controller.abort();
+      setIsSearchingUsers(false);
+    };
+  }, [assignmentMode, userSearch]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -359,24 +386,47 @@ function ProcessCompositionInviteForm({ processId, role, laboratories, invites, 
   }
 
   return (
-    <form className="grid gap-3" onSubmit={(event) => void submit(event)}>
-      <label className="grid gap-1.5 text-sm font-semibold text-slate-800" htmlFor={`composition-${role}-mode`}>{t("participantComposition.fields.assignmentMode")}<select id={`composition-${role}-mode`} value={assignmentMode} onChange={(event) => setAssignmentMode(event.target.value as "invite" | "assign")} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3"><option value="invite">{t("participantComposition.actions.inviteByEmail")}</option><option value="assign">{t("participantComposition.actions.assignExisting")}</option></select></label>
-      {assignmentMode === "assign" ? <div className="grid gap-2"><label className="grid gap-1.5 text-sm font-semibold text-slate-800" htmlFor={`composition-${role}-user-search`}>{t("participantComposition.fields.searchUser")}<input id={`composition-${role}-user-search`} value={userSearch} onChange={(event) => { setUserSearch(event.target.value); setUserId(""); if (event.target.value.trim().length < 2) setUsers([]); }} disabled={busy} className="min-h-11 rounded-lg border border-slate-300 px-3 font-normal" autoComplete="off" /></label>{isSearchingUsers && <p className="text-xs text-slate-500" role="status">{t("participantComposition.fields.searchingUsers")}</p>}<label className="grid gap-1.5 text-sm font-semibold text-slate-800" htmlFor={`composition-${role}-user`}>{t("participantComposition.fields.selectUser")}<select id={`composition-${role}-user`} value={userId} onChange={(event) => setUserId(event.target.value)} required disabled={busy || users.length === 0} className="min-h-11 rounded-lg border border-slate-300 px-3 font-normal"><option value="">{t("participantComposition.fields.chooseUser")}</option>{users.map((user) => <option key={user.id} value={user.id}>{user.full_name || user.username} · {user.email}</option>)}</select></label></div> : <label className="grid gap-1.5 text-sm font-semibold text-slate-800" htmlFor={`composition-${role}-email`}>{t("participantComposition.fields.email")}
-        <input autoComplete="email" className="min-h-11 rounded-lg border border-slate-300 px-3 font-normal outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-600/20 disabled:bg-slate-100" disabled={busy} id={`composition-${role}-email`} maxLength={254} onChange={(event) => setEmail(event.target.value)} placeholder={t("participantComposition.fields.emailPlaceholder")} required type="email" value={email} />
-      </label>}
-      {needsLaboratory && (
-        <label className="grid gap-1.5 text-sm font-semibold text-slate-800" htmlFor="composition-laboratory">{t("participantComposition.fields.laboratory")}
-          <select className="min-h-11 rounded-lg border border-slate-300 bg-white px-3 font-normal outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-600/20 disabled:bg-slate-100" disabled={busy || laboratories.length === 0} id="composition-laboratory" onChange={(event) => setLaboratoryId(event.target.value)} required value={laboratoryId}>
+    <form className="grid gap-4 rounded-xl bg-slate-50 p-3 sm:p-4 md:grid-cols-[minmax(10rem,0.55fr)_minmax(0,2.45fr)]" onSubmit={(event) => void submit(event)}>
+      <div className="grid content-start gap-3">
+        <label className="grid gap-1.5 text-sm font-semibold text-slate-800" htmlFor={`composition-${role}-mode`}>{t("participantComposition.fields.assignmentMode")}
+          <select id={`composition-${role}-mode`} value={assignmentMode} onChange={(event) => { setAssignmentMode(event.target.value as "invite" | "assign"); setUserSearch(""); setUsers([]); setIsSearchingUsers(false); setUserSearchFailed(false); setUserId(""); }} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 font-normal focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-600/20"><option value="invite">{t("participantComposition.actions.inviteByEmail")}</option><option value="assign">{t("participantComposition.actions.assignExisting")}</option></select>
+        </label>
+        {needsLaboratory && <label className="grid gap-1.5 text-sm font-semibold text-slate-800" htmlFor={`composition-${role}-laboratory`}>{t("participantComposition.fields.laboratory")}
+          <select className="min-h-11 rounded-lg border border-slate-300 bg-white px-3 font-normal focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-600/20 disabled:bg-slate-100" disabled={busy || laboratories.length === 0} id={`composition-${role}-laboratory`} onChange={(event) => setLaboratoryId(event.target.value)} required value={laboratoryId}>
             <option value="">{t("participantComposition.fields.selectLaboratory")}</option>
             {laboratories.map((laboratory) => <option key={laboratory.id} value={laboratory.id}>{laboratory.institution.name} · {laboratory.name}</option>)}
           </select>
-        </label>
-      )}
-      {duplicateInvite && <p className="text-xs font-medium text-amber-900" role="status">{t("participantComposition.errors.duplicate")}</p>}
-      <button className="inline-flex min-h-11 w-fit items-center gap-2 rounded-lg bg-teal-700 px-4 text-sm font-bold text-white outline-none transition hover:bg-teal-800 focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50" disabled={busy || (assignmentMode === "assign" ? !userIdValid || !laboratoryValid : !valid)} type="submit">
-        {busy ? <LoaderCircle aria-hidden="true" className="size-4 animate-spin" /> : <MailPlus aria-hidden="true" className="size-4" />}
-        {busy ? t("participantComposition.actions.sending") : assignmentMode === "assign" ? t("participantComposition.actions.assign") : t("participantComposition.actions.invite")}
-      </button>
+        </label>}
+      </div>
+      <div className="grid content-start gap-3">
+        {assignmentMode === "assign" ? <>
+          <label className="grid gap-1.5 text-sm font-semibold text-slate-800" htmlFor={`composition-${role}-user-search`}>{t("participantComposition.fields.searchUser")}
+            <input id={`composition-${role}-user-search`} value={userSearch} onChange={(event) => { setUserSearch(event.target.value); setUserId(""); setUsers([]); setIsSearchingUsers(false); setUserSearchFailed(false); }} disabled={busy} className="min-h-11 rounded-lg border border-slate-300 bg-white px-3 font-normal outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-600/20" autoComplete="off" />
+          </label>
+          {isSearchingUsers && <p className="text-xs text-slate-500" role="status">{t("participantComposition.fields.searchingUsers")}</p>}
+          {userSearchFailed && <p className="text-xs text-rose-700" role="status">{t("participantComposition.fields.userSearchFailed")}</p>}
+          {!isSearchingUsers && !userSearchFailed && userSearch.trim().length >= 2 && users.length === 0 && <p className="rounded-lg border border-dashed border-slate-300 bg-white px-3 py-4 text-center text-sm text-slate-600" role="status">{t("participantComposition.fields.noUsersFound")}</p>}
+          {users.length > 0 && <ul className="grid max-h-72 gap-2 overflow-y-auto" aria-label={t("participantComposition.fields.selectUser")}>
+            {users.map((user) => {
+              const displayName = user.full_name || user.username;
+              const initials = displayName.trim().slice(0, 1).toLocaleUpperCase();
+              const selected = userId === user.id;
+              return <li key={user.id}><button type="button" aria-pressed={selected} onClick={() => setUserId(user.id)} disabled={busy} className={`flex min-h-[4.5rem] w-full items-center gap-3 rounded-xl border p-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 ${selected ? "border-teal-600 bg-teal-50 shadow-sm" : "border-slate-200 bg-white hover:border-teal-300 hover:bg-teal-50/50"}`}>
+                <span aria-hidden="true" className={`grid size-10 shrink-0 place-items-center rounded-full text-sm font-bold ${selected ? "bg-teal-700 text-white" : "bg-teal-100 text-teal-800"}`}>{initials}</span>
+                <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-slate-900">{displayName}</span><span className="mt-0.5 block truncate text-xs font-medium text-teal-800">@{user.username}</span><span className="mt-0.5 block truncate text-xs text-slate-500">{user.email}</span></span>
+                {selected && <Check aria-hidden="true" className="size-5 shrink-0 text-teal-700" />}
+              </button></li>;
+            })}
+          </ul>}
+        </> : <label className="grid gap-1.5 text-sm font-semibold text-slate-800" htmlFor={`composition-${role}-email`}>{t("participantComposition.fields.email")}
+          <input autoComplete="email" className="min-h-11 rounded-lg border border-slate-300 bg-white px-3 font-normal outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-600/20 disabled:bg-slate-100" disabled={busy} id={`composition-${role}-email`} maxLength={254} onChange={(event) => setEmail(event.target.value)} placeholder={t("participantComposition.fields.emailPlaceholder")} required type="email" value={email} />
+        </label>}
+        {duplicateInvite && <p className="text-xs font-medium text-amber-900" role="status">{t("participantComposition.errors.duplicate")}</p>}
+        <button className="inline-flex min-h-11 w-fit items-center gap-2 rounded-lg bg-teal-700 px-4 text-sm font-bold text-white outline-none transition hover:bg-teal-800 focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50" disabled={busy || (assignmentMode === "assign" ? !userIdValid || !laboratoryValid : !valid)} type="submit">
+          {busy ? <LoaderCircle aria-hidden="true" className="size-4 animate-spin" /> : <MailPlus aria-hidden="true" className="size-4" />}
+          {busy ? t("participantComposition.actions.sending") : assignmentMode === "assign" ? t("participantComposition.actions.assign") : t("participantComposition.actions.invite")}
+        </button>
+      </div>
     </form>
   );
 }
@@ -388,7 +438,7 @@ function CompositionProcessCard({ item, locale }: CompositionProcessCardProps) {
   const formattedDate = item.process.started_at ? new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(new Date(item.process.started_at)) : t("dynamicForm.notProvided");
   return (
     <article className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="min-w-0"><p className="font-mono text-xs font-bold uppercase tracking-wide text-teal-700">{item.process.code}</p><h2 className="mt-1 break-words text-lg font-bold text-slate-900">{item.process.title}</h2><p className="mt-1 text-xs text-slate-500">{t("participantComposition.index.startedAt", { date: formattedDate })}</p><p className="mt-2 text-sm text-slate-600">{nextStep}</p></div>
+      <div className="min-w-0"><p className="font-mono text-xs font-bold uppercase tracking-wide text-teal-700">{item.process.code}</p><h2 className="mt-1 break-words text-lg font-bold text-slate-900">{item.process.title}</h2><p className="mt-2 text-sm text-slate-700"><span className="font-semibold">{t("participantComposition.index.proponent")}:</span> {item.proponent?.full_name || item.proponent?.username || t("participantComposition.index.proponentNotIdentified")}</p><p className="mt-1 text-xs text-slate-500">{t("participantComposition.index.startedAt", { date: formattedDate })}</p><p className="mt-2 text-sm text-slate-600">{nextStep}</p></div>
       <Link className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-lg bg-teal-700 px-4 text-sm font-bold text-white outline-none hover:bg-teal-800 focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2" href={`/processos/${item.process.id}/composicao`}>{t("participantComposition.actions.open")}<ArrowRight aria-hidden="true" className="size-4" /></Link>
     </article>
   );
@@ -410,7 +460,7 @@ function EmptyCompositionIndex() {
 }
 
 function isIndex(value: unknown): value is ProcessCompositionIndexItem[] {
-  return Array.isArray(value) && value.every((item) => isRecord(item) && isProcess(item.process) && Array.isArray(item.roles) && item.roles.every((role) => typeof role === "string") && Array.isArray(item.actionableTasks));
+  return Array.isArray(value) && value.every((item) => isRecord(item) && isProcess(item.process) && (item.proponent === null || isCompositionUser(item.proponent)) && Array.isArray(item.roles) && item.roles.every((role) => typeof role === "string") && Array.isArray(item.actionableTasks));
 }
 
 function isSnapshot(value: unknown): value is ProcessCompositionSnapshot {
@@ -419,6 +469,10 @@ function isSnapshot(value: unknown): value is ProcessCompositionSnapshot {
 
 function isProcess(value: unknown) {
   return isRecord(value) && typeof value.id === "string" && typeof value.code === "string" && typeof value.title === "string" && typeof value.status === "string" && typeof value.template_key === "string" && typeof value.version_number === "number";
+}
+
+function isCompositionUser(value: unknown) {
+  return isRecord(value) && typeof value.id === "string" && typeof value.username === "string" && (typeof value.full_name === "string" || value.full_name === null);
 }
 
 function isRecord(value: unknown): value is ApiRecord {

@@ -7,7 +7,7 @@ O sistema SHALL permitir que pessoas autorizadas da BraCVAM retomem composiçõe
 #### Scenario: BraCVAM possui composição pendente
 
 - **WHEN** a sessão BraCVAM pode atuar em ao menos uma composição incompleta
-- **THEN** a navegação oferece acesso ao destino que lista somente processos autorizados
+- **THEN** a navegação oferece acesso ao destino que lista somente processos autorizados e identifica em cada cartão o processo e seu proponente ativo
 
 #### Scenario: Composição aberta após aprovação
 

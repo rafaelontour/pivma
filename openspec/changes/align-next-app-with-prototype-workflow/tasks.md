@@ -67,6 +67,7 @@
 - [x] 5.13 Corrigir a retomada de processos devolvidos para consultar o retorno e os pareceres persistidos, liberar os campos indicados após `REVISE` e não depender de estado temporário do navegador
 - [x] 5.14 Separar a aceitação de `REVISE` do reenvio, apresentar no resumo e nos campos os apontamentos persistidos da BraCVAM e permitir salvar e retomar o rascunho da correção sem concluir o formulário
   - Na submissão real `VAL-2026-99c4366d716d27e8`, a rodada 13 foi devolvida com 79 pareceres persistidos e três campos apontados. O retorno oferece somente Iniciar correção; a ação abre o rascunho sem reenvio, cada resposta pode ser salva ou reaberta individualmente, e Salvar rascunho fecha o modal e move o processo para Meus rascunhos mantendo a visualização de retorno na retomada.
+- [x] 5.15 Manter Enviar para análise desabilitado sem respostas ou com qualquer campo obrigatório ausente ou inválido, sem exigir o preenchimento de campos opcionais
 
 ## 6. Triagem BraCVAM
 
@@ -83,10 +84,12 @@
 - [ ] 6.10 Verificar triagem parcial, retomada, três decisões finais, conflito concorrente, timeline e negação para sessão sem `triage.review`
   - As validações dos pareceres por campo estão ativas: a primeira triagem exige todos os campos e a reanálise exige somente os campos alterados. O botão de confirmação também exige resultado final e justificativa válida, e o backend permanece autoritativo.
   - A negação `401`, validações de entrada e uma decisão real `NEEDS_REVISION` foram verificadas; triagem parcial, conflito e os outros desfechos permanecem pendentes.
-- [x] 6.11 Exigir decisão explícita para todos os campos e para o resultado final, remover o salvamento separado de pareceres e persistir o conjunto completo antes de solicitar a transição
+- [x] 6.11 Exigir decisão explícita para todos os campos obrigatórios e para o resultado final, remover o salvamento separado de pareceres e persistir os pareceres preenchidos antes de solicitar a transição
 - [x] 6.12 Comparar o formulário atual com a última versão submetida durante o rascunho e, após o reenvio, comparar as duas versões mais recentes; sinalizar os campos corrigidos e exibir à esquerda do modal uma lista com campo, parecer e comentário junto ao acesso ao histórico, mantendo o formulário à direita e oferecendo navegação direta para cada ponto
   - Na submissão real `VAL-2026-99c4366d716d27e8`, a comparação do formulário atual com a rodada 13 identificou `transferability_assessed`, `transferability_detail` e `within_lab_reproducibility_detail`, enquanto a comparação isolada das rodadas 12 e 13 retornava uma lista vazia para a correção em andamento.
-- [x] 6.13 Persistir antes da decisão os pareceres exigidos na rodada, exigir todos os campos na primeira triagem e somente os campos corrigidos na reanálise, impedindo `NEEDS_REVISION` sem apontamento corrigível
+- [x] 6.13 Persistir antes da decisão os pareceres exigidos na rodada, exigir os campos obrigatórios na primeira triagem e somente os obrigatórios corrigidos na reanálise, impedindo `NEEDS_REVISION` sem apontamento corrigível
+- [x] 6.14 Identificar visualmente campos opcionais na análise BraCVAM e impedir que a ausência de parecer nesses campos bloqueie a confirmação da decisão
+- [x] 6.15 Reconciliar os pareceres das versões anteriores na reanálise, preservando decisões de campos não alterados e reiniciando somente os campos corrigidos
 
 ## 7. Kanban e navegação
 

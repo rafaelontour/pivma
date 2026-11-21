@@ -11,6 +11,7 @@ import type {
   CreateProcessDraftInput,
   DirectReviewInput,
   DirectReviewResult,
+  DynamicFormReview,
   SaveSubmissionDraftInput,
   SaveSubmissionDraftResult,
   SubmissionAttachmentDownload,
@@ -405,6 +406,57 @@ export async function getLatestSubmissionVersionValues(
   return detail ? { ok: true, data: detail.values } : { ok: false };
 }
 
+export async function getSubmissionReviewHistory(
+  accessToken: string,
+  processId: string,
+): Promise<ServiceResult<Record<string, DynamicFormReview>>> {
+  const [listError, listResponse] = await tryit(() =>
+    http.get<unknown>(`/processes/${processId}/submission-versions`, {
+      headers: { Cookie: `access_token=${accessToken}` },
+      params: { page: 1, per_page: 100 },
+    }),
+  )();
+
+  if (listError) return { ok: false, status: getStatus(listError) };
+  const versions = normalizeSubmissionVersionList(listResponse.data);
+  if (!versions) return { ok: false };
+
+  const orderedVersions = versions
+    .slice()
+    .sort((first, second) => second.run_number - first.run_number);
+  const reviews: Record<string, DynamicFormReview> = {};
+
+  for (let index = 0; index < orderedVersions.length; index += SUBMISSION_FORM_LOOKUP_BATCH_SIZE) {
+    const batch = orderedVersions.slice(index, index + SUBMISSION_FORM_LOOKUP_BATCH_SIZE);
+    const details = await Promise.all(
+      batch.map(async (version) => {
+        const [error, response] = await tryit(() =>
+          http.get<unknown>(
+            `/processes/${processId}/submission-versions/${version.run_number}`,
+            { headers: { Cookie: `access_token=${accessToken}` } },
+          ),
+        )();
+        if (error) return { ok: false as const, status: getStatus(error) };
+        const data = normalizeSubmissionVersion(response.data);
+        return data
+          ? { ok: true as const, data }
+          : { ok: false as const, status: undefined };
+      }),
+    );
+    const failed = details.find((detail) => !detail.ok);
+    if (failed && !failed.ok) return { ok: false, status: failed.status };
+
+    for (const detail of details) {
+      if (!detail.ok) continue;
+      for (const [fieldKey, review] of Object.entries(detail.data.reviews)) {
+        reviews[fieldKey] ??= review;
+      }
+    }
+  }
+
+  return { ok: true, data: reviews };
+}
+
 export async function getSubmissionForm(
   accessToken: string,
   processId: string,
@@ -735,11 +787,20 @@ function normalizeSubmissionVersion(value: unknown): SubmissionVersion | null {
     !isRecord(value) ||
     !isRecord(value.values) ||
     !Array.isArray(value.attachments) ||
-    !value.attachments.every(isRecord)
+    !value.attachments.every(isRecord) ||
+    !isRecord(value.reviews) ||
+    !Object.values(value.reviews).every(isDynamicFormReview)
   ) {
     return null;
   }
   return value as SubmissionVersion;
+}
+
+function isDynamicFormReview(value: unknown): value is DynamicFormReview {
+  return isRecord(value) &&
+    typeof value.status === "string" &&
+    (value.comments === undefined || value.comments === null || typeof value.comments === "string") &&
+    (value.reviewed_at === undefined || value.reviewed_at === null || typeof value.reviewed_at === "string");
 }
 
 function compareSubmissionVersions(

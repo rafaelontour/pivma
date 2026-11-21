@@ -163,6 +163,7 @@ export type SubmissionVersionSummary = {
 export type SubmissionVersion = SubmissionVersionSummary & {
   values: Record<string, unknown>;
   attachments: Record<string, unknown>[];
+  reviews: Record<string, DynamicFormReview>;
 };
 
 export type DynamicFormReview = {

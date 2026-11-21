@@ -1,5 +1,5 @@
 import type { ProcessInstance } from "./Processo";
-import type { SubmissionForm, SubmissionPreEvaluation } from "./Submissao";
+import type { DynamicFormReview, SubmissionForm, SubmissionPreEvaluation } from "./Submissao";
 
 export type TriageFieldReviewStatus = "APPROVED" | "NEEDS_REVISION" | "REJECTED";
 export type TriageFeedbackVerdict = "agree" | "disagree" | "inconclusive";
@@ -54,6 +54,7 @@ export type TriageTimeline = {
 export type TriageSnapshot = {
   process: ProcessInstance;
   form: SubmissionForm;
+  historicalReviews: Record<string, DynamicFormReview>;
   preEvaluation: SubmissionPreEvaluation | null;
   timeline: TriageTimeline;
   correctedFieldKeys: string[];

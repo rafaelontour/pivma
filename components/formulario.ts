@@ -196,8 +196,8 @@ export function buildDynamicFormInputs(form: SubmissionForm) {
 
     if (field.field_type === "file_upload" && field.attachment) {
       inputs[field.field_key] = field.attachment.artifact_id;
-    } else if (field.field_type === "boolean") {
-      inputs[field.field_key] = value === true;
+    } else if (field.field_type === "boolean" && typeof value === "boolean") {
+      inputs[field.field_key] = value;
     } else if (field.field_type === "select" && isDynamicFormOptionValue(value)) {
       inputs[field.field_key] = serializeDynamicFormOption(value);
     } else if (typeof value === "string" || typeof value === "number") {
@@ -377,7 +377,29 @@ export function validateDynamicFormValues(
     }
   }
 
+  if (!fields.some((field) => hasDynamicFormResponse(field, inputs))) {
+    return {
+      valid: false,
+      fieldKey: fields[0]?.field_key ?? "",
+      message: t?.("submissions.validation.responseRequired") ?? "Preencha o formulário antes de enviar para análise.",
+    };
+  }
+
   return { valid: true };
+}
+
+function hasDynamicFormResponse(
+  field: DynamicFormField,
+  inputs: SubmissionFieldInputs,
+) {
+  const value = inputs[field.field_key];
+
+  if (!isSupportedDynamicFormField(field.field_type)) return false;
+  if (field.field_type === "file_upload") {
+    return Boolean(field.attachment) || hasDynamicFormFileReference(value);
+  }
+  if (field.field_type === "boolean") return typeof value === "boolean";
+  return typeof value === "string" && value.trim().length > 0;
 }
 
 export function getDynamicFormOptions(

@@ -75,7 +75,22 @@ O sistema SHALL abrir o formulário inicial do processo em um popup, SHALL agrup
 
 ### Requirement: Envio da submissão para análise
 
-O sistema SHALL apresentar Enviar para análise ao lado de Salvar rascunho enquanto o formulário não estiver submetido. Ao acionar o envio, o sistema MUST enviar os valores atuais ao endpoint de conclusão, MUST impedir salvamento ou envio concorrente e MUST refletir o estado do processo devolvido ou posteriormente consultado, inclusive `AI_PRE_EVALUATION` quando houver avaliações associadas.
+O sistema SHALL apresentar Enviar para análise ao lado de Salvar rascunho enquanto o formulário não estiver submetido. A ação MUST permanecer desabilitada enquanto o formulário não possuir nenhuma resposta ou qualquer campo obrigatório estiver ausente ou inválido. Campos opcionais vazios MUST NOT impedir o envio quando todos os obrigatórios estiverem válidos. Ao acionar o envio, o sistema MUST repetir essa validação, enviar os valores atuais ao endpoint de conclusão, impedir salvamento ou envio concorrente e refletir o estado do processo devolvido ou posteriormente consultado, inclusive `AI_PRE_EVALUATION` quando houver avaliações associadas.
+
+#### Scenario: Campo obrigatório permanece sem resposta
+
+- **WHEN** a pessoa preenche nove de dez campos obrigatórios, independentemente dos campos opcionais
+- **THEN** o sistema mantém Enviar para análise desabilitado
+
+#### Scenario: Todos os campos obrigatórios estão válidos
+
+- **WHEN** a pessoa preenche validamente todos os campos obrigatórios e deixa vazios todos ou alguns campos opcionais
+- **THEN** o sistema habilita Enviar para análise
+
+#### Scenario: Formulário permanece sem respostas
+
+- **WHEN** nenhum campo do formulário possui resposta
+- **THEN** o sistema mantém Enviar para análise desabilitado mesmo que o formulário não defina campos obrigatórios
 
 #### Scenario: Envio aceito com avaliação por IA
 

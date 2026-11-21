@@ -3,7 +3,7 @@ import { authorizeInternalApi } from "@/app/(paginas)/api/_shared/authorization"
 import { triageErrorResponse } from "@/app/(paginas)/api/_shared/triage";
 import { isTriageUuid } from "@/components/triagem";
 import { getProcess } from "@/services/Processo";
-import { getCorrectedSubmissionFieldKeys, getSubmissionForm, getSubmissionPreEvaluation } from "@/services/Submissao";
+import { getCorrectedSubmissionFieldKeys, getSubmissionForm, getSubmissionPreEvaluation, getSubmissionReviewHistory } from "@/services/Submissao";
 import { getTriageTimeline } from "@/services/Triagem";
 
 export const runtime = "nodejs";
@@ -21,15 +21,20 @@ export async function GET(_request: Request, context: RouteContext<"/api/triage/
       form.ok ? form.data.values : undefined,
     ),
   );
-  const [process, form, preEvaluation, timeline, correctedFields] = await Promise.all([
+  const historicalReviewsRequest = getSubmissionReviewHistory(
+    authorization.accessToken,
+    processId,
+  );
+  const [process, form, preEvaluation, timeline, correctedFields, historicalReviews] = await Promise.all([
     getProcess(authorization.accessToken, processId),
     formRequest,
     getSubmissionPreEvaluation(authorization.accessToken, processId),
     getTriageTimeline(authorization.accessToken, processId),
     correctedFieldsRequest,
+    historicalReviewsRequest,
   ]);
-  const failed = !process.ok ? process : !form.ok ? form : !timeline.ok ? timeline : !preEvaluation.ok && preEvaluation.status !== 404 ? preEvaluation : null;
+  const failed = !process.ok ? process : !form.ok ? form : !timeline.ok ? timeline : !historicalReviews.ok ? historicalReviews : !preEvaluation.ok && preEvaluation.status !== 404 ? preEvaluation : null;
   if (failed && !failed.ok) return triageErrorResponse(failed.status, authorization.cookieStore, "Não foi possível carregar o processo para triagem.");
-  if (!process.ok || !form.ok || !timeline.ok) return triageErrorResponse(undefined, authorization.cookieStore, "A resposta de triagem está incompleta.");
-  return NextResponse.json({ process: process.data, form: form.data, preEvaluation: preEvaluation.ok ? preEvaluation.data : null, timeline: timeline.data, correctedFieldKeys: correctedFields.ok ? correctedFields.data : [] });
+  if (!process.ok || !form.ok || !timeline.ok || !historicalReviews.ok) return triageErrorResponse(undefined, authorization.cookieStore, "A resposta de triagem está incompleta.");
+  return NextResponse.json({ process: process.data, form: form.data, historicalReviews: historicalReviews.data, preEvaluation: preEvaluation.ok ? preEvaluation.data : null, timeline: timeline.data, correctedFieldKeys: correctedFields.ok ? correctedFields.data : [] });
 }

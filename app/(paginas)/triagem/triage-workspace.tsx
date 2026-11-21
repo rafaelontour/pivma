@@ -99,7 +99,16 @@ export function TriageWorkspace({
         setWorkspace({ kind: "error", process, message: getApiMessage(payload, t("triage.proposalFailed"), t) });
         return;
       }
-      const confirmedReviews = Object.fromEntries(Object.entries(payload.form.reviews).filter(([, review]) => isReviewStatus(review.status)).map(([fieldKey, review]) => [fieldKey, { field_key: fieldKey, status: review.status as TriageFieldReviewStatus, comments: review.comments ?? null }]));
+      const historicalReviews = normalizeTriageReviews(payload.historicalReviews);
+      for (const fieldKey of payload.correctedFieldKeys) {
+        if (!Object.hasOwn(payload.form.reviews, fieldKey)) {
+          delete historicalReviews[fieldKey];
+        }
+      }
+      const confirmedReviews = {
+        ...historicalReviews,
+        ...normalizeTriageReviews(payload.form.reviews),
+      };
       setWorkspace({
         kind: "ready",
         snapshot: payload,
@@ -167,13 +176,15 @@ export function TriageWorkspace({
 
   async function decide(input: TriageDecisionInput) {
     if (workspace.kind !== "ready" || workspace.isDeciding) return false;
+    const reviewFields = getTriageReviewFields(workspace.snapshot);
     const requiredFields = getRequiredTriageReviewFields(workspace.snapshot);
-    const reviews = requiredFields.map((field) => workspace.reviews[field.field_key]);
-    if (reviews.some((review) => !review)) {
+    if (requiredFields.some((field) => !workspace.reviews[field.field_key])) {
       toast.error(t("triage.allFieldsReviewRequired"));
       return false;
     }
-    const completedReviews = reviews.filter((review): review is NonNullable<typeof review> => Boolean(review));
+    const completedReviews = reviewFields
+      .map((field) => workspace.reviews[field.field_key])
+      .filter((review): review is NonNullable<typeof review> => Boolean(review));
     if (completedReviews.some((review) => review.status !== "APPROVED" && !review.comments?.trim())) {
       toast.error(t("triage.reviewCommentRequired"));
       return false;
@@ -292,6 +303,7 @@ function TriageReviewPanel({ state, onRetry, onReviewChange, onFeedbackChange, o
   const correctedFields = fields.filter((field) =>
     state.snapshot.correctedFieldKeys.includes(field.field_key),
   );
+  const reviewFields = getTriageReviewFields(state.snapshot);
   const requiredFields = getRequiredTriageReviewFields(state.snapshot);
 
   function focusCorrectedField(fieldKey: string) {
@@ -349,7 +361,7 @@ function TriageReviewPanel({ state, onRetry, onReviewChange, onFeedbackChange, o
       requestAnimationFrame(() => document.getElementById(`triage-review-${missingField.field_key}`)?.focus());
       return;
     }
-    const incompleteReview = requiredFields
+    const incompleteReview = reviewFields
       .map((field) => readyState.reviews[field.field_key])
       .find((review) => review && review.status !== "APPROVED" && !review.comments?.trim());
     if (incompleteReview) {
@@ -371,7 +383,7 @@ function TriageReviewPanel({ state, onRetry, onReviewChange, onFeedbackChange, o
       document.getElementById("triage-final-justification")?.focus();
       return;
     }
-    if (outcome === "NEEDS_REVISION" && !requiredFields.some((field) => {
+    if (outcome === "NEEDS_REVISION" && !reviewFields.some((field) => {
       const status = readyState.reviews[field.field_key]?.status;
       return status === "NEEDS_REVISION" || status === "REJECTED";
     })) {
@@ -455,13 +467,7 @@ function TriageReviewPanel({ state, onRetry, onReviewChange, onFeedbackChange, o
                 .map((field) => (
                   <TriageFieldCard
                     corrected={state.snapshot.correctedFieldKeys.includes(field.field_key)}
-                    disabled={
-                      busy ||
-                      (correctedFields.length > 0 &&
-                        !state.snapshot.correctedFieldKeys.includes(
-                          field.field_key,
-                        ))
-                    }
+                    disabled={busy}
                     field={field}
                     key={field.field_key}
                     onChange={(status, comments) =>
@@ -482,7 +488,7 @@ function TriageReviewPanel({ state, onRetry, onReviewChange, onFeedbackChange, o
   </div>}</div>;
 }
 
-function getRequiredTriageReviewFields(snapshot: TriageSnapshot) {
+function getTriageReviewFields(snapshot: TriageSnapshot) {
   if (snapshot.correctedFieldKeys.length === 0) {
     return snapshot.form.fields;
   }
@@ -491,6 +497,10 @@ function getRequiredTriageReviewFields(snapshot: TriageSnapshot) {
   return snapshot.form.fields.filter((field) =>
     correctedKeys.has(field.field_key),
   );
+}
+
+function getRequiredTriageReviewFields(snapshot: TriageSnapshot) {
+  return getTriageReviewFields(snapshot).filter((field) => field.is_required);
 }
 
 function TriageTimelineView({ timeline, onClose }: TriageTimelineViewProps) {
@@ -528,7 +538,14 @@ function formatTimelineEventFallback(value: string) {
 function TriageFieldCard({ field, value, review, corrected, disabled, onChange }: TriageFieldCardProps) {
   const { t } = useTranslation();
   const status = review?.status ?? "";
-  return <article className={`scroll-mt-6 rounded-xl border p-4 ${corrected ? "border-emerald-300 bg-emerald-50/40" : "border-slate-200"}`} id={`triage-field-${field.field_key}`}>{corrected && <p className="mb-3 w-fit rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-800">{t("triage.correctedByProponent")}</p>}<DynamicFormFieldValue field={field} value={value} /><div className="mt-3 grid gap-3 sm:grid-cols-[13rem_1fr]"><label className="grid gap-1.5 text-xs font-bold text-slate-700">{t("triage.review")}<select className="min-h-10 rounded-lg border border-slate-300 px-2 text-sm font-normal" disabled={disabled} id={`triage-review-${field.field_key}`} onChange={(event) => onChange(event.target.value as TriageFieldReviewStatus, review?.comments ?? "")} value={status}><option disabled value="">{t("triage.registerDecision")}</option>{REVIEW_STATUSES.map((item) => <option key={item} value={item}>{t(`triage.reviewStatuses.${item}`)}</option>)}</select></label><label className="grid gap-1.5 text-xs font-bold text-slate-700">{t("triage.comment")}<textarea className="h-10 min-h-10 resize-y rounded-lg border border-slate-300 p-2 text-sm font-normal" disabled={disabled || !review} id={`triage-comment-${field.field_key}`} onChange={(event) => { if (review) onChange(review.status, event.target.value); }} value={review?.comments ?? ""} /></label></div></article>;
+  return <article className={`scroll-mt-6 rounded-xl border p-4 ${corrected ? "border-emerald-300 bg-emerald-50/40" : "border-slate-200"}`} id={`triage-field-${field.field_key}`}>
+    <div className="mb-3 flex flex-wrap gap-2">
+      {corrected && <span className="w-fit rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-800">{t("triage.correctedByProponent")}</span>}
+      {!field.is_required && <span className="w-fit rounded-full border border-sky-200 bg-sky-100 px-2.5 py-1 text-xs font-bold text-sky-800">{t("triage.optionalField")}</span>}
+    </div>
+    <DynamicFormFieldValue field={field} value={value} />
+    <div className="mt-3 grid gap-3 sm:grid-cols-[13rem_1fr]"><label className="grid gap-1.5 text-xs font-bold text-slate-700">{t("triage.review")}<select className="min-h-10 rounded-lg border border-slate-300 px-2 text-sm font-normal" disabled={disabled} id={`triage-review-${field.field_key}`} onChange={(event) => onChange(event.target.value as TriageFieldReviewStatus, review?.comments ?? "")} value={status}><option disabled value="">{t("triage.registerDecision")}</option>{REVIEW_STATUSES.map((item) => <option key={item} value={item}>{t(`triage.reviewStatuses.${item}`)}</option>)}</select></label><label className="grid gap-1.5 text-xs font-bold text-slate-700">{t("triage.comment")}<textarea className="h-10 min-h-10 resize-y rounded-lg border border-slate-300 p-2 text-sm font-normal" disabled={disabled || !review} id={`triage-comment-${field.field_key}`} onChange={(event) => { if (review) onChange(review.status, event.target.value); }} value={review?.comments ?? ""} /></label></div>
+  </article>;
 }
 
 function TriageAiReport({ evaluation, feedback, disabled, onChange }: TriageAiReportProps) {
@@ -540,7 +557,14 @@ function Loading({ label }: TriageLoadingProps) { return <div className="flex mi
 function Message({ message, action }: TriageMessageProps) { const { t } = useTranslation(); return <div className="rounded-xl border border-slate-200 bg-slate-50 p-5 text-center"><AlertCircle aria-hidden="true" className="mx-auto size-6 text-slate-500" /><p className="mt-2 text-sm leading-6 text-slate-600">{message}</p>{action && <button className="mt-3 min-h-10 rounded-lg bg-teal-700 px-3 text-sm font-bold text-white" onClick={action} type="button">{t("common.retry")}</button>}</div>; }
 function isProcessList(value: unknown): value is ProcessList { return isRecord(value) && Array.isArray(value.items) && value.items.every(isProcess) && typeof value.total === "number"; }
 function isProcess(value: unknown): value is ProcessInstance { return isRecord(value) && typeof value.id === "string" && typeof value.code === "string" && typeof value.title === "string" && typeof value.status === "string" && typeof value.template_key === "string" && typeof value.version_number === "number"; }
-function isSnapshot(value: unknown): value is TriageSnapshot { return isRecord(value) && isProcess(value.process) && isRecord(value.form) && Array.isArray(value.form.fields) && isRecord(value.form.values) && isRecord(value.timeline) && Array.isArray(value.timeline.events) && Array.isArray(value.correctedFieldKeys) && value.correctedFieldKeys.every((fieldKey) => typeof fieldKey === "string"); }
+function normalizeTriageReviews(value: Record<string, { status: string; comments?: string | null }>) {
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([, review]) => isReviewStatus(review.status))
+      .map(([fieldKey, review]) => [fieldKey, { field_key: fieldKey, status: review.status as TriageFieldReviewStatus, comments: review.comments ?? null }]),
+  );
+}
+function isSnapshot(value: unknown): value is TriageSnapshot { return isRecord(value) && isProcess(value.process) && isRecord(value.form) && Array.isArray(value.form.fields) && isRecord(value.form.values) && isRecord(value.form.reviews) && isRecord(value.historicalReviews) && Object.values(value.historicalReviews).every((review) => isRecord(review) && typeof review.status === "string") && isRecord(value.timeline) && Array.isArray(value.timeline.events) && Array.isArray(value.correctedFieldKeys) && value.correctedFieldKeys.every((fieldKey) => typeof fieldKey === "string"); }
 function isReviewStatus(value: string): value is TriageFieldReviewStatus { return REVIEW_STATUSES.includes(value as TriageFieldReviewStatus); }
 function isRecord(value: unknown): value is ApiRecord { return Boolean(value) && typeof value === "object" && !Array.isArray(value); }
 function getApiMessage(value: unknown, fallback: string, t: TFunction) { return getLocalizedApiError(isRecord(value) ? value : null, fallback, t); }

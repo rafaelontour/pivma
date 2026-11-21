@@ -1605,7 +1605,13 @@ function SubmissionDialogContent({
             </button>
             {canSubmit && (
               <button
-                title={t(isCorrectionMode ? "submissions.resubmitTooltip" : "submissions.submitTooltip")}
+                title={t(
+                  isCorrectionMode
+                    ? "submissions.resubmitTooltip"
+                    : submissionFormIsValid
+                      ? "submissions.submitTooltip"
+                      : "submissions.submitRequirementsTooltip",
+                )}
                 className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-teal-700 px-4 py-2 text-sm font-semibold text-white outline-none transition hover:bg-teal-800 focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-60"
                 disabled={
                   operation !== "idle" ||

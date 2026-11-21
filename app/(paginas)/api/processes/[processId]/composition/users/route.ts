@@ -31,10 +31,46 @@ export async function GET(request: Request, context: ProcessCompositionRouteCont
     });
   }
 
-  const users: ProcessCompositionUserOption[] = result.data.items
-    .filter((user) => user.active)
+  const matchingUsers = new Map(
+    result.data.items
+      .filter((user) => user.active)
+      .map((user) => [user.id, user]),
+  );
+  const searchTokens = normalizeSearch(search).split(" ").filter(Boolean);
+
+  // The external search covers username and email. Full names must always be
+  // checked across the active directory, even if the external search matched
+  // another account first.
+  for (let offset = 0; offset <= 10_000; offset += 100) {
+    const page = await listUsers(authorization.accessToken, { offset, limit: 100, active: true });
+    if (!page.ok) {
+      return internalApiErrorResponse(page.status, {
+        cookieStore: authorization.cookieStore,
+        fallbackMessage: "Não foi possível consultar os usuários no momento.",
+        messages: { 403: "Você não tem permissão para consultar usuários." },
+      });
+    }
+
+    for (const user of page.data.items) {
+      if (user.active && matchesName(user.full_name, searchTokens)) matchingUsers.set(user.id, user);
+    }
+    if (page.data.items.length < page.data.limit) break;
+  }
+
+  const users: ProcessCompositionUserOption[] = Array.from(matchingUsers.values())
+    .slice(0, 20)
     .map(({ id, username, full_name, email }) => ({ id, username, full_name, email }));
   return NextResponse.json(users);
+}
+
+function normalizeSearch(value: string) {
+  return value.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLocaleLowerCase("en-US").trim().replace(/\s+/g, " ");
+}
+
+function matchesName(fullName: string | null, tokens: string[]) {
+  if (!fullName) return false;
+  const normalizedName = normalizeSearch(fullName);
+  return tokens.every((token) => normalizedName.includes(token));
 }
 
 function validationError() {

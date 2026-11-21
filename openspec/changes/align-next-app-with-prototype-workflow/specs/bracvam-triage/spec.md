@@ -48,7 +48,7 @@ O sistema SHALL apresentar junto à proposta o relatório automático disponíve
 
 ### Requirement: Revisão humana por campo
 
-O sistema SHALL exigir uma escolha explícita entre `APPROVED`, `NEEDS_REVISION` ou `REJECTED` para cada campo da proposta na primeira triagem, acompanhado de comentário quando exigido pelo contrato. Em uma reanálise após correção, o sistema MUST exigir um novo parecer somente para os campos alterados pelo proponente, preservando os pareceres históricos dos demais campos. Nenhum resultado MUST ser selecionado implicitamente. Os pareceres exigidos na rodada MUST ser persistidos como parte da confirmação da decisão final, sem uma ação separada de salvamento, e a transição do processo MUST ocorrer somente depois que a API confirmar sua gravação.
+O sistema SHALL exigir uma escolha explícita entre `APPROVED`, `NEEDS_REVISION` ou `REJECTED` para cada campo obrigatório da proposta na primeira triagem, acompanhado de comentário quando exigido pelo contrato. Campos opcionais MUST ser identificados visualmente, MAY receber parecer e MUST NOT bloquear a confirmação quando permanecerem sem parecer. Em uma reanálise após correção, o sistema MUST exigir um novo parecer somente para os campos obrigatórios alterados pelo proponente, preservando os pareceres históricos dos demais campos. Nenhum resultado MUST ser selecionado implicitamente. Os pareceres exigidos e os pareceres opcionais preenchidos na rodada MUST ser persistidos como parte da confirmação da decisão final, sem uma ação separada de salvamento, e a transição do processo MUST ocorrer somente depois que a API confirmar sua gravação.
 
 Quando houver uma correção em andamento, o sistema SHALL comparar os valores atuais persistidos no formulário com a última versão submetida e indicar em cada campo da triagem se ele já foi revisado pelo proponente. Depois do reenvio, quando o formulário atual não possuir diferenças pendentes, o sistema SHALL comparar as duas versões submetidas mais recentes para preservar a indicação dos campos corrigidos.
 
@@ -57,20 +57,41 @@ Quando houver uma correção em andamento, o sistema SHALL comparar os valores a
 - **WHEN** a pessoa ainda não escolheu um resultado para um campo
 - **THEN** o seletor apresenta Registrar decisão e não assume aprovação ou outro parecer
 
-#### Scenario: Todos os campos são analisados
+#### Scenario: Todos os campos obrigatórios são analisados
 
-- **WHEN** a pessoa escolhe um resultado válido para cada campo, informa os comentários aplicáveis e confirma a decisão final
-- **THEN** o sistema grava todos os pareceres antes da decisão sem alterar os valores submetidos pelo proponente
+- **WHEN** a pessoa escolhe um resultado válido para cada campo obrigatório, informa os comentários aplicáveis e confirma a decisão final
+- **THEN** o sistema grava os pareceres preenchidos antes da decisão sem alterar os valores submetidos pelo proponente
+
+#### Scenario: Campo opcional permanece sem parecer
+
+- **WHEN** um campo opcional não recebe parecer e todos os campos obrigatórios da rodada estão válidos
+- **THEN** o sistema identifica o campo como Opcional e não impede a confirmação da decisão
+
+#### Scenario: Campo opcional recebe parecer
+
+- **WHEN** a pessoa registra um parecer em um campo opcional
+- **THEN** o sistema valida e persiste esse parecer junto aos demais
 
 #### Scenario: Revisão incompleta
 
-- **WHEN** algum campo não possui resultado explícito ou um resultado exige comentário e ele não foi informado
+- **WHEN** algum campo obrigatório não possui resultado explícito ou um parecer preenchido exige comentário e ele não foi informado
 - **THEN** o sistema impede a confirmação da decisão final, leva a pessoa ao campo pendente e indica a informação necessária
 
 #### Scenario: Reanálise de campos corrigidos
 
 - **WHEN** a BraCVAM analisa uma nova versão que possui campos alterados pelo proponente
 - **THEN** o sistema exige um novo parecer somente para esses campos e não bloqueia a decisão por campos inalterados da proposta
+
+#### Scenario: Pareceres dos campos não alterados são preservados
+
+- **WHEN** uma submissão retorna à BraCVAM depois que o proponente corrige somente parte do formulário
+- **THEN** o sistema recupera das versões persistidas o parecer mais recente de cada campo não alterado, mantém sua decisão e comentário visíveis e permite que a BraCVAM edite e avalie novamente qualquer campo
+- **AND** os campos corrigidos permanecem sem decisão da nova rodada até serem analisados novamente
+
+#### Scenario: Histórico de pareceres não pode ser carregado
+
+- **WHEN** a consulta das versões anteriores falha ou retorna conteúdo incompatível
+- **THEN** o sistema comunica que a análise não pôde ser carregada e não apresenta os pareceres anteriores como ausentes
 
 #### Scenario: Gravação dos pareceres falha
 
@@ -111,7 +132,7 @@ O sistema SHALL permitir classificar cada critério automático como concordante
 
 ### Requirement: Decisão final da triagem
 
-O sistema SHALL exigir a escolha explícita do resultado final e uma justificativa antes de concluir a triagem. A confirmação MUST permanecer indisponível enquanto qualquer campo exigido na rodada estiver sem parecer válido. Depois de persistir os pareceres exigidos, a decisão `APPROVED` MUST mover o processo para `PLANNING`, `NEEDS_REVISION` MUST devolver o processo com ao menos um parecer corrigível persistido para `SUBMISSION` e `REJECTED` MUST movê-lo para `CLOSED`.
+O sistema SHALL exigir a escolha explícita do resultado final e uma justificativa antes de concluir a triagem. A confirmação MUST permanecer indisponível enquanto qualquer campo obrigatório exigido na rodada estiver sem parecer válido, mas MUST NOT ser bloqueada por campo opcional sem parecer. Depois de persistir os pareceres preenchidos, a decisão `APPROVED` MUST mover o processo para `PLANNING`, `NEEDS_REVISION` MUST devolver o processo com ao menos um parecer corrigível persistido para `SUBMISSION` e `REJECTED` MUST movê-lo para `CLOSED`.
 
 #### Scenario: Proposta aprovada
 

@@ -82,10 +82,20 @@ export async function listCompositionIndex(
     }
   }
   if (processIds.size === 0) return { ok: true, data: [] };
-  const processResults = await Promise.all(Array.from(processIds, (processId) => getProcess(accessToken, processId)));
+  const processIdList = Array.from(processIds);
+  const [processResults, participantResults] = await Promise.all([
+    Promise.all(processIdList.map((processId) => getProcess(accessToken, processId))),
+    Promise.all(processIdList.map((processId) => listParticipants(accessToken, processId))),
+  ]);
   const failedProcess = processResults.find((result) => !result.ok);
   if (failedProcess && !failedProcess.ok) return failedProcess;
+  const failedParticipants = participantResults.find((result) => !result.ok);
+  if (failedParticipants && !failedParticipants.ok) return failedParticipants;
   const processes = processResults.flatMap((result) => result.ok ? [result.data] : []);
+  const participantsByProcess = new Map(processIdList.map((processId, index) => [
+    processId,
+    participantResults[index]?.ok ? participantResults[index].data : [],
+  ]));
 
   const byProcessTasks = new Map<string, ProcessTask[]>();
   for (const task of tasks.data) {
@@ -99,6 +109,7 @@ export async function listCompositionIndex(
     data: processes
       .map((process) => ({
         process,
+        proponent: participantsByProcess.get(process.id)?.find((participant) => participant.active && participant.role_key === "proponent")?.user ?? null,
         roles: canManageParticipants ? ["bracvam", ...rolesForProcess(relevantScopes, process.id)] : rolesForProcess(relevantScopes, process.id),
         actionableTasks: (byProcessTasks.get(process.id) ?? []).filter(
           (task) => task.status === "READY" && task.can_act,

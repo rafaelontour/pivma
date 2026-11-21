@@ -89,6 +89,7 @@ export type ProcessParticipantActionInput = ProcessParticipantAssignmentInput | 
 
 export type ProcessCompositionIndexItem = {
   process: ProcessInstance;
+  proponent: ProcessParticipant["user"] | null;
   roles: string[];
   actionableTasks: ProcessTask[];
 };
@@ -112,9 +113,7 @@ export type ProcessCompositionInviteInput = {
 export type ProcessCompositionWorkspaceProps = { processId?: string };
 
 export type ProcessCompositionInviteFormProps = {
-  processId: string;
   role: ProcessParticipantRole;
-  participants: ProcessParticipant[];
   laboratories: ProcessLaboratory[];
   invites: ProcessParticipantInvite[];
   busy: boolean;
@@ -123,7 +122,6 @@ export type ProcessCompositionInviteFormProps = {
 };
 
 export type ProcessCompositionRoleCardProps = {
-  processId: string;
   title: string;
   description: string;
   role: ProcessParticipantRole;

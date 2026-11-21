@@ -30,6 +30,16 @@
 - [x] 4.3 Implementar a seleção de uma conta existente ou o convite por e-mail para a designação `sponsor`.
 - [x] 4.4 Reconciliar a coleção após cada designação sem substituir integrantes existentes nem simular conclusão da etapa.
 - [x] 4.5 Deixar claro na interface que o grupo gestor é formado por usuários comuns vinculados ao processo, sem área ou conta coletiva separada.
+- [x] 4.6 Encerrar o estado de carregamento da busca em troca de consulta, cancelamento ou demora, e informar resultados vazios e falhas.
+- [x] 4.7 Localizar contas ativas pelo nome completo em toda busca, mesmo quando a pesquisa remota retornar coincidências por nome de acesso ou e-mail.
+- [x] 4.8 Não filtrar os resultados da busca por perfil, cargo local ou participação existente; validar a designação somente na confirmação pela API.
+- [x] 4.9 Conectar o seletor à rota interna `/api/users` comprovada com uma consulta autenticada por nome na API real.
+- [x] 4.10 Mostrar as contas retornadas logo abaixo da caixa de busca para que os resultados não dependam de abrir um seletor fechado.
+- [x] 4.11 Organizar o modo de inclusão e campos auxiliares à esquerda e a pesquisa, os cartões de pessoas e a confirmação à direita, com resultados visuais mais claros.
+- [x] 4.12 Reduzir a largura da coluna de modo e expandir a coluna de pesquisa e resultados.
+- [x] 4.13 Abrir o formulário no modo de busca de conta existente para exibir a pesquisa imediatamente.
+- [x] 4.14 Limpar consulta, seleção e resultados ao alternar o modo de convite/designação.
+- [x] 4.15 Remover borda, fundo e recuo extra do seletor de modo para alinhar o texto ao formulário.
 
 ## 5. Convites e consulta de participantes
 
@@ -45,6 +55,7 @@
 - [x] 6.2 Atualizar Submissões e Kanban para refletir grupo gestor, patrocinador, convites e etapas sem oferecer controles a sessões não autorizadas.
 - [x] 6.3 Adicionar simultaneamente aos dicionários `pt-BR` e `en` títulos, etapas, cargos, campos, estados de convite e entrega, validações, toasts e nomes acessíveis.
 - [x] 6.4 Preservar nomes e e-mails recebidos do backend e localizar datas, contagens e rótulos de cargos conforme o locale ativo.
+- [x] 6.5 Identificar nos cartões da listagem de composição o proponente ativo retornado pela API, sem inferir ou inventar uma pessoa quando a designação estiver ausente.
 
 ## 7. Acessibilidade e verificação
 
