@@ -36,6 +36,7 @@ export function CompositionWorkspace({ processId }: ProcessCompositionWorkspaceP
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [history, setHistory] = useState<ProcessParticipantHistoryItem[] | null>(null);
   const [selectedParticipant, setSelectedParticipant] = useState<ProcessParticipant | null>(null);
+  const [activeCompositionTab, setActiveCompositionTab] = useState<ProcessParticipantRole>("group_manager");
   const isSubmittingRef = useRef(false);
   const participantTriggerRef = useRef<HTMLElement | null>(null);
 
@@ -231,38 +232,74 @@ export function CompositionWorkspace({ processId }: ProcessCompositionWorkspaceP
 
       {compositionState.isStale && <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900" role="status">{t("participantComposition.errors.stale")}</p>}
 
-      <ol aria-label={t("participantComposition.timeline.title")} className="grid gap-3 md:grid-cols-2">
-        {(["group_manager", "sponsor"] as const).map((role, index) => {
-          const taskKey = role === "group_manager" ? "assign_group_manager" : "assign_sponsor";
-          const task = snapshot.tasks.find((item) => item.activity_key === taskKey);
-          const done = task?.status === "COMPLETED" || snapshot.participants.some((participant) => participant.role_key === role && participant.active);
-          const current = roleCanAct(snapshot, role);
-          return <li className={`rounded-xl border p-4 ${current ? "border-teal-500 bg-teal-50" : done ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-white"}`} key={`step-${role}`}><p className="text-xs font-bold uppercase tracking-wide text-slate-500">{t("participantComposition.timeline.step", { number: index + 1 })}</p><p className="mt-1 font-bold text-slate-900">{t(`participantComposition.roles.${role}.title`)}</p><p className="mt-1 text-sm text-slate-600">{t(done ? "participantComposition.timeline.done" : current ? "participantComposition.timeline.current" : "participantComposition.timeline.waiting")}</p></li>;
-        })}
-      </ol>
-      <div className="grid gap-5">
-        {(["group_manager", "sponsor"] as const).map((role) => {
-          const roleCanAssign = role === "sponsor" ? canAssignSponsor
-            : role === "group_manager" ? canAssignGroupManager
-              : Boolean(snapshot.capabilities.canManageParticipants || snapshot.capabilities.canAssignLaboratories);
-          return <CompositionRoleCard
-            key={role}
-            description={t(`participantComposition.roles.${role}.description`)}
-            invites={snapshot.invites}
-            laboratories={snapshot.laboratories}
-            onSubmit={invite}
-            participants={snapshot.participants}
-            role={role}
-            showForm={roleCanAssign}
-            title={t(`participantComposition.roles.${role}.title`)}
-            busy={isSubmitting}
-            onAssign={assignExisting}
-            onParticipantAction={participantAction}
-            onCompleteRole={completeRole}
-            canManage={Boolean(snapshot.capabilities.canManageParticipants || snapshot.capabilities.canAssignLaboratories)}
-            onViewParticipant={openParticipant}
-          />;
-        })}
+      <div>
+        <div aria-label={t("participantComposition.timeline.title")} className="flex gap-2 overflow-x-auto border-b border-slate-200" role="tablist">
+          {(["group_manager", "sponsor"] as const).map((role, index) => {
+            const taskKey = role === "group_manager" ? "assign_group_manager" : "assign_sponsor";
+            const task = snapshot.tasks.find((item) => item.activity_key === taskKey);
+            const done = task?.status === "COMPLETED" || snapshot.participants.some((participant) => participant.role_key === role && participant.active);
+            const current = roleCanAct(snapshot, role);
+            const selected = activeCompositionTab === role;
+            return <button
+              aria-controls={`composition-panel-${role}`}
+              aria-selected={selected}
+              className={`min-w-fit border-b-2 px-4 py-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-teal-600 ${selected ? "border-teal-700 bg-teal-50 text-teal-950" : "border-transparent text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}
+              id={`composition-tab-${role}`}
+              key={role}
+              onClick={() => setActiveCompositionTab(role)}
+              onKeyDown={(event) => {
+                if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+                event.preventDefault();
+                const nextRole = event.key === "Home" ? "group_manager"
+                  : event.key === "End" ? "sponsor"
+                    : event.key === "ArrowRight" ? role === "group_manager" ? "sponsor" : "group_manager"
+                      : role === "sponsor" ? "group_manager" : "sponsor";
+                setActiveCompositionTab(nextRole);
+                document.getElementById(`composition-tab-${nextRole}`)?.focus();
+              }}
+              role="tab"
+              tabIndex={selected ? 0 : -1}
+              type="button"
+            >
+              <span className="block text-xs font-bold uppercase tracking-wide text-slate-500">{t("participantComposition.timeline.step", { number: index + 1 })}</span>
+              <span className="mt-0.5 block font-bold">{t(`participantComposition.roles.${role}.title`)}</span>
+              <span className={`mt-1 block text-xs ${done ? "text-emerald-700" : current ? "text-teal-800" : "text-slate-500"}`}>{t(done ? "participantComposition.timeline.done" : current ? "participantComposition.timeline.current" : "participantComposition.timeline.waiting")}</span>
+            </button>;
+          })}
+        </div>
+        <div className="pt-5">
+          {(["group_manager", "sponsor"] as const).map((role) => {
+            const roleCanAssign = role === "sponsor" ? canAssignSponsor
+              : role === "group_manager" ? canAssignGroupManager
+                : Boolean(snapshot.capabilities.canManageParticipants || snapshot.capabilities.canAssignLaboratories);
+            return <section
+              aria-labelledby={`composition-tab-${role}`}
+              className="grid gap-5"
+              hidden={activeCompositionTab !== role}
+              id={`composition-panel-${role}`}
+              key={role}
+              role="tabpanel"
+              tabIndex={0}
+            >
+              <CompositionRoleCard
+                description={t(`participantComposition.roles.${role}.description`)}
+                invites={snapshot.invites}
+                laboratories={snapshot.laboratories}
+                onSubmit={invite}
+                participants={snapshot.participants}
+                role={role}
+                showForm={roleCanAssign}
+                title={t(`participantComposition.roles.${role}.title`)}
+                busy={isSubmitting}
+                onAssign={assignExisting}
+                onParticipantAction={participantAction}
+                onCompleteRole={completeRole}
+                canManage={Boolean(snapshot.capabilities.canManageParticipants || snapshot.capabilities.canAssignLaboratories)}
+                onViewParticipant={openParticipant}
+              />
+            </section>;
+          })}
+        </div>
       </div>
 
       {selectedParticipant && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/50 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) closeParticipant(); }}><section aria-labelledby="participant-profile-title" aria-modal="true" className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl" role="dialog"><h3 className="text-lg font-bold text-slate-900" id="participant-profile-title">{selectedParticipant.user.full_name || selectedParticipant.user.username}</h3><dl className="mt-4 grid gap-3 text-sm"><div><dt className="font-semibold text-slate-500">{t("participantComposition.profile.role")}</dt><dd className="mt-1 text-slate-900">{t(`participantComposition.roleLabels.${selectedParticipant.role_key}`, { defaultValue: selectedParticipant.role_key })}</dd></div><div><dt className="font-semibold text-slate-500">{t("participantComposition.profile.assignedAt")}</dt><dd className="mt-1 text-slate-900">{new Intl.DateTimeFormat(i18n.resolvedLanguage, { dateStyle: "medium", timeStyle: "short" }).format(new Date(selectedParticipant.assigned_at))}</dd></div></dl><button autoFocus className="mt-6 min-h-10 rounded-lg bg-teal-700 px-4 text-sm font-bold text-white" onClick={closeParticipant} type="button">{t("common.close")}</button></section></div>}

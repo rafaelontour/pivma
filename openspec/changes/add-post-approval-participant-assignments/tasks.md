@@ -40,6 +40,11 @@
 - [x] 4.13 Abrir o formulário no modo de busca de conta existente para exibir a pesquisa imediatamente.
 - [x] 4.14 Limpar consulta, seleção e resultados ao alternar o modo de convite/designação.
 - [x] 4.15 Remover borda, fundo e recuo extra do seletor de modo para alinhar o texto ao formulário.
+- [x] 4.16 Organizar grupo gestor e patrocinador em abas numeradas, exibindo uma etapa por vez e permitindo alternância acessível entre elas.
+- [x] 4.17 Informar ao proponente que a BraCVAM está definindo a composição e só liberar sua consulta quando as tarefas de grupo gestor e patrocinador estiverem concluídas.
+- [x] 4.18 Encaminhar ao backend de convites a origem HTTP(S) do site que iniciou a solicitação, em vez da origem da própria API.
+- [x] 4.19 Adicionar aos detalhes dos processos em andamento um botão para abrir o histórico da submissão.
+- [x] 4.20 Encaminhar à designação direta o cookie autenticado e a origem HTTP(S) da interface ao chamar a API externa.
 
 ## 5. Convites e consulta de participantes
 

@@ -129,4 +129,5 @@ export type TriageMessageProps = {
 export type TriageTimelineViewProps = {
   timeline: TriageTimeline;
   onClose: () => void;
+  closeLabel: string;
 };

@@ -59,7 +59,7 @@ export type ProcessCardProps = {
   item: ProcessKanbanItem;
   onAnalyze: (process: ProcessInstance) => void;
   onDelete: (process: ProcessInstance) => void;
-  onViewDetails: (process: ProcessInstance) => void;
+  onViewDetails: (process: ProcessInstance, stage: ProcessKanbanItem["stage"]) => void;
   isDeleting: boolean;
 };
 
@@ -83,9 +83,9 @@ export type ProcessAnalysisDialogProps = {
 
 export type ProcessDetailsState =
   | { kind: "closed" }
-  | { kind: "loading"; process: ProcessInstance }
-  | { kind: "error"; process: ProcessInstance; message: string }
-  | { kind: "ready"; process: ProcessInstance; composition: ProcessCompositionSnapshot | null; structure: ApiRecord | null; operationsPermissions: ApiRecord | null };
+  | { kind: "loading"; process: ProcessInstance; stage: ProcessKanbanItem["stage"] }
+  | { kind: "error"; process: ProcessInstance; stage: ProcessKanbanItem["stage"]; message: string }
+  | { kind: "ready"; process: ProcessInstance; stage: ProcessKanbanItem["stage"]; composition: ProcessCompositionSnapshot | null; structure: ApiRecord | null; operationsPermissions: ApiRecord | null };
 
 export type ProcessDetailsDialogProps = {
   state: Exclude<ProcessDetailsState, { kind: "closed" }>;

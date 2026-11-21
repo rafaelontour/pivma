@@ -8,6 +8,8 @@ Permitir que a BraCVAM componha, após a aprovação, o grupo gestor e o patroci
 
 O sistema SHALL levar a pessoa autorizada da BraCVAM à composição do processo depois da aprovação da submissão e SHALL apresentar uma linha do tempo retomável. A linha do tempo MUST ordenar **Definir grupo gestor** antes de **Definir patrocinador** e MUST obter o estado de cada etapa da API.
 
+A interface MUST apresentar cada etapa em uma aba numerada, com **Grupo gestor** primeiro e **Patrocinador** em seguida, exibindo somente o painel da aba selecionada. A troca entre abas MUST preservar os dados já preenchidos e permitir navegação por teclado.
+
 #### Scenario: Aprovação abre a composição
 
 - **WHEN** a BraCVAM aprova uma submissão e a API aceita a decisão
@@ -22,6 +24,11 @@ O sistema SHALL levar a pessoa autorizada da BraCVAM à composição do processo
 
 - **WHEN** a etapa do grupo gestor ainda não satisfaz as condições publicadas pela API
 - **THEN** o sistema mantém a definição do patrocinador identificada como etapa posterior sem simular sua liberação
+
+#### Scenario: Navegação entre etapas da composição
+
+- **WHEN** a pessoa autorizada alterna entre as abas da composição
+- **THEN** o sistema mostra somente o painel da etapa selecionada, preserva os dados preenchidos nos demais painéis e mantém a ordem numerada do grupo gestor antes do patrocinador
 
 ### Requirement: Grupo gestor formado por participantes do processo
 
@@ -42,6 +49,20 @@ O sistema SHALL representar o grupo gestor como uma coleção de uma ou mais con
 - **WHEN** existe ao menos um integrante ativo e a BraCVAM solicita a conclusão da etapa
 - **THEN** o sistema usa a operação autoritativa da API e atualiza a linha do tempo conforme o resultado retornado
 
+### Requirement: Visibilidade da composição para o proponente
+
+A interface de acompanhamento do proponente MUST informar que a BraCVAM está definindo os grupos enquanto as tarefas de grupo gestor e patrocinador não estiverem concluídas. A interface MUST NOT liberar a consulta da composição parcial e MUST disponibilizar a composição quando ambas as tarefas estiverem concluídas.
+
+#### Scenario: Composição ainda em definição
+
+- **WHEN** pelo menos uma das tarefas de definição do grupo gestor ou do patrocinador ainda não está concluída
+- **THEN** o proponente vê uma mensagem de que a BraCVAM está definindo os grupos e que a composição será exibida quando estiver pronta
+
+#### Scenario: Composição concluída
+
+- **WHEN** as tarefas do grupo gestor e do patrocinador estão concluídas
+- **THEN** o proponente pode abrir e consultar a composição do processo
+
 ### Requirement: Seleção de usuários existentes
 
 O sistema SHALL permitir que a BraCVAM pesquise contas ativas da plataforma pelo nome completo, nome de usuário ou e-mail e selecione uma identidade persistida para o grupo gestor ou para o patrocinador. A confirmação MUST permanecer indisponível enquanto nenhum resultado válido estiver selecionado e MUST NOT tratar texto livre como identidade.
@@ -56,6 +77,11 @@ Quando a pessoa alternar entre convite e designação de conta existente, o sist
 
 - **WHEN** a pesquisa retorna uma conta ativa e a BraCVAM seleciona essa conta
 - **THEN** o sistema permite confirmar a designação usando o identificador persistido da pessoa
+
+#### Scenario: Designação autenticada com origem da interface
+
+- **WHEN** a BraCVAM confirma a designação de uma conta existente
+- **THEN** o servidor encaminha à API externa o cookie da sessão autenticada e a origem HTTP(S) da interface que iniciou a solicitação
 
 #### Scenario: Conta já possui cargo no processo
 
@@ -87,12 +113,17 @@ Quando a pessoa alternar entre convite e designação de conta existente, o sist
 
 ### Requirement: Convite por e-mail
 
-O sistema SHALL permitir convidar para `group_manager` ou `sponsor` uma pessoa não selecionada no diretório, usando um e-mail válido e o canal de entrega por e-mail. O sistema MUST distinguir o estado do convite da situação de sua entrega e MUST NOT revelar, por respostas diferentes, se o endereço já pertence a uma conta.
+O sistema SHALL permitir convidar para `group_manager` ou `sponsor` uma pessoa não selecionada no diretório, usando um e-mail válido e o canal de entrega por e-mail. O sistema MUST encaminhar ao backend a origem HTTP(S) do site que iniciou a solicitação, para validação contra as origens confiáveis. O sistema MUST distinguir o estado do convite da situação de sua entrega e MUST NOT revelar, por respostas diferentes, se o endereço já pertence a uma conta.
 
 #### Scenario: Convite criado para entrega por e-mail
 
 - **WHEN** a BraCVAM informa um e-mail válido, escolhe o cargo e confirma o convite
 - **THEN** o sistema solicita o envio por e-mail, confirma a criação e mostra o estado de entrega retornado pela API
+
+#### Scenario: Convite validado pela origem do site
+
+- **WHEN** a BraCVAM envia um convite pela interface do site
+- **THEN** o sistema encaminha a origem HTTP(S) desse site ao backend para que ele a valide, sem substituir pela origem da API
 
 #### Scenario: Convite permanece pendente
 

@@ -18,3 +18,8 @@ O sistema SHALL apresentar na consulta somente leitura do processo o grupo gesto
 
 - **WHEN** a API atualiza tarefas ou processo após uma designação ou aceite
 - **THEN** a próxima revalidação atualiza os detalhes e o posicionamento conforme o estado retornado pela API
+
+#### Scenario: Histórico da submissão em andamento
+
+- **WHEN** uma pessoa abre os detalhes de uma submissão na coluna **Em andamento**
+- **THEN** o Kanban oferece **Ver histórico** e exibe a linha do tempo da submissão após a consulta autorizada à API

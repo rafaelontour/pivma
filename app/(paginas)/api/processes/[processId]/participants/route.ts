@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { authorizeProcessComposition } from "@/app/(paginas)/api/_shared/process-composition-authorization";
+import { getRequestOrigin } from "@/app/(paginas)/api/_shared/request-origin";
 import { internalApiErrorResponse } from "@/app/(paginas)/api/_shared/responses";
 import { isProcessCompositionUuid, validateProcessParticipantAssignment } from "@/components/participacao-processo";
 import { canActOnAssignment, createProcessParticipant, listProcessParticipantHistory, listProcessTasks } from "@/services/ParticipacaoProcesso";
@@ -39,7 +40,9 @@ export async function POST(request: Request, context: ProcessCompositionRouteCon
       return forwardError(user.status, user.code, user.message, authorization.cookieStore);
     }
   }
-  const result = await createProcessParticipant(authorization.accessToken, processId, parsed.input);
+  const origin = getRequestOrigin(request);
+  if (!origin) return NextResponse.json({ code: "INVALID_ORIGIN", message: "A origem da solicitação não é válida." }, { status: 403 });
+  const result = await createProcessParticipant(authorization.accessToken, processId, parsed.input, origin);
   if (!result.ok) return forwardError(result.status, result.code, result.message, authorization.cookieStore);
   return NextResponse.json(result.data, { status: 201 });
 }

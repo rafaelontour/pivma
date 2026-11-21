@@ -2,7 +2,7 @@ import "server-only";
 
 import { isAxiosError } from "axios";
 import { tryit } from "radash";
-import { getApiOrigin, http } from "./Http";
+import { http } from "./Http";
 import { normalizeProcessInstance } from "./Processo";
 import type { CurrentSessionUser } from "@/types/Autenticacao";
 import type {
@@ -123,6 +123,7 @@ export async function createProcessParticipantInvite(
   accessToken: string,
   processId: string,
   input: ProcessCompositionInviteInput,
+  origin: string,
 ): Promise<ServiceResult<ProcessParticipantInvite>> {
   const [error, response] = await tryit(() => http.post<unknown>(
     `/processes/${processId}/participants/invites`,
@@ -132,7 +133,7 @@ export async function createProcessParticipantInvite(
       ...(input.laboratory_id ? { laboratory_id: input.laboratory_id } : {}),
       channel: "email",
     },
-    { headers: { ...authHeaders(accessToken), Origin: getApiOrigin() } },
+    { headers: { ...authHeaders(accessToken), Origin: origin } },
   ))();
   if (error) return getServiceError(error);
 
@@ -146,10 +147,15 @@ export async function createProcessParticipant(
   accessToken: string,
   processId: string,
   input: ProcessParticipantAssignmentInput,
+  origin: string,
 ): Promise<ServiceResult<ProcessParticipant>> {
-  const result = await mutate<unknown>(accessToken, "post", `/processes/${processId}/participants`, input);
-  if (!result.ok) return result;
-  const participant = normalizeParticipant(result.data);
+  const [error, response] = await tryit(() => http.post<unknown>(
+    `/processes/${processId}/participants`,
+    input,
+    { headers: { ...authHeaders(accessToken), Origin: origin } },
+  ))();
+  if (error) return getServiceError(error);
+  const participant = normalizeParticipant(response.data);
   return participant ? { ok: true, data: participant } : { ok: false };
 }
 

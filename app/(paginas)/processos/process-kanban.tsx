@@ -8,11 +8,12 @@ import type { TFunction } from "i18next";
 import { toast } from "sonner";
 import { useAccessibleDialog } from "@/components/accessible-dialog";
 import { getLocalizedApiError } from "@/i18n/errors";
-import { TriageWorkspace } from "@/app/(paginas)/triagem/triage-workspace";
+import { TriageTimelineView, TriageWorkspace } from "@/app/(paginas)/triagem/triage-workspace";
 import {
   AlertTriangle,
   Eye,
   FileStack,
+  History,
   LoaderCircle,
   RefreshCw,
   Trash2,
@@ -36,6 +37,7 @@ import type { ProcessInstance, ProcessList } from "@/types/Processo";
 import type { ProcessTask, ProcessTaskList } from "@/types/Tarefa";
 import type { ApiRecord } from "@/types/Servico";
 import type { ProcessCompositionSnapshot } from "@/types/ParticipacaoProcesso";
+import type { TriageTimeline } from "@/types/Triagem";
 
 const PROCESS_PAGE_SIZE = 100;
 const PAGE_BATCH_SIZE = 4;
@@ -187,11 +189,11 @@ export function ProcessKanban() {
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [details.kind]);
 
-  async function openDetails(process: ProcessInstance) {
+  async function openDetails(process: ProcessInstance, stage: ProcessKanbanItem["stage"]) {
     detailsControllerRef.current?.abort();
     const controller = new AbortController();
     detailsControllerRef.current = controller;
-    setDetails({ kind: "loading", process });
+    setDetails({ kind: "loading", process, stage });
 
     try {
       const response = await fetch(`/api/processes/${process.id}`, {
@@ -208,6 +210,7 @@ export function ProcessKanban() {
         setDetails({
           kind: "error",
           process,
+          stage,
           message: getApiMessage(
             payload,
             t("processes.detailsFailed"),
@@ -244,12 +247,13 @@ export function ProcessKanban() {
       } catch {
         operationsPermissions = null;
       }
-      if (!controller.signal.aborted) setDetails({ kind: "ready", process: payload, composition, structure, operationsPermissions });
+      if (!controller.signal.aborted) setDetails({ kind: "ready", process: payload, stage, composition, structure, operationsPermissions });
     } catch {
       if (!controller.signal.aborted) {
         setDetails({
           kind: "error",
           process,
+          stage,
           message: t("processes.detailsFailed"),
         });
       }
@@ -446,7 +450,7 @@ export function ProcessKanban() {
                       onAnalyze={setAnalysisProcess}
                       onDelete={(process) => setDeletion({ kind: "confirming", process })}
                       onViewDetails={(selectedProcess) =>
-                        void openDetails(selectedProcess)
+                        void openDetails(selectedProcess, item.stage)
                       }
                     />
                   ))
@@ -460,7 +464,7 @@ export function ProcessKanban() {
       {details.kind !== "closed" && (
         <ProcessDetailsDialog
           onClose={closeDetails}
-          onRetry={() => void openDetails(details.process)}
+          onRetry={() => void openDetails(details.process, details.stage)}
           state={details}
         />
       )}
@@ -538,7 +542,7 @@ function ProcessCard({ item, isDeleting, onAnalyze, onDelete, onViewDetails }: P
         <button
           aria-label={t("processes.viewDetailsLabel", { code: process.code, title: process.title })}
           className="inline-flex min-h-9 w-full items-center justify-center gap-1.5 rounded-lg border border-teal-700/25 bg-teal-50 px-2.5 py-2 text-xs font-bold text-teal-800 shadow-sm outline-none transition hover:border-teal-600 hover:bg-teal-100 hover:text-teal-950 focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2"
-          onClick={() => onViewDetails(process)}
+          onClick={() => onViewDetails(process, item.stage)}
           type="button"
         >
           <Eye aria-hidden="true" className="size-4" />
@@ -619,8 +623,32 @@ function ProcessDetailsDialog({
   onRetry,
 }: ProcessDetailsDialogProps) {
   const { i18n, t } = useTranslation();
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [timeline, setTimeline] = useState<TriageTimeline | null>(null);
   const locale = i18n.resolvedLanguage;
   const isTerminal = isTerminalProcessStatus(state.process.status);
+
+  async function openHistory() {
+    if (state.kind !== "ready" || isLoadingHistory) return;
+    setIsLoadingHistory(true);
+    setHistoryError(null);
+    try {
+      const response = await fetch(`/api/processes/${state.process.id}/timeline`, { cache: "no-store" });
+      const payload = await response.json().catch(() => null) as unknown;
+      if (!response.ok || !isTriageTimeline(payload, state.process.id)) {
+        setHistoryError(getApiMessage(payload, t("processes.historyFailed"), t));
+        return;
+      }
+      setTimeline(payload);
+      setIsHistoryOpen(true);
+    } catch {
+      setHistoryError(t("processes.historyFailed"));
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  }
 
   return (
     <div
@@ -629,8 +657,8 @@ function ProcessDetailsDialog({
       className="fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4 backdrop-blur-[2px]"
       role="dialog"
     >
-      <div className="max-h-[90dvh] w-full max-w-xl overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-2xl">
-        <header className="sticky top-0 flex items-start justify-between gap-4 border-b border-slate-200 bg-white px-5 py-4">
+      <div className={`max-h-[90dvh] w-full overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-2xl ${isHistoryOpen ? "max-w-5xl" : "max-w-xl"}`}>
+        <header className="sticky top-0 z-20 flex items-start justify-between gap-4 border-b border-slate-200 bg-white px-5 py-4">
           <div>
             <p className="font-mono text-xs font-bold uppercase tracking-wide text-teal-700">
               {state.process.code}
@@ -675,10 +703,11 @@ function ProcessDetailsDialog({
             <>
             <dl className="grid gap-4 sm:grid-cols-2">
               <DetailItem label={t("processes.template")} value={state.process.template_key} />
-              <DetailItem
-                label={t("processes.flowVersion")}
-                value={String(state.process.version_number)}
-              />
+              <div className="rounded-xl bg-slate-50 p-3">
+                <dt className="text-xs font-bold uppercase tracking-wide text-slate-500">{t("processes.flowVersion")}</dt>
+                <dd className="mt-1 break-words text-sm font-semibold text-slate-800">{state.process.version_number}</dd>
+                {state.stage === "ongoing" && !isHistoryOpen && <div className="mt-3"><button className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-teal-700 bg-white px-3 text-xs font-bold text-teal-800 outline-none transition hover:bg-teal-50 focus-visible:ring-2 focus-visible:ring-teal-500 disabled:cursor-wait disabled:opacity-60" disabled={isLoadingHistory} onClick={() => void openHistory()} type="button">{isLoadingHistory ? <LoaderCircle aria-hidden="true" className="size-4 animate-spin" /> : <History aria-hidden="true" className="size-4" />}{t("processes.viewHistory")}</button>{historyError && <p className="mt-2 text-xs text-rose-800" role="alert">{historyError}</p>}</div>}
+              </div>
               <DetailItem
                 label={t("processes.start")}
                 value={formatOptionalDateTime(state.process.started_at, locale, t("dynamicForm.notProvided"))}
@@ -700,6 +729,7 @@ function ProcessDetailsDialog({
                 </div>
               )}
             </dl>
+            {isHistoryOpen && timeline ? <TriageTimelineView closeLabel={t("processes.backToDetails")} onClose={() => setIsHistoryOpen(false)} timeline={timeline} /> : <>
             {state.structure && <section className="mt-6 grid gap-2 border-t border-slate-200 pt-5" aria-labelledby="process-structure-status"><div className="flex flex-wrap items-center justify-between gap-3"><h3 className="text-base font-bold text-slate-900" id="process-structure-status">{t("processOperations.sections.structure")}</h3><div className="flex gap-3"><Link className="text-xs font-bold text-teal-800 underline underline-offset-4" href={`/processos/${state.process.id}/amostras`}>{t("processOperations.actions.openWorkspace")}</Link>{state.operationsPermissions?.canRegisterReceipt === true && <Link className="text-xs font-bold text-teal-800 underline underline-offset-4" href={`/processos/${state.process.id}/recebimento-amostras`}>{t("processOperations.sections.receipt")}</Link>}</div></div><p className="text-sm text-slate-700">{t("processOperations.structureStatus", { status: String(state.structure.status ?? "") })}{state.structure.run_number != null ? ` · ${t("processOperations.runNumber", { run: state.structure.run_number })}` : ""}{state.structure.blocked_reason ? ` · ${String(state.structure.blocked_reason)}` : ""}</p>{Array.isArray(state.structure.decisions) && state.structure.decisions[0] && isRecord(state.structure.decisions[0]) && <p className="text-xs text-slate-600">{t("processOperations.latestDecision", { outcome: t(`processOperations.outcomes.${String(state.structure.decisions[0].outcome ?? "").toLowerCase()}`), date: typeof state.structure.decisions[0].decided_at === "string" ? formatOptionalDateTime(state.structure.decisions[0].decided_at, locale, t("dynamicForm.notProvided")) : t("dynamicForm.notProvided") })}</p>}</section>}
             {state.composition && (
               <section aria-labelledby="process-composition-summary" className="mt-6 border-t border-slate-200 pt-5">
@@ -710,6 +740,7 @@ function ProcessDetailsDialog({
                 {state.composition.tasks.some((task) => task.status === "READY") && <p className="mt-3 text-xs text-slate-600">{t("participantComposition.details.pendingTasks", { count: new Intl.NumberFormat(locale).format(state.composition.tasks.filter((task) => task.status === "READY").length) })}</p>}
               </section>
             )}
+            </>}
             </>
           )}
         </div>
@@ -1158,6 +1189,13 @@ function isCompositionSnapshot(value: unknown): value is ProcessCompositionSnaps
   return Array.isArray(snapshot.participants) && Array.isArray(snapshot.invites) &&
     Array.isArray(snapshot.tasks) && Array.isArray(snapshot.laboratories) &&
     Boolean(snapshot.capabilities) && typeof snapshot.capabilities === "object";
+}
+
+function isTriageTimeline(value: unknown, processId: string): value is TriageTimeline {
+  return isRecord(value) && value.process_id === processId && typeof value.code === "string" &&
+    Array.isArray(value.events) && value.events.every((event) => isRecord(event) &&
+      typeof event.id === "string" && typeof event.event_type === "string" &&
+      typeof event.occurred_at === "string");
 }
 
 function getApiMessage(value: unknown, fallback: string, t: TFunction) {

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { authorizeProcessComposition } from "@/app/(paginas)/api/_shared/process-composition-authorization";
+import { getRequestOrigin } from "@/app/(paginas)/api/_shared/request-origin";
 import { internalApiErrorResponse } from "@/app/(paginas)/api/_shared/responses";
 import { validateProcessCompositionInvite, isProcessCompositionUuid } from "@/components/participacao-processo";
 import { canActOnAssignment, createProcessParticipantInvite, getProcessComposition, hasDuplicateProcessParticipantInvite, listActiveLaboratories, listProcessTasks } from "@/services/ParticipacaoProcesso";
@@ -48,7 +49,9 @@ export async function POST(request: Request, context: ProcessCompositionRouteCon
   if (!duplicate.ok) return compositionError(duplicate.status, authorization.cookieStore, duplicate.code, duplicate.message);
   if (duplicate.data) return NextResponse.json({ code: "CONFLICT", message: "Já existe um convite ou designação para esta pessoa, função e laboratório." }, { status: 409 });
 
-  const created = await createProcessParticipantInvite(authorization.accessToken, processId, input.input);
+  const origin = getRequestOrigin(request);
+  if (!origin) return NextResponse.json({ code: "INVALID_ORIGIN", message: "A origem da solicitação não é válida." }, { status: 403 });
+  const created = await createProcessParticipantInvite(authorization.accessToken, processId, input.input, origin);
   if (!created.ok) return compositionError(created.status, authorization.cookieStore, created.code, created.message);
   return NextResponse.json(created.data, { status: 201 });
 }
