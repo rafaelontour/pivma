@@ -24,21 +24,21 @@ export async function POST(request: Request, context: ProcessCompositionRouteCon
   if (!isProcessCompositionUuid(processId)) return validationError();
   const parsed = validateProcessParticipantAssignment(await request.json().catch(() => null));
   if (!parsed.valid) return validationError(parsed.message);
-  const isInitialCompositionRole = parsed.input.role_key === "group_manager" || parsed.input.role_key === "sponsor";
-  const authorization = await authorizeProcessComposition(processId, isInitialCompositionRole ? "triage" : "manage");
+  const authorization = await authorizeProcessComposition(processId, "triage");
   if (!authorization.ok) return authorization.response;
-  if (isInitialCompositionRole) {
-    const tasks = await listProcessTasks(authorization.accessToken, processId);
-    if (!tasks.ok) return forwardError(tasks.status, tasks.code, tasks.message, authorization.cookieStore);
-    const taskKey = parsed.input.role_key === "group_manager" ? "assign_group_manager" : "assign_sponsor";
-    if (!canActOnAssignment(tasks.data, taskKey, authorization.roles, authorization.session.access.global_permissions.includes("triage.review"))) {
-      return NextResponse.json({ code: "CONFLICT", message: "Esta definição não está disponível para este processo no momento." }, { status: 409 });
-    }
-    const user = await findActiveUserById(authorization.accessToken, parsed.input.user_id);
-    if (!user.ok) {
-      if (user.status === 404) return validationError("Selecione uma conta ativa da plataforma.");
-      return forwardError(user.status, user.code, user.message, authorization.cookieStore);
-    }
+  const tasks = await listProcessTasks(authorization.accessToken, processId);
+  if (!tasks.ok) return forwardError(tasks.status, tasks.code, tasks.message, authorization.cookieStore);
+  const taskKey = `assign_${parsed.input.role_key}`;
+  const completedGroupManagerMaintenance = parsed.input.role_key === "group_manager" &&
+    authorization.session.access.global_permissions.includes("process.participants.manage") &&
+    tasks.data.some((task) => task.activity_key === taskKey && task.status === "COMPLETED");
+  if (!completedGroupManagerMaintenance && !canActOnAssignment(tasks.data, taskKey, authorization.roles, authorization.session.access.global_permissions.includes("triage.review"))) {
+    return NextResponse.json({ code: "CONFLICT", message: "Esta definição não está disponível para este processo no momento." }, { status: 409 });
+  }
+  const user = await findActiveUserById(authorization.accessToken, parsed.input.user_id);
+  if (!user.ok) {
+    if (user.status === 404) return validationError("Selecione uma conta ativa da plataforma.");
+    return forwardError(user.status, user.code, user.message, authorization.cookieStore);
   }
   const origin = getRequestOrigin(request);
   if (!origin) return NextResponse.json({ code: "INVALID_ORIGIN", message: "A origem da solicitação não é válida." }, { status: 403 });

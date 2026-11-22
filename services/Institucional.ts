@@ -5,6 +5,7 @@ import { tryit } from "radash";
 import { getApiOrigin, http } from "./Http";
 import type {
   Institution,
+  InstitutionalAffiliationCreateInput,
   InstitutionNameInput,
   InstitutionalCatalogSnapshot,
   InstitutionalListResponse,
@@ -84,6 +85,36 @@ export async function deactivateLaboratory(
     }),
   )();
   return error ? { ok: false, status: getStatus(error) } : { ok: true, data: null };
+}
+
+export async function createUserAffiliation(
+  accessToken: string,
+  userId: string,
+  input: InstitutionalAffiliationCreateInput,
+): Promise<ServiceResult<null>> {
+  const [error, response] = await tryit(() => http.post<unknown>(
+    `/institutional/users/${userId}/affiliations`,
+    input,
+    { headers: mutationHeaders(accessToken) },
+  ))();
+  if (error) return { ok: false, status: getStatus(error) };
+  return response.status >= 200 && response.status < 300
+    ? { ok: true, data: null }
+    : { ok: false };
+}
+
+export async function getUserActiveState(
+  accessToken: string,
+  userId: string,
+): Promise<ServiceResult<boolean>> {
+  const [error, response] = await tryit(() => http.get<unknown>(`/users/${userId}`, {
+    headers: authHeaders(accessToken),
+  }))();
+  if (error) return { ok: false, status: getStatus(error) };
+  if (!isRecord(response.data) || response.data.id !== userId || typeof response.data.active !== "boolean") {
+    return { ok: false };
+  }
+  return { ok: true, data: response.data.active };
 }
 
 async function listAllInstitutions(accessToken: string): Promise<ServiceResult<Institution[]>> {

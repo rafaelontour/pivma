@@ -82,6 +82,7 @@ export function SettingsHub({ initialCapabilities }: SettingsHubProps) {
     canViewAiEvaluations: false,
     canManageUsers: false,
     canManageInstitutionalCatalog: false,
+    canManageLaboratoryAffiliations: false,
   };
 
   const hasAccess = hasAnySettingsAccess(effectiveCapabilities);

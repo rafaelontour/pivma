@@ -1212,6 +1212,7 @@ function SubmissionFormDialog({
       toast.success(
         t(isCorrectionMode ? "submissions.resubmitted" : "submissions.submitted"),
       );
+      window.dispatchEvent(new Event("pivma:session-refresh"));
       clearCorrectionReviewSnapshot(state.process.id);
       onSubmitted(state.process);
     } catch {

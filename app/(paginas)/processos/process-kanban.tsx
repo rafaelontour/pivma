@@ -507,7 +507,7 @@ function ProcessCard({ item, isDeleting, onAnalyze, onDelete, onViewDetails }: P
           <span className={`max-w-full rounded-md px-2 py-1 text-[10px] font-semibold ${getReviewStateTone(item.reviewState)}`}>
             {t(`processes.reviewStates.${item.reviewState}`)}
           </span>
-          <button
+          {process.available_actions?.includes("DELETE") && <button
             aria-label={t("processes.deleteLabel", { code: process.code, title: process.title })}
             className="grid size-7 shrink-0 place-items-center rounded-md text-rose-600 outline-none transition hover:bg-rose-50 hover:text-rose-800 focus-visible:ring-2 focus-visible:ring-rose-500 disabled:cursor-wait disabled:text-slate-400"
             disabled={isDeleting}
@@ -518,7 +518,7 @@ function ProcessCard({ item, isDeleting, onAnalyze, onDelete, onViewDetails }: P
             {isDeleting
               ? <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" />
               : <Trash2 aria-hidden="true" className="size-3.5" />}
-          </button>
+          </button>}
         </div>
       </div>
       <h3 className="mt-3 min-w-0 break-words text-sm font-bold leading-5 text-slate-900">

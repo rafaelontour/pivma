@@ -15,10 +15,16 @@ import type {
   ProcessParticipantAssignmentInput,
   ProcessParticipantConflictInput,
   ProcessParticipantHistoryItem,
+  ProcessCompositionInviteCreated,
+  InvitePreview,
 } from "@/types/ParticipacaoProcesso";
 import type { ProcessInstance } from "@/types/Processo";
 import type { ProcessTask } from "@/types/Tarefa";
 import type { ApiRecord, ServiceResult } from "@/types/Servico";
+import type {
+  SponsorTrackingDetail,
+  SponsorTrackingItem,
+} from "@/types/Acompanhamento";
 
 const PAGE_SIZE = 100;
 const MAX_PAGES = 1000;
@@ -28,6 +34,7 @@ export async function getProcessComposition(
   processId: string,
   scopes: CurrentSessionUser["access"]["scopes"],
   canReview = false,
+  canManageParticipants = false,
 ): Promise<ServiceResult<ProcessCompositionSnapshot>> {
   const processResult = await getProcess(accessToken, processId);
   if (!processResult.ok) return processResult;
@@ -38,7 +45,7 @@ export async function getProcessComposition(
     listParticipants(accessToken, processId),
     listParticipantInvites(accessToken, processId),
     listProcessTasks(accessToken, processId),
-    isGroupManager ? listActiveLaboratories(accessToken) : Promise.resolve({ ok: true as const, data: [] as ProcessLaboratory[] }),
+    isGroupManager || canReview ? listActiveLaboratories(accessToken) : Promise.resolve({ ok: true as const, data: [] as ProcessLaboratory[] }),
   ]);
   const failure = [participants, invites, tasks, laboratories].find((result) => !result.ok);
   if (failure && !failure.ok) return failure;
@@ -54,7 +61,8 @@ export async function getProcessComposition(
       laboratories: laboratories.ok ? laboratories.data.filter((laboratory) => laboratory.active) : [],
       capabilities: {
         canAssignSponsor: canActOnAssignment(taskItems, "assign_sponsor", roles, canReview),
-        canAssignGroupManager: canActOnAssignment(taskItems, "assign_group_manager", roles, canReview),
+        canAssignGroupManager: canActOnAssignment(taskItems, "assign_group_manager", roles, canReview) ||
+          (canManageParticipants && taskItems.some((task) => task.activity_key === "assign_group_manager" && task.status === "COMPLETED")),
         canAssignLaboratories: isGroupManager,
         canManageParticipants: isGroupManager || roles.includes("proponent") || canReview,
         canCompleteRoles: canReview,
@@ -110,6 +118,9 @@ export async function listCompositionIndex(
       .map((process) => ({
         process,
         proponent: participantsByProcess.get(process.id)?.find((participant) => participant.active && participant.role_key === "proponent")?.user ?? null,
+        groupMembers: (participantsByProcess.get(process.id) ?? []).filter(
+          (participant) => participant.active && participant.role_key === "group_manager",
+        ),
         roles: canManageParticipants ? ["bracvam", ...rolesForProcess(relevantScopes, process.id)] : rolesForProcess(relevantScopes, process.id),
         actionableTasks: (byProcessTasks.get(process.id) ?? []).filter(
           (task) => task.status === "READY" && task.can_act,
@@ -119,19 +130,113 @@ export async function listCompositionIndex(
   };
 }
 
+export async function listSponsorTracking(
+  accessToken: string,
+  scopes: CurrentSessionUser["access"]["scopes"],
+  userId: string,
+): Promise<ServiceResult<SponsorTrackingItem[]>> {
+  const processIds = Array.from(new Set(
+    scopes
+      .filter((scope) => scope.roles.includes("sponsor"))
+      .map((scope) => scope.process_id),
+  ));
+  const results = await Promise.all(
+    processIds.map((processId) =>
+      getSponsorTrackingItem(accessToken, processId, userId),
+    ),
+  );
+  const failed = results.find((result) => !result.ok);
+  if (failed && !failed.ok) return failed;
+
+  return {
+    ok: true,
+    data: results
+      .flatMap((result) => result.ok && result.data ? [result.data] : [])
+      .sort((first, second) =>
+        second.sponsorAssignedAt.localeCompare(first.sponsorAssignedAt),
+      ),
+  };
+}
+
+export async function getSponsorTrackingDetail(
+  accessToken: string,
+  processId: string,
+  scopes: CurrentSessionUser["access"]["scopes"],
+  userId: string,
+): Promise<ServiceResult<SponsorTrackingDetail>> {
+  const hasSponsorScope = scopes.some(
+    (scope) =>
+      scope.process_id === processId && scope.roles.includes("sponsor"),
+  );
+  if (!hasSponsorScope) return { ok: false, status: 403 };
+
+  const [item, tasks] = await Promise.all([
+    getSponsorTrackingItem(accessToken, processId, userId),
+    listProcessTasks(accessToken, processId),
+  ]);
+  if (!item.ok) return item;
+  if (!item.data) return { ok: false, status: 403 };
+  if (!tasks.ok) return tasks;
+
+  const currentTask = [...tasks.data]
+    .filter((task) => task.status === "READY")
+    .sort((first, second) =>
+      first.phase.order - second.phase.order ||
+      first.activity_run_number - second.activity_run_number,
+    )[0] ?? null;
+
+  return { ok: true, data: { ...item.data, currentTask } };
+}
+
+async function getSponsorTrackingItem(
+  accessToken: string,
+  processId: string,
+  userId: string,
+): Promise<ServiceResult<SponsorTrackingItem | null>> {
+  const [process, participants] = await Promise.all([
+    getProcess(accessToken, processId),
+    listParticipants(accessToken, processId),
+  ]);
+  if (!process.ok) return process;
+  if (!participants.ok) return participants;
+
+  const sponsor = participants.data
+    .filter((participant) =>
+      participant.active &&
+      participant.role_key === "sponsor" &&
+      participant.user.id === userId,
+    )
+    .sort((first, second) =>
+      second.assigned_at.localeCompare(first.assigned_at),
+    )[0];
+  if (!sponsor) return { ok: true, data: null };
+
+  return {
+    ok: true,
+    data: {
+      process: process.data,
+      proponent: participants.data.find(
+        (participant) =>
+          participant.active && participant.role_key === "proponent",
+      )?.user ?? null,
+      sponsorAssignedAt: sponsor.assigned_at,
+    },
+  };
+}
+
 export async function createProcessParticipantInvite(
   accessToken: string,
   processId: string,
   input: ProcessCompositionInviteInput,
   origin: string,
-): Promise<ServiceResult<ProcessParticipantInvite>> {
+): Promise<ServiceResult<ProcessCompositionInviteCreated>> {
   const [error, response] = await tryit(() => http.post<unknown>(
     `/processes/${processId}/participants/invites`,
     {
       email: input.email,
       role_key: input.role_key,
+      channel: input.channel ?? "email",
       ...(input.laboratory_id ? { laboratory_id: input.laboratory_id } : {}),
-      channel: "email",
     },
     { headers: { ...authHeaders(accessToken), Origin: origin } },
   ))();
@@ -141,6 +246,18 @@ export async function createProcessParticipantInvite(
   // fields required by the UI so the token never crosses the internal route.
   const invite = normalizeCreatedInvite(response.data);
   return invite ? { ok: true, data: invite } : { ok: false };
+}
+
+export async function previewParticipantInvite(token: string): Promise<ServiceResult<InvitePreview>> {
+  const [error, response] = await tryit(() => http.get<unknown>(`/invites/${encodeURIComponent(token)}`))();
+  if (error) return getServiceError(error);
+  const value = response.data;
+  if (!isRecord(value) || typeof value.role_key !== "string" || typeof value.process_code !== "string" || typeof value.process_title !== "string" || typeof value.masked_email !== "string" || typeof value.expires_at !== "string" || typeof value.expired !== "boolean") return { ok: false };
+  return { ok: true, data: { role_key: value.role_key as InvitePreview["role_key"], process_code: value.process_code, process_title: value.process_title, masked_email: value.masked_email, expires_at: value.expires_at, expired: value.expired } };
+}
+
+export async function acceptParticipantInvite(accessToken: string, token: string) {
+  return mutate<unknown>(accessToken, "post", `/invites/${encodeURIComponent(token)}/accept`);
 }
 
 export async function createProcessParticipant(
@@ -167,8 +284,8 @@ export async function revokeProcessParticipantInvite(accessToken: string, proces
   return mutate<null>(accessToken, "post", `/processes/${processId}/participants/invites/${inviteId}/revoke`);
 }
 
-export async function revokeProcessParticipant(accessToken: string, processId: string, assignmentId: string) {
-  return mutate<null>(accessToken, "delete", `/processes/${processId}/participants/${assignmentId}`);
+export async function revokeProcessParticipant(accessToken: string, processId: string, assignmentId: string, origin: string) {
+  return mutate<null>(accessToken, "delete", `/processes/${processId}/participants/${assignmentId}`, undefined, origin);
 }
 
 export async function declareProcessParticipantConflict(
@@ -188,10 +305,10 @@ export async function listProcessParticipantHistory(accessToken: string, process
   return listPages(accessToken, `/processes/${processId}/participants/history`, normalizeParticipantHistory);
 }
 
-async function mutate<T>(accessToken: string, method: "post" | "delete", path: string, data?: unknown): Promise<ServiceResult<T>> {
+async function mutate<T>(accessToken: string, method: "post" | "delete", path: string, data?: unknown, origin?: string): Promise<ServiceResult<T>> {
   const [error, response] = await tryit(() => method === "post"
-    ? http.post<T>(path, data, { headers: authHeaders(accessToken) })
-    : http.delete<T>(path, { headers: authHeaders(accessToken) }))();
+    ? http.post<T>(path, data, { headers: { ...authHeaders(accessToken), ...(origin ? { Origin: origin } : {}) } })
+    : http.delete<T>(path, { headers: { ...authHeaders(accessToken), ...(origin ? { Origin: origin } : {}) } }))();
   if (error) return getServiceError(error);
   return { ok: true, data: response.data === undefined ? null as T : response.data };
 }
@@ -235,7 +352,7 @@ export function rolesForProcess(
 
 export function canActOnAssignment(
   tasks: ProcessTask[],
-  activityKey: "assign_sponsor" | "assign_group_manager",
+  activityKey: string,
   roles: string[],
   canReview = false,
 ) {
@@ -394,12 +511,13 @@ function normalizeInvite(value: unknown): ProcessParticipantInvite | null {
     role_key: value.role_key,
     laboratory,
     email: value.email,
-    channel: value.channel,
+    channel: value.channel === "link" ? "link" : "email",
     status: value.status,
     expired: value.expired,
     expires_at: value.expires_at,
     created_at: value.created_at,
     accepted_at: value.accepted_at,
+    accepted_by: value.accepted_by,
     revoked_at: value.revoked_at,
     delivery: isRecord(value.delivery) &&
       (value.delivery.status === "pending" || value.delivery.status === "sent" || value.delivery.status === "failed" || value.delivery.status === "cancelled")
@@ -408,9 +526,10 @@ function normalizeInvite(value: unknown): ProcessParticipantInvite | null {
   };
 }
 
-function normalizeCreatedInvite(value: unknown) {
+function normalizeCreatedInvite(value: unknown): ProcessCompositionInviteCreated | null {
   if (!isRecord(value) || typeof value.token !== "string") return null;
-  return normalizeInvite(value);
+  const invite = normalizeInvite(value);
+  return invite ? { ...invite, token: value.token } : null;
 }
 
 function normalizeLaboratory(value: unknown): ProcessLaboratory | null {

@@ -1,86 +1,62 @@
 ## Purpose
 
-Permitir que pessoas autorizadas consultem e administrem, de forma auditável, os vínculos entre contas existentes e laboratórios ativos do catálogo institucional.
+Permitir que sessões BraCVAM autorizadas adicionem contas existentes a laboratórios ativos diretamente no catálogo institucional.
 
 ## ADDED Requirements
 
-### Requirement: Acesso à gestão de membros por laboratório
-O sistema SHALL disponibilizar a ação **Gerenciar membros** em cada laboratório ativo para sessões com `institutional.affiliations.manage`. A página e todas as operações internas MUST repetir a autorização no servidor e MUST NOT conceder acesso com base somente no nome de um perfil.
+### Requirement: Adicionar pessoa pela listagem de laboratórios
+O sistema SHALL oferecer uma ação para adicionar uma pessoa na linha de cada laboratório ativo para sessões com `institutional.affiliations.manage`, `users.read` e `institutional.read`. A interface SHALL permitir buscar contas ativas exclusivamente pelo nome completo e selecionar uma conta existente. A busca nominal MUST desconsiderar diferenças de caixa e acentuação e MUST NOT usar nome de usuário ou e-mail como critério. Cada mutação MUST repetir a autorização no servidor.
 
-#### Scenario: Administrador ou BraCVAM autorizado
-- **WHEN** uma sessão possui `institutional.affiliations.manage` e abre a gestão de um laboratório ativo
-- **THEN** o sistema apresenta os membros atuais e os controles de inclusão e desativação de vínculo
+#### Scenario: Sessão autorizada adiciona conta ativa
+- **WHEN** uma pessoa autorizada busca uma conta ativa, seleciona um resultado e confirma a inclusão em um laboratório ativo
+- **THEN** o sistema cria a afiliação e confirma qual pessoa foi adicionada ao laboratório
+
+#### Scenario: Conta inativa
+- **WHEN** uma conta selecionada está inativa no momento da criação
+- **THEN** o servidor recusa a operação e não cria uma afiliação
+
+#### Scenario: Laboratório ou instituição inativos
+- **WHEN** o laboratório não existe, está inativo ou sua instituição está inativa
+- **THEN** o servidor recusa a operação sem enviar uma criação inválida à API
+
+#### Scenario: Vínculo já existente
+- **WHEN** a API informa conflito porque já existe um vínculo ativo entre a conta e o laboratório
+- **THEN** a interface apresenta uma mensagem localizada e não repete a criação automaticamente
+
+### Requirement: Autorização e proteção da integração
+O navegador MUST acessar somente rotas internas. O Route Handler SHALL exigir `institutional.affiliations.manage`, `users.read` e `institutional.read`, validar os identificadores e derivar `institution_id` do laboratório encontrado no catálogo. Credenciais e chamadas à API externa MUST permanecer no servidor.
 
 #### Scenario: Sessão sem permissão
-- **WHEN** uma sessão sem `institutional.affiliations.manage` tenta acessar a interface ou uma rota interna de afiliações
-- **THEN** o sistema recusa a operação sem revelar os membros do laboratório
+- **WHEN** uma sessão sem qualquer permissão exigida tenta buscar contas ou criar uma afiliação
+- **THEN** o servidor recusa a operação sem expor credenciais ou permitir a mutação
 
-### Requirement: Listagem autoritativa dos membros
-O sistema SHALL consultar de forma paginada as afiliações ativas do laboratório selecionado e SHALL identificar cada membro por sua conta, instituição e laboratório. A consulta MUST usar uma operação de backend filtrada pelo laboratório e MUST NOT varrer o diretório inteiro consultando as afiliações de cada usuário individualmente.
+#### Scenario: Inclusão bem-sucedida
+- **WHEN** o servidor valida a conta e o laboratório ativos
+- **THEN** envia à API externa os identificadores da conta, instituição e laboratório correspondentes
 
-#### Scenario: Laboratório com membros
-- **WHEN** a API retorna afiliações ativas para o laboratório selecionado
-- **THEN** o sistema lista nome, nome de usuário ou e-mail seguro de cada pessoa e identifica o laboratório correspondente
+### Requirement: Não inferir membros a partir de buscas em contas
+O sistema MUST NOT percorrer o diretório de contas nem consultar afiliações de cada pessoa para compor membros de um laboratório. Enquanto a API não oferecer uma listagem inversa, a página SHALL limitar-se a permitir a inclusão e confirmar o resultado.
 
-#### Scenario: Laboratório sem membros
-- **WHEN** a consulta autoritativa não retorna afiliações ativas
-- **THEN** o sistema apresenta um estado vazio e mantém disponível a ação para adicionar uma pessoa
+#### Scenario: Abrir o catálogo
+- **WHEN** uma pessoa consulta a listagem de instituições e laboratórios
+- **THEN** o sistema não realiza chamadas N+1 para determinar membros
 
-#### Scenario: Consulta por laboratório indisponível
-- **WHEN** o backend ainda não publica uma listagem ou filtro de afiliações por laboratório
-- **THEN** a funcionalidade permanece indisponível com estado seguro e não substitui a consulta por uma varredura N+1 de usuários
+### Requirement: Internacionalização e acessibilidade
+Todo texto controlado pela interface MUST existir em português do Brasil e inglês. O diálogo SHALL oferecer rótulos acessíveis, busca por teclado, seleção inequívoca de conta, mensagens de carregamento e erro, foco inicial e Escape.
 
-### Requirement: Seleção de usuário existente
-O sistema SHALL permitir localizar contas ativas pelo diretório autorizado e selecionar uma identidade persistida antes de criar um vínculo. O sistema MUST NOT criar usuário implicitamente, MUST NOT usar somente texto livre como identidade e MUST NOT permitir confirmação sem usuário válido.
+O diálogo SHALL identificar o laboratório, separar visualmente busca, resultados e ações, e apresentar estados distintos antes da busca, durante o carregamento e quando não houver correspondências.
 
-#### Scenario: Seleção válida
-- **WHEN** a pessoa autorizada pesquisa e seleciona uma conta ativa existente
-- **THEN** o sistema associa a seleção ao identificador persistido do usuário e habilita a confirmação somente quando os demais campos estiverem válidos
+#### Scenario: Alternar idioma
+- **WHEN** a pessoa usa a interface em português ou inglês
+- **THEN** rótulos, validações, mensagens de estado e confirmações acompanham o locale ativo
 
-#### Scenario: Usuário ausente ou inativo
-- **WHEN** nenhum usuário foi selecionado ou a conta selecionada deixou de estar ativa
-- **THEN** o sistema mantém a confirmação desabilitada e não envia a mutação
+#### Scenario: Busca e inclusão em andamento
+- **WHEN** uma busca ou mutação está em andamento
+- **THEN** os controles correspondentes ficam indisponíveis e a ação não é repetida automaticamente
 
-### Requirement: Criação de afiliação laboratorial
-O sistema SHALL criar uma afiliação para a conta selecionada usando a instituição do laboratório e o próprio laboratório. A instituição e o laboratório MUST existir, estar ativos e corresponder entre si; valores ausentes, nulos, malformados ou divergentes MUST ser recusados no cliente e no servidor.
-
-#### Scenario: Inclusão aceita
-- **WHEN** usuário, instituição e laboratório ativos estão completos e a pessoa confirma
-- **THEN** o sistema cria a afiliação, reconcilia a lista autoritativa e apresenta o novo membro
-
-#### Scenario: Dados incompletos
-- **WHEN** usuário, instituição ou laboratório estiver ausente, nulo ou inválido
-- **THEN** a confirmação permanece desabilitada e nenhuma chamada de criação é realizada
-
-#### Scenario: Vínculo duplicado ou concorrente
-- **WHEN** já existe uma afiliação ativa equivalente ou outra sessão a cria simultaneamente
-- **THEN** o sistema não duplica o vínculo, informa o conflito com segurança e atualiza a listagem antes de permitir nova tentativa
-
-### Requirement: Desativação auditável de vínculo
-O sistema SHALL permitir desativar uma afiliação mediante confirmação própria que identifique a pessoa e o laboratório. A operação MUST NOT ser apresentada como exclusão física e MUST NOT oferecer reativação enquanto o backend não publicar essa capacidade.
-
-#### Scenario: Desativação confirmada
-- **WHEN** a pessoa autorizada confirma a desativação de uma afiliação ativa
-- **THEN** o sistema envia somente a desativação solicitada, reconcilia a lista e retira o vínculo dos membros ativos
-
-#### Scenario: Desativação cancelada
-- **WHEN** a pessoa fecha ou cancela a confirmação
-- **THEN** o sistema mantém a afiliação sem realizar mutação
-
-### Requirement: Afiliação não concede participação em processo
-O sistema MUST tratar a afiliação laboratorial como vínculo institucional e MUST NOT criar perfil, convite ou papel em processo como efeito colateral. Uma pessoa afiliada somente participará de um processo quando o fluxo de participantes criar uma designação própria.
+### Requirement: Afiliação institucional isolada de acessos e designações
+Criar uma afiliação MUST NOT criar ou alterar perfis globais, convites ou papéis locais em processos.
 
 #### Scenario: Pessoa adicionada ao laboratório
-- **WHEN** uma afiliação laboratorial é criada com sucesso
-- **THEN** a conta passa a constar como membro institucional sem receber automaticamente `participating_laboratory` ou qualquer outro papel de processo
-
-### Requirement: Segurança de integração, internacionalização e acessibilidade
-O navegador MUST acessar somente Route Handlers internos para consultar ou alterar afiliações. Todo conteúdo controlado pela aplicação MUST existir em português do Brasil e inglês; nomes de pessoas, instituições e laboratórios MUST permanecer inalterados. Diálogos e controles MUST possuir foco inicial, contenção e restauração de foco, Escape, navegação por teclado e nomes acessíveis.
-
-#### Scenario: Operação pela interface
-- **WHEN** a pessoa consulta, adiciona ou desativa um membro
-- **THEN** origem externa, cookies e credenciais permanecem no servidor e a interface apresenta textos no locale ativo
-
-#### Scenario: Mutação em andamento
-- **WHEN** uma criação ou desativação está sendo processada
-- **THEN** ações conflitantes permanecem desabilitadas e a interface não repete automaticamente a mutação
+- **WHEN** a API confirma a afiliação
+- **THEN** a operação não altera as permissões nem as designações da pessoa em processos

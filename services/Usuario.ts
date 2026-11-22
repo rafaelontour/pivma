@@ -55,6 +55,34 @@ export async function listUsers(
   return data ? { ok: true, data } : { ok: false };
 }
 
+export async function searchActiveUsersByFullName(
+  accessToken: string,
+  name: string,
+  resultLimit = 50,
+): Promise<ServiceResult<UserList>> {
+  const queryTokens = normalizeFullName(name).split(" ").filter(Boolean);
+  if (queryTokens.length === 0) {
+    return { ok: true, data: { offset: 0, limit: resultLimit, items: [] } };
+  }
+
+  const matches: UserListItem[] = [];
+  for (let offset = 0; offset <= 10_000 && matches.length < resultLimit; offset += 100) {
+    const page = await listUsers(accessToken, { offset, limit: 100, active: true });
+    if (!page.ok) return page;
+
+    for (const user of page.data.items) {
+      if (!user.active || !user.full_name) continue;
+      const normalizedName = normalizeFullName(user.full_name);
+      if (queryTokens.every((token) => normalizedName.includes(token))) matches.push(user);
+      if (matches.length === resultLimit) break;
+    }
+
+    if (page.data.items.length < page.data.limit) break;
+  }
+
+  return { ok: true, data: { offset: 0, limit: resultLimit, items: matches } };
+}
+
 export async function updateUser(
   accessToken: string,
   userId: string,
@@ -131,6 +159,15 @@ async function findUserById(
 
 function getStatus(error: Error) {
   return isAxiosError(error) ? error.response?.status : undefined;
+}
+
+function normalizeFullName(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("pt-BR")
+    .trim()
+    .replace(/\s+/g, " ");
 }
 
 function normalizeUserList(value: ExternalUserListResponse): UserList | null {

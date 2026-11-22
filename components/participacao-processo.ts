@@ -6,7 +6,7 @@ import type { ApiRecord } from "@/types/Servico";
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function validateProcessCompositionInvite(value: unknown): ApiInputValidation<ProcessCompositionInviteInput> {
-  if (!isRecord(value) || !isProcessParticipantRole(value.role_key)) {
+  if (!isRecord(value) || !isProcessParticipantRole(value.role_key) || (value.channel !== undefined && value.channel !== "email" && value.channel !== "link")) {
     return invalid("Informe uma designação válida.");
   }
 
@@ -18,13 +18,13 @@ export function validateProcessCompositionInvite(value: unknown): ApiInputValida
     if (typeof value.laboratory_id !== "string" || !isProcessCompositionUuid(value.laboratory_id)) {
       return invalid("Selecione um laboratório ativo.");
     }
-    return { valid: true, input: { role_key: value.role_key, email, laboratory_id: value.laboratory_id } };
+    return { valid: true, input: { role_key: value.role_key, email, channel: value.channel === "link" ? "link" : "email", laboratory_id: value.laboratory_id } };
   }
 
   if (value.laboratory_id !== undefined && value.laboratory_id !== null) {
     return invalid("A designação não aceita um laboratório.");
   }
-  return { valid: true, input: { role_key: value.role_key, email } };
+  return { valid: true, input: { role_key: value.role_key, email, channel: value.channel === "link" ? "link" : "email" } };
 }
 
 export function validateProcessParticipantAssignment(value: unknown): ApiInputValidation<ProcessParticipantAssignmentInput> {

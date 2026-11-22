@@ -23,6 +23,7 @@ export type SettingsSessionCapabilities = {
   canViewAiEvaluations: boolean;
   canManageUsers: boolean;
   canManageInstitutionalCatalog: boolean;
+  canManageLaboratoryAffiliations: boolean;
   canManageCollectionTemplates?: boolean;
   user?: CurrentUser;
 };

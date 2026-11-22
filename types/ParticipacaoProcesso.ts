@@ -40,12 +40,13 @@ export type ProcessParticipantInvite = {
   role_key: string;
   laboratory: { id: string; name: string; active: boolean; institution: { id: string; name: string; active: boolean } } | null;
   email: string;
-  channel: string;
+  channel: "email" | "link";
   status: "pending" | "accepted" | "revoked";
   expired: boolean;
   expires_at: string;
   created_at: string;
   accepted_at: string | null;
+  accepted_by: string | null;
   revoked_at: string | null;
   delivery?: { status: "pending" | "sent" | "failed" | "cancelled"; sent_at: string | null } | null;
 };
@@ -90,6 +91,7 @@ export type ProcessParticipantActionInput = ProcessParticipantAssignmentInput | 
 export type ProcessCompositionIndexItem = {
   process: ProcessInstance;
   proponent: ProcessParticipant["user"] | null;
+  groupMembers: ProcessParticipant[];
   roles: string[];
   actionableTasks: ProcessTask[];
 };
@@ -107,10 +109,31 @@ export type ProcessCompositionState =
 export type ProcessCompositionInviteInput = {
   role_key: ProcessParticipantRole;
   email: string;
+  channel?: "email" | "link";
   laboratory_id?: string;
 };
 
-export type ProcessCompositionWorkspaceProps = { processId?: string };
+export type ProcessCompositionInviteCreated = ProcessParticipantInvite & { token?: string };
+export type InvitePreview = {
+  role_key: ProcessParticipantRole;
+  process_code: string;
+  process_title: string;
+  masked_email: string;
+  expires_at: string;
+  expired: boolean;
+};
+export type InviteWorkspaceProps = { token: string };
+export type InvitePageProps = { params: Promise<{ token: string }> };
+export type InviteRouteContext = { params: Promise<{ token: string }> };
+export type InviteWorkspaceState =
+  | { kind: "loading" }
+  | { kind: "error"; message: string }
+  | { kind: "ready"; invite: InvitePreview };
+
+export type ProcessCompositionWorkspaceProps = {
+  processId?: string;
+  view?: "composition" | "group";
+};
 
 export type ProcessCompositionInviteFormProps = {
   role: ProcessParticipantRole;
@@ -129,6 +152,7 @@ export type ProcessCompositionRoleCardProps = {
   invites: ProcessParticipantInvite[];
   laboratories: ProcessLaboratory[];
   showForm: boolean;
+  canCompleteRole: boolean;
   busy: boolean;
   onSubmit: (input: ProcessCompositionInviteInput) => Promise<boolean>;
   onAssign: (input: ProcessParticipantAssignmentInput) => Promise<boolean>;
@@ -141,12 +165,16 @@ export type ProcessCompositionRoleCardProps = {
 export type CompositionProcessCardProps = {
   item: ProcessCompositionIndexItem;
   locale: string | undefined;
+  view: "composition" | "group";
 };
 
 export type CompositionErrorProps = {
   message: string;
   onRetry: () => void;
 };
+
+export type GroupProcessDetailPageProps = { params: Promise<{ processId: string }> };
+export type GroupProcessDetailProps = { processId: string };
 
 export type ProcessCompositionPageProps = { processId: string };
 

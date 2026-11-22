@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { internalApiErrorResponse } from "@/app/(paginas)/api/_shared/responses";
 import { getCurrentUser } from "@/services/Autenticacao";
 import { listCurrentTasks } from "@/services/Tarefa";
-import { hasProcessKanbanAccess } from "@/types/Processo";
+import { canReadProcessKanban } from "@/services/Processo";
 
 export const runtime = "nodejs";
 
@@ -27,8 +27,9 @@ export async function GET(request: Request) {
       fallbackMessage: "Não foi possível validar a autorização no momento.",
     });
   }
-  if (!hasProcessKanbanAccess(
+  if (!canReadProcessKanban(
     currentUser.data.access.global_permissions,
+    currentUser.data.access.scopes,
     currentUser.data.access.profiles,
   )) {
     return NextResponse.json(

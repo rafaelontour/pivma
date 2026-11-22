@@ -15,7 +15,7 @@ export async function GET(_request: Request, context: ProcessCompositionRouteCon
 
   const authorization = await authorizeProcessComposition(processId, "read");
   if (!authorization.ok) return authorization.response;
-  const result = await getProcessComposition(authorization.accessToken, processId, authorization.session.access.scopes, authorization.session.access.global_permissions.includes("triage.review"));
+  const result = await getProcessComposition(authorization.accessToken, processId, authorization.session.access.scopes, authorization.session.access.global_permissions.includes("triage.review"), authorization.session.access.global_permissions.includes("process.participants.manage"));
   if (!result.ok) return compositionError(result.status, authorization.cookieStore, result.code, result.message);
   return NextResponse.json(result.data);
 }
@@ -26,18 +26,19 @@ export async function POST(request: Request, context: ProcessCompositionRouteCon
 
   const input = validateProcessCompositionInvite(await request.json().catch(() => null));
   if (!input.valid) return validationError(input.message);
-  const operation = input.input.role_key === "sponsor" || input.input.role_key === "group_manager" ? "triage" : "group_manager";
-  const authorization = await authorizeProcessComposition(processId, operation);
+  const authorization = await authorizeProcessComposition(processId, "triage");
   if (!authorization.ok) return authorization.response;
 
-  if (operation === "triage") {
-    const tasks = await listProcessTasks(authorization.accessToken, processId);
-    if (!tasks.ok) return compositionError(tasks.status, authorization.cookieStore, tasks.code, tasks.message);
-    const taskKey = input.input.role_key === "sponsor" ? "assign_sponsor" : "assign_group_manager";
-    if (!canActOnAssignment(tasks.data, taskKey, authorization.roles, authorization.session.access.global_permissions.includes("triage.review"))) {
-      return NextResponse.json({ code: "CONFLICT", message: "Esta definição não está disponível para este processo no momento." }, { status: 409 });
-    }
-  } else if (input.input.role_key === "participating_laboratory" || input.input.role_key === "lead_laboratory") {
+  const tasks = await listProcessTasks(authorization.accessToken, processId);
+  if (!tasks.ok) return compositionError(tasks.status, authorization.cookieStore, tasks.code, tasks.message);
+  const taskKey = `assign_${input.input.role_key}`;
+  const completedGroupManagerMaintenance = input.input.role_key === "group_manager" &&
+    authorization.session.access.global_permissions.includes("process.participants.manage") &&
+    tasks.data.some((task) => task.activity_key === taskKey && task.status === "COMPLETED");
+  if (!completedGroupManagerMaintenance && !canActOnAssignment(tasks.data, taskKey, authorization.roles, authorization.session.access.global_permissions.includes("triage.review"))) {
+    return NextResponse.json({ code: "CONFLICT", message: "Esta definição não está disponível para este processo no momento." }, { status: 409 });
+  }
+  if (input.input.role_key === "participating_laboratory" || input.input.role_key === "lead_laboratory") {
     const laboratories = await listActiveLaboratories(authorization.accessToken);
     if (!laboratories.ok) return compositionError(laboratories.status, authorization.cookieStore, laboratories.code, laboratories.message);
     if (!laboratories.data.some((laboratory) => laboratory.id === input.input.laboratory_id && laboratory.active)) {
@@ -53,7 +54,8 @@ export async function POST(request: Request, context: ProcessCompositionRouteCon
   if (!origin) return NextResponse.json({ code: "INVALID_ORIGIN", message: "A origem da solicitação não é válida." }, { status: 403 });
   const created = await createProcessParticipantInvite(authorization.accessToken, processId, input.input, origin);
   if (!created.ok) return compositionError(created.status, authorization.cookieStore, created.code, created.message);
-  return NextResponse.json(created.data, { status: 201 });
+  const { token, ...invite } = created.data;
+  return NextResponse.json(input.input.channel === "link" ? { ...invite, token } : invite, { status: 201 });
 }
 
 function validationError(message = "Revise os dados informados.") {

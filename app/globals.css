@@ -56,23 +56,74 @@ body {
   --color-teal-800: oklch(39.8% 0.135 var(--module-hue));
   --color-teal-900: oklch(35.2% 0.105 var(--module-hue));
   --color-teal-950: oklch(24.5% 0.07 var(--module-hue));
+  --role-page: oklch(97.4% 0.018 var(--module-hue));
+  --role-page-deep: oklch(93.5% 0.042 var(--module-hue));
+  --role-panel: oklch(99.2% 0.008 var(--module-hue) / 0.96);
+  --role-border: oklch(82% 0.085 var(--module-hue) / 0.72);
+  --role-glow: oklch(72% 0.13 var(--module-hue) / 0.2);
 }
 
-:root[data-module-theme="proponent"] { --module-hue: 252; }
-:root[data-module-theme="bracvam"] { --module-hue: 160; }
-:root[data-module-theme="administration"] { --module-hue: 305; }
-:root[data-module-theme="group_manager"] { --module-hue: 82; }
-:root[data-module-theme="study_manager"] { --module-hue: 275; }
-:root[data-module-theme="statistician"] { --module-hue: 292; }
-:root[data-module-theme="adhoc_evaluator"] { --module-hue: 18; }
-:root[data-module-theme="peer_reviewer"] { --module-hue: 325; }
+:root[data-module-theme="proponent"] { --module-hue: 245; }
+:root[data-module-theme="bracvam"] { --module-hue: 150; }
+:root[data-module-theme="administration"] { --module-hue: 300; }
+:root[data-module-theme="group_manager"] { --module-hue: 35; }
+:root[data-module-theme="study_manager"] { --module-hue: 190; }
+:root[data-module-theme="statistician"] { --module-hue: 330; }
+:root[data-module-theme="adhoc_evaluator"] { --module-hue: 15; }
+:root[data-module-theme="peer_reviewer"] { --module-hue: 275; }
 :root[data-module-theme="lead_laboratory"] { --module-hue: 205; }
-:root[data-module-theme="participating_laboratory"] { --module-hue: 225; }
-:root[data-module-theme="sponsor"] { --module-hue: 55; }
-:root[data-module-theme="sample_selection_group"] { --module-hue: 125; }
-:root[data-module-theme="regulatory_observer"] { --module-hue: 245; }
+:root[data-module-theme="participating_laboratory"] { --module-hue: 220; }
+:root[data-module-theme="sponsor"] { --module-hue: 75; }
+:root[data-module-theme="sample_selection_group"] { --module-hue: 100; }
+:root[data-module-theme="regulatory_observer"] { --module-hue: 260; }
 :root[data-module-theme="collaborator"] { --module-hue: 345; }
-:root[data-module-theme="platform"] { --module-hue: 190; }
+:root[data-module-theme="platform"] {
+  --module-hue: 255;
+  --color-teal-50: oklch(97.2% 0.004 255);
+  --color-teal-100: oklch(93.8% 0.006 255);
+  --color-teal-200: oklch(88.5% 0.008 255);
+  --color-teal-300: oklch(80.8% 0.01 255);
+  --color-teal-400: oklch(70.8% 0.012 255);
+  --color-teal-500: oklch(62.2% 0.014 255);
+  --color-teal-600: oklch(54.2% 0.014 255);
+  --color-teal-700: oklch(46.5% 0.012 255);
+  --color-teal-800: oklch(39.8% 0.01 255);
+  --color-teal-900: oklch(35.2% 0.008 255);
+  --color-teal-950: oklch(24.5% 0.006 255);
+  --role-page: oklch(97.4% 0.004 255);
+  --role-page-deep: oklch(93.5% 0.006 255);
+  --role-panel: oklch(99.2% 0.002 255 / 0.96);
+  --role-border: oklch(82% 0.008 255 / 0.72);
+  --role-glow: oklch(72% 0.008 255 / 0.16);
+}
+
+.authenticated-role-shell {
+  background:
+    radial-gradient(circle at 88% 8%, var(--role-glow), transparent 28rem),
+    linear-gradient(145deg, var(--role-page), #f8fafc 48%, var(--role-page-deep));
+}
+
+.authenticated-role-header {
+  border-color: color-mix(in oklab, var(--role-border) 38%, transparent);
+  background: color-mix(in oklab, var(--role-panel) 92%, white);
+}
+
+.authenticated-role-sidebar {
+  border-color: color-mix(in oklab, var(--role-border) 38%, transparent);
+  background: color-mix(in oklab, var(--role-panel) 94%, white);
+}
+
+.authenticated-role-heading {
+  border-color: var(--role-border);
+  background: linear-gradient(120deg, var(--role-panel), color-mix(in oklab, var(--role-page-deep) 58%, white));
+}
+
+.role-module-indicator,
+.role-profile-card {
+  border-color: var(--role-border);
+  background: linear-gradient(135deg, var(--role-panel), var(--role-page-deep));
+  color: var(--color-teal-900);
+}
 
 button,
 input {

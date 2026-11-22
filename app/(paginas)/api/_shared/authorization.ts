@@ -50,6 +50,46 @@ export async function authorizeInternalApi(
   return { ok: true, accessToken, cookieStore };
 }
 
+export async function authorizeInternalApiAll(
+  requiredPermissions: string[],
+): Promise<InternalApiAuthorization> {
+  const cookieStore = await cookies();
+  const accessToken = cookieStore.get("access_token")?.value;
+  if (!accessToken) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { code: "AUTH_REQUIRED", message: "Sessão não encontrada." },
+        { status: 401 },
+      ),
+    };
+  }
+
+  const session = await getCurrentUser(accessToken);
+  if (!session.ok) {
+    return {
+      ok: false,
+      response: internalApiErrorResponse(session.status, {
+        cookieStore,
+        fallbackMessage: "Não foi possível validar a autorização no momento.",
+      }),
+    };
+  }
+
+  const permissions = session.data.access.global_permissions;
+  if (!requiredPermissions.every((permission) => permissions.includes(permission))) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { code: "FORBIDDEN", message: "Você não tem permissão para realizar esta operação." },
+        { status: 403 },
+      ),
+    };
+  }
+
+  return { ok: true, accessToken, cookieStore };
+}
+
 export async function authorizeAdministratorApi(): Promise<InternalApiAuthorization> {
   const cookieStore = await cookies();
   const accessToken = cookieStore.get("access_token")?.value;

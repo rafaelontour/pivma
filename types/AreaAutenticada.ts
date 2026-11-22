@@ -12,10 +12,6 @@ export type SessionState =
   | { kind: "loading" }
   | { kind: "ready"; user: CurrentUser };
 
-export type AuthenticatedHomeProps = {
-  page?: "home";
-};
-
 export type AuthenticatedPage =
   | "home"
   | "settings"
@@ -23,10 +19,12 @@ export type AuthenticatedPage =
   | "institutional-catalog"
   | "collection-templates"
   | "processes"
+  | "group"
   | "process-composition"
   | "process-samples"
   | "sample-receipt"
   | "submissions"
+  | "sponsor-tracking"
   | "forms"
   | "ai-evaluations"
   | "triage"
@@ -35,6 +33,13 @@ export type AuthenticatedPage =
 
 export type AuthenticatedShellProps = {
   activePage: AuthenticatedPage;
+  children: ReactNode;
+  isProponentPageAllowed: boolean;
+  isSponsorPageAllowed: boolean;
+  isGroupManagerPageAllowed: boolean;
+};
+
+export type AuthenticatedPagesLayoutProps = {
   children: ReactNode;
 };
 
@@ -47,12 +52,25 @@ export type ModuleIndicatorProps = {
   module: AuthenticatedModule;
 };
 
+export type RoleIconProps = ModuleIndicatorProps & {
+  className?: string;
+};
+
 export type SidebarProps = {
   activePage: AuthenticatedPage;
+  activeModule: AuthenticatedModule;
   canViewProcesses: boolean;
+  canViewSubmissions: boolean;
+  canViewSponsorTracking: boolean;
+  canViewGroup: boolean;
   canViewComposition: boolean;
   canViewObservability: boolean;
   canViewSettings: boolean;
+  canManageForms: boolean;
+  canViewAiEvaluations: boolean;
+  canManageUsers: boolean;
+  canManageInstitutionalCatalog: boolean;
+  canManageLaboratoryAffiliations: boolean;
   expanded: boolean;
   user: CurrentUser;
 };

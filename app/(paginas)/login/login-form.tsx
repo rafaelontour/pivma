@@ -13,7 +13,7 @@ import type {
 import type { ApiMessage } from "@/types/Servico";
 import { getLocalizedApiError } from "@/i18n/errors";
 
-export function LoginForm({ onRegister }: LoginFormProps) {
+export function LoginForm({ onRegister, returnTo }: LoginFormProps) {
   const { t } = useTranslation();
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
@@ -59,7 +59,7 @@ export function LoginForm({ onRegister }: LoginFormProps) {
         description: t("auth.login.welcome", { username: userPayload.username }),
       });
       form.reset();
-      router.replace("/inicio");
+      router.replace(returnTo ?? "/inicio");
     } catch {
       setFormState({ kind: "idle" });
       toast.error(t("auth.login.connectionFailed"));

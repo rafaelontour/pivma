@@ -2,18 +2,13 @@
 
 import { ChevronRight } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { AuthenticatedShell } from "@/app/_components/authenticated-shell";
-import type {
-  AuthenticatedHomeProps,
-  WelcomeCardProps,
-} from "@/types/AreaAutenticada";
+import type { WelcomeCardProps } from "@/types/AreaAutenticada";
 
-export function AuthenticatedHome({ page = "home" }: AuthenticatedHomeProps) {
+export function AuthenticatedHome() {
   const { t } = useTranslation();
 
   return (
-    <AuthenticatedShell activePage={page}>
-      <div className="grid flex-1 content-center gap-5 py-10 md:grid-cols-2">
+    <div className="grid flex-1 content-center gap-5 py-10 md:grid-cols-2">
         <WelcomeCard
           eyebrow={t("home.environmentEyebrow")}
           title={t("home.environmentTitle")}
@@ -24,8 +19,7 @@ export function AuthenticatedHome({ page = "home" }: AuthenticatedHomeProps) {
           title={t("home.navigationTitle")}
           description={t("home.navigationDescription")}
         />
-      </div>
-    </AuthenticatedShell>
+    </div>
   );
 }
 

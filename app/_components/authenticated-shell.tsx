@@ -2,11 +2,22 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { redirect, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   Activity,
+  BookOpenCheck,
   BrainCircuit,
+  BriefcaseBusiness,
+  Building2,
+  ChartNoAxesCombined,
+  ChevronDown,
+  ClipboardCheck,
+  ClipboardList,
+  Eye,
+  FlaskConical,
+  HandHelping,
+  Handshake,
   House,
   LayoutDashboard,
   FilePenLine,
@@ -15,8 +26,14 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   PanelsTopLeft,
+  Microscope,
   Settings,
+  ShieldCheck,
+  TestTubes,
+  UserCheck,
+  UserRoundCog,
   UsersRound,
+  type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
@@ -28,6 +45,7 @@ import type {
   AuthenticatedModule,
   AuthenticatedShellProps,
   ModuleIndicatorProps,
+  RoleIconProps,
   SessionState,
   SidebarProps,
 } from "@/types/AreaAutenticada";
@@ -35,15 +53,35 @@ import type { ApiMessage, ApiRecord } from "@/types/Servico";
 import type { CurrentUser } from "@/types/Usuario";
 import {
   PROCESS_PARTICIPANT_ROLES,
-  type ProcessParticipantRole,
 } from "@/types/ParticipacaoProcesso";
 import { hasProcessKanbanAccess } from "@/types/Processo";
 import { hasFormManagementAccess } from "@/components/configuracoes";
 import { GuidedOnboarding } from "./guided-onboarding";
 
+const ROLE_ICON_BY_MODULE: Record<AuthenticatedModule, LucideIcon> = {
+  proponent: FilePenLine,
+  bracvam: ShieldCheck,
+  administration: Settings,
+  sponsor: Handshake,
+  group_manager: UsersRound,
+  study_manager: BriefcaseBusiness,
+  statistician: ChartNoAxesCombined,
+  adhoc_evaluator: Microscope,
+  peer_reviewer: BookOpenCheck,
+  lead_laboratory: FlaskConical,
+  participating_laboratory: TestTubes,
+  sample_selection_group: ClipboardCheck,
+  regulatory_observer: Eye,
+  collaborator: HandHelping,
+  platform: PanelsTopLeft,
+};
+
 export function AuthenticatedShell({
   activePage,
   children,
+  isProponentPageAllowed,
+  isSponsorPageAllowed,
+  isGroupManagerPageAllowed,
 }: AuthenticatedShellProps) {
   const router = useRouter();
   const { t } = useTranslation();
@@ -89,9 +127,17 @@ export function AuthenticatedShell({
       }
     }
 
+    function handleSessionRefresh() {
+      void loadSession();
+    }
+
+    window.addEventListener("pivma:session-refresh", handleSessionRefresh);
     void loadSession();
 
-    return () => controller.abort();
+    return () => {
+      window.removeEventListener("pivma:session-refresh", handleSessionRefresh);
+      controller.abort();
+    };
   }, [router, t]);
 
   useEffect(() => {
@@ -137,32 +183,70 @@ export function AuthenticatedShell({
     return <SessionLoading />;
   }
 
-  const canViewProcesses = hasProcessKanbanAccess(
-    session.user.permissions,
-    session.user.profiles,
+  const isProponentModule = activeModule === "proponent";
+  const isSponsorModule = activeModule === "sponsor";
+  const isGroupManagerModule = activeModule === "group_manager";
+  if (isProponentModule && !isProponentPageAllowed) {
+    redirect("/inicio");
+  }
+  if (isSponsorModule && !isSponsorPageAllowed) {
+    redirect("/acompanhamento");
+  }
+  if (isGroupManagerModule && !isGroupManagerPageAllowed) {
+    redirect("/grupo");
+  }
+
+  const canViewProcesses = !isProponentModule && !isSponsorModule && !isGroupManagerModule && (
+    hasProcessKanbanAccess(
+      session.user.permissions,
+      session.user.profiles,
+    ) || Boolean(session.user.scopes?.some((scope) => scope.roles.length > 0))
   );
-  const canViewComposition = session.user.scopes?.some((scope) =>
-    scope.roles.includes("proponent") || scope.roles.includes("group_manager"),
-  ) || session.user.permissions.includes("process.participants.manage");
-  const canViewAiEvaluations = [
+  const normalizedProfileNames = session.user.profiles.map((profile) =>
+    normalizeModuleName(profile.name),
+  );
+  const hasAdministrativeProfile = normalizedProfileNames.some(
+    (name) => name.includes("administr"),
+  );
+  const hasBracvamProfile = normalizedProfileNames.some((name) =>
+    name.includes("bracvam"),
+  );
+  const hasProponentRole = session.user.roles.includes("proponent") || Boolean(
+    session.user.scopes?.some((scope) => scope.roles.includes("proponent")),
+  ) || normalizedProfileNames.some(
+    (name) => name.includes("proponente") || name.includes("proponent"),
+  );
+  const canViewSubmissions = (hasProponentRole || activeModule === "platform") &&
+    !hasAdministrativeProfile && !hasBracvamProfile && !isSponsorModule;
+  const canViewGroup = isGroupManagerModule;
+  const canViewComposition = !isProponentModule && !isSponsorModule && !isGroupManagerModule && (
+    session.user.scopes?.some((scope) => scope.roles.includes("proponent")) ||
+    session.user.permissions.includes("process.participants.manage")
+  );
+  const canViewAiEvaluations = !isProponentModule && !isSponsorModule && !isGroupManagerModule && [
     "ai_evaluations.read",
     "ai_evaluations.manage",
   ].some((permission) => session.user.permissions.includes(permission));
-  const canManageForms = hasFormManagementAccess(session.user);
-  const canUseSubmissionTutorial =
-    !canManageForms &&
-    (session.user.roles.includes("proponent") ||
-      session.user.profiles.some((profile) =>
-        profile.name.toLocaleLowerCase("pt-BR").includes("proponente"),
-      ));
+  const canManageForms = !isProponentModule && !isSponsorModule && !isGroupManagerModule && hasFormManagementAccess(session.user);
+  const canUseSubmissionTutorial = canViewSubmissions && !canManageForms;
   const canManageUsers = session.user.permissions.includes("users.read");
   const canManageInstitutionalCatalog = session.user.permissions.includes(
     "institutional.catalogs.manage",
   );
+  const canManageLaboratoryAffiliations = [
+    "institutional.affiliations.manage",
+    "users.read",
+    "institutional.read",
+  ].every((permission) => session.user.permissions.includes(permission));
   const canManageCollectionTemplates = session.user.isAdministrator || canManageInstitutionalCatalog;
-  const canViewSettings =
-    canManageForms || canViewAiEvaluations || canManageUsers || canManageInstitutionalCatalog || canManageCollectionTemplates;
-  const headingKey = activePage === "ai-evaluations"
+  const canViewSettings = !isProponentModule && !isSponsorModule && !isGroupManagerModule && (
+    canManageForms || canViewAiEvaluations || canManageUsers ||
+    canManageInstitutionalCatalog || canManageLaboratoryAffiliations ||
+    canManageCollectionTemplates
+  );
+  const headingKey = activePage === "sponsor-tracking"
+    ? "sponsorTracking"
+    : activePage === "ai-evaluations"
     ? "aiEvaluations"
     : activePage === "operational-observability"
       ? "operationalObservability"
@@ -176,6 +260,8 @@ export function AuthenticatedShell({
               ? "processSamples"
               : activePage === "sample-receipt"
                 ? "sampleReceipt"
+                : activePage === "group"
+                  ? "group"
             : activePage;
   const heading = {
     eyebrow: t(`shell.headings.${headingKey}.eyebrow`),
@@ -186,8 +272,8 @@ export function AuthenticatedShell({
   };
 
   return (
-    <main className="grid h-dvh min-w-0 grid-cols-[auto_minmax(0,1fr)] grid-rows-[4.5rem_minmax(0,1fr)] overflow-hidden bg-[#efeef1] text-slate-800" data-module-theme={activeModule}>
-      <header className="col-span-full flex h-18 items-center justify-between gap-4 border-b border-slate-200 bg-white/95 px-5 shadow-[0_12px_28px_-24px_rgba(15,23,42,0.18)] sm:px-6">
+    <main className="authenticated-role-shell grid h-dvh min-w-0 grid-cols-[auto_minmax(0,1fr)] grid-rows-[4.5rem_minmax(0,1fr)] overflow-hidden text-slate-800" data-module-theme={activeModule}>
+      <header className="authenticated-role-header col-span-full flex h-18 items-center justify-between gap-4 border-b px-5 shadow-[0_12px_28px_-24px_rgba(15,23,42,0.18)] sm:px-6">
         <div className="flex min-w-0 items-center gap-3 sm:gap-4">
           <button
             aria-expanded={isSidebarExpanded}
@@ -270,10 +356,19 @@ export function AuthenticatedShell({
 
       <Sidebar
         activePage={activePage}
+        activeModule={activeModule}
+        canViewGroup={canViewGroup}
         canViewComposition={canViewComposition}
         canViewProcesses={canViewProcesses}
-        canViewObservability={session.user.isAdministrator}
+        canViewSubmissions={canViewSubmissions}
+        canViewSponsorTracking={isSponsorModule}
+        canViewObservability={!isProponentModule && !isSponsorModule && !isGroupManagerModule && session.user.isAdministrator}
         canViewSettings={canViewSettings}
+        canManageForms={canManageForms}
+        canViewAiEvaluations={canViewAiEvaluations}
+        canManageUsers={!isSponsorModule && !isGroupManagerModule && canManageUsers}
+        canManageInstitutionalCatalog={!isSponsorModule && !isGroupManagerModule && canManageInstitutionalCatalog}
+        canManageLaboratoryAffiliations={!isSponsorModule && !isGroupManagerModule && canManageLaboratoryAffiliations}
         expanded={isSidebarExpanded}
         user={session.user}
       />
@@ -281,7 +376,7 @@ export function AuthenticatedShell({
       <GuidedOnboarding
         activePage={activePage}
         canManageForms={canManageForms}
-        canManageUsers={session.user.permissions.includes("users.read")}
+        canManageUsers={!isProponentModule && !isSponsorModule && !isGroupManagerModule && session.user.permissions.includes("users.read")}
         canSubmit={canUseSubmissionTutorial}
         userId={session.user.id}
       />
@@ -300,7 +395,7 @@ export function AuthenticatedShell({
                 : "min-h-full"
             }`}
           >
-            <div className="flex shrink-0 items-start justify-between gap-5 border-b border-slate-300 pb-6">
+            <div className="authenticated-role-heading flex shrink-0 items-start justify-between gap-5 rounded-2xl border px-5 py-5 shadow-sm sm:px-6">
               <div className="min-w-0">
                 <p className="text-xs font-bold uppercase tracking-[0.18em] text-teal-700">
                   {heading.eyebrow}
@@ -337,10 +432,10 @@ function ModuleIndicator({ module }: ModuleIndicatorProps) {
 
   return (
     <div
-      className="inline-flex min-h-9 shrink-0 items-center gap-2 rounded-full border border-teal-200 bg-teal-50 px-3 py-1.5 text-xs font-bold text-teal-900 shadow-sm"
+      className="role-module-indicator inline-flex min-h-9 shrink-0 items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-bold shadow-sm"
     >
       <span className="grid size-6 place-items-center rounded-full bg-teal-600 text-white shadow-sm">
-        <PanelsTopLeft aria-hidden="true" className="size-3.5" strokeWidth={2.4} />
+        <RoleIcon className="size-3.5" module={module} />
       </span>
       <span className="whitespace-nowrap">{t(`shell.modules.${module}`)}</span>
     </div>
@@ -349,20 +444,33 @@ function ModuleIndicator({ module }: ModuleIndicatorProps) {
 
 function Sidebar({
   activePage,
+  activeModule,
+  canViewGroup,
   canViewComposition,
   canViewProcesses,
+  canViewSubmissions,
+  canViewSponsorTracking,
   canViewObservability,
   canViewSettings,
+  canManageForms,
+  canViewAiEvaluations,
+  canManageUsers,
+  canManageInstitutionalCatalog,
+  canManageLaboratoryAffiliations,
   expanded,
   user,
 }: SidebarProps) {
   const { i18n, t } = useTranslation();
+  const isConfigurationPage = activePage === "settings" || activePage === "forms" || activePage === "ai-evaluations" || activePage === "users" || activePage === "institutional-catalog" || activePage === "collection-templates";
+  const [configurationExpanded, setConfigurationExpanded] = useState(isConfigurationPage);
   const displayName = user.full_name || user.username;
   const initials = getInitials(displayName);
   const locale = normalizeLocale(i18n.resolvedLanguage) ?? "pt-BR";
   const profiles = user.profiles.length === 0
     ? formatRoles(user.roles, locale, t("common.notAssigned"))
     : user.profiles.map((profile) => profile.name).join(" · ");
+  const activeRoleTitle = t(`shell.roleProfiles.${activeModule}.title`);
+  const activeRoleDescription = t(`shell.roleProfiles.${activeModule}.description`);
   const linkClassName = (active: boolean) =>
     `flex items-center rounded-xl py-3 text-sm font-semibold outline-none transition focus-visible:ring-2 focus-visible:ring-teal-500 ${
       expanded ? "gap-3 px-3" : "justify-center px-2"
@@ -375,7 +483,7 @@ function Sidebar({
   return (
     <aside
       aria-label={t("shell.mainNavigation")}
-      className={`relative z-10 flex min-h-0 shrink-0 flex-col overflow-hidden border-r border-slate-200 bg-white/95 px-3 py-3 shadow-[12px_0_28px_-24px_rgba(15,23,42,0.14)] transition-[width] duration-200 ease-out ${
+      className={`authenticated-role-sidebar relative z-10 flex min-h-0 shrink-0 flex-col overflow-hidden border-r px-3 py-3 shadow-[12px_0_28px_-24px_rgba(15,23,42,0.14)] transition-[width] duration-200 ease-out ${
         expanded ? "w-72" : "w-20"
       }`}
     >
@@ -390,28 +498,46 @@ function Sidebar({
           {expanded && <span>{t("shell.navigation.home")}</span>}
         </Link>
 
-        <Link
-          data-tour="shell-nav-submissions"
-          aria-current={activePage === "submissions" ? "page" : undefined}
-          aria-label={t("shell.navigation.submissions")}
-          className={`mt-2 ${linkClassName(activePage === "submissions")}`}
-          href="/submissoes"
-          onClick={() => {
-            try {
-              window.sessionStorage.setItem("pivma:onboarding:enter", "proponent-submission");
-            } catch {
-              // A navegação continua quando o navegador bloqueia o armazenamento.
-            }
-            window.dispatchEvent(new CustomEvent("pivma:onboarding-enter", { detail: "proponent-submission" }));
-          }}
-        >
-          <FilePenLine
-            aria-hidden="true"
-            className="size-5 shrink-0"
-            strokeWidth={2.2}
-          />
-          {expanded && <span>{t("shell.navigation.submissions")}</span>}
-        </Link>
+        {canViewSubmissions && (
+          <Link
+            data-tour="shell-nav-submissions"
+            aria-current={activePage === "submissions" ? "page" : undefined}
+            aria-label={t("shell.navigation.submissions")}
+            className={`mt-2 ${linkClassName(activePage === "submissions")}`}
+            href="/submissoes"
+            onClick={() => {
+              try {
+                window.sessionStorage.setItem("pivma:onboarding:enter", "proponent-submission");
+              } catch {
+                // A navegação continua quando o navegador bloqueia o armazenamento.
+              }
+              window.dispatchEvent(new CustomEvent("pivma:onboarding-enter", { detail: "proponent-submission" }));
+            }}
+          >
+            <FilePenLine
+              aria-hidden="true"
+              className="size-5 shrink-0"
+              strokeWidth={2.2}
+            />
+            {expanded && <span>{t("shell.navigation.submissions")}</span>}
+          </Link>
+        )}
+
+        {canViewSponsorTracking && (
+          <Link
+            aria-current={activePage === "sponsor-tracking" ? "page" : undefined}
+            aria-label={t("shell.navigation.sponsorTracking")}
+            className={`mt-2 ${linkClassName(activePage === "sponsor-tracking")}`}
+            href="/acompanhamento"
+          >
+            <ChartNoAxesCombined
+              aria-hidden="true"
+              className="size-5 shrink-0"
+              strokeWidth={2.2}
+            />
+            {expanded && <span>{t("shell.navigation.sponsorTracking")}</span>}
+          </Link>
+        )}
 
         {canViewProcesses && (
           <Link
@@ -441,37 +567,91 @@ function Sidebar({
           </Link>
         )}
 
-        {canViewSettings && (
+        {canViewGroup && (
           <Link
-            data-tour="shell-nav-settings"
-            aria-current={
-              activePage === "settings" ||
-              activePage === "forms" ||
-              activePage === "ai-evaluations" ||
-              activePage === "users" ||
-              activePage === "institutional-catalog" ||
-              activePage === "collection-templates"
-                ? "page"
-                : undefined
-            }
-            aria-label={t("shell.navigation.settings")}
-            className={`mt-2 ${linkClassName(
-              activePage === "settings" ||
-                activePage === "forms" ||
-                activePage === "ai-evaluations" ||
-                activePage === "users" ||
-                activePage === "institutional-catalog" ||
-                activePage === "collection-templates",
-            )}`}
-            href="/configuracoes"
+            aria-current={activePage === "group" ? "page" : undefined}
+            aria-label={t("shell.navigation.sponsorTracking")}
+            className={`mt-2 ${linkClassName(activePage === "group")}`}
+            href="/grupo"
           >
-            <Settings
-              aria-hidden="true"
-              className="size-5 shrink-0"
-              strokeWidth={2.2}
-            />
-            {expanded && <span>{t("shell.navigation.settings")}</span>}
+            <UsersRound aria-hidden="true" className="size-5 shrink-0" strokeWidth={2.2} />
+            {expanded && <span>{t("shell.navigation.sponsorTracking")}</span>}
           </Link>
+        )}
+
+        {canViewSettings && (
+          <section aria-label={t("shell.navigation.configuration")} className="mt-2">
+            <div className={`flex items-center rounded-xl ${expanded ? "gap-1" : "justify-center gap-0.5"}`}>
+              <Link
+                aria-current={activePage === "settings" ? "page" : undefined}
+                aria-label={t("shell.navigation.settings")}
+                className={`flex min-w-0 flex-1 items-center rounded-xl py-3 text-sm font-semibold outline-none transition focus-visible:ring-2 focus-visible:ring-teal-500 ${expanded ? "gap-3 px-3" : "justify-center px-2"} ${isConfigurationPage ? "bg-teal-600/10 text-teal-800 ring-1 ring-inset ring-teal-700/20 hover:bg-teal-600/15" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"}`}
+                href="/configuracoes"
+              >
+                <Settings aria-hidden="true" className="size-5 shrink-0" strokeWidth={2.2} />
+                {expanded && <span className="truncate">{t("shell.navigation.settings")}</span>}
+              </Link>
+              {expanded && (
+                <button
+                  aria-controls="configuration-submenu"
+                  aria-expanded={configurationExpanded}
+                  aria-label={t(configurationExpanded ? "shell.navigation.collapseConfiguration" : "shell.navigation.expandConfiguration")}
+                  className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg text-slate-600 outline-none transition hover:bg-slate-100 hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-teal-500"
+                  onClick={() => setConfigurationExpanded((value) => !value)}
+                  type="button"
+                >
+                  <ChevronDown aria-hidden="true" className={`size-4 transition-transform ${configurationExpanded ? "rotate-180" : ""}`} />
+                </button>
+              )}
+            </div>
+            <div className={`ml-3 mt-1 grid gap-1 border-l border-slate-200 pl-2 ${configurationExpanded ? "" : "hidden"}`} id="configuration-submenu">
+            {canManageForms && (
+              <Link
+                data-tour="shell-nav-settings"
+                aria-current={activePage === "forms" ? "page" : undefined}
+                aria-label={t("shell.navigation.forms")}
+                className={`flex items-center rounded-lg px-3 py-2 text-sm font-medium outline-none transition focus-visible:ring-2 focus-visible:ring-teal-500 ${expanded ? "gap-3" : "justify-center"} ${activePage === "forms" ? "bg-teal-600/10 text-teal-800" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"}`}
+                href="/formularios"
+              >
+                <ClipboardList aria-hidden="true" className="size-4 shrink-0" />
+                {expanded && <span>{t("shell.navigation.forms")}</span>}
+              </Link>
+            )}
+            {canViewAiEvaluations && (
+              <Link
+                aria-current={activePage === "ai-evaluations" ? "page" : undefined}
+                aria-label={t("shell.navigation.aiRules")}
+                className={`flex items-center rounded-lg px-3 py-2 text-sm font-medium outline-none transition focus-visible:ring-2 focus-visible:ring-teal-500 ${expanded ? "gap-3" : "justify-center"} ${activePage === "ai-evaluations" ? "bg-teal-600/10 text-teal-800" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"}`}
+                href="/avaliacoes-ia"
+              >
+                <BrainCircuit aria-hidden="true" className="size-4 shrink-0" />
+                {expanded && <span>{t("shell.navigation.aiRules")}</span>}
+              </Link>
+            )}
+            {canManageUsers && (
+              <Link
+                aria-current={activePage === "users" ? "page" : undefined}
+                aria-label={t("shell.navigation.usersAndProfiles")}
+                className={`flex items-center rounded-lg px-3 py-2 text-sm font-medium outline-none transition focus-visible:ring-2 focus-visible:ring-teal-500 ${expanded ? "gap-3" : "justify-center"} ${activePage === "users" ? "bg-teal-600/10 text-teal-800" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"}`}
+                href="/usuarios"
+              >
+                <UserRoundCog aria-hidden="true" className="size-4 shrink-0" />
+                {expanded && <span>{t("shell.navigation.usersAndProfiles")}</span>}
+              </Link>
+            )}
+            {(canManageInstitutionalCatalog || canManageLaboratoryAffiliations) && (
+              <Link
+                aria-current={activePage === "institutional-catalog" ? "page" : undefined}
+                aria-label={t("shell.navigation.institutionsAndLaboratories")}
+                className={`flex items-center rounded-lg px-3 py-2 text-sm font-medium outline-none transition focus-visible:ring-2 focus-visible:ring-teal-500 ${expanded ? "gap-3" : "justify-center"} ${activePage === "institutional-catalog" ? "bg-teal-600/10 text-teal-800" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"}`}
+                href="/instituicoes-laboratorios"
+              >
+                <Building2 aria-hidden="true" className="size-4 shrink-0" />
+                {expanded && <span>{t("shell.navigation.institutionsAndLaboratories")}</span>}
+              </Link>
+            )}
+            </div>
+          </section>
         )}
 
         {canViewObservability && (
@@ -500,24 +680,30 @@ function Sidebar({
 
       <div className="mt-auto border-t border-slate-200 pt-4">
         <div
-          className={`flex items-center rounded-xl bg-slate-100 ${
-            expanded ? "gap-3 p-3" : "justify-center p-2"
+          className={`role-profile-card flex items-center rounded-2xl border shadow-sm ${
+            expanded ? "gap-3 p-3.5" : "justify-center p-2"
           }`}
-          title={expanded ? undefined : displayName}
+          title={expanded ? undefined : `${displayName} · ${activeRoleTitle}`}
         >
-          <div className="grid size-9 shrink-0 place-items-center rounded-full bg-teal-600/10 text-xs font-bold text-teal-800 ring-1 ring-teal-700/20">
+          <div className="relative grid size-11 shrink-0 place-items-center rounded-full bg-teal-600 text-xs font-bold text-white shadow-sm ring-4 ring-white/80">
             {initials}
+            <span className="absolute -bottom-1 -right-1 grid size-5 place-items-center rounded-full border-2 border-white bg-teal-800 text-white">
+              <RoleIcon className="size-2.5" module={activeModule} />
+            </span>
           </div>
           {!expanded && <span className="sr-only">{t("shell.profile", { name: displayName })}</span>}
           {expanded && (
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-semibold text-slate-800">
                 {displayName}
               </p>
-              <p className="truncate text-xs text-slate-500">
-                {user.username} · {user.email}
+              <p className="mt-0.5 truncate text-xs font-bold text-teal-800">
+                {activeRoleTitle}
               </p>
-              <p className="mt-1 truncate text-xs font-medium text-teal-700">
+              <p className="mt-1 line-clamp-2 text-[0.7rem] leading-4 text-slate-600">
+                {activeRoleDescription}
+              </p>
+              <p className="mt-2 truncate border-t border-slate-200/80 pt-2 text-[0.68rem] text-slate-500" title={profiles}>
                 {t("shell.profiles", { profiles })}
               </p>
             </div>
@@ -545,6 +731,11 @@ function SessionLoading() {
   );
 }
 
+function RoleIcon({ module, className }: RoleIconProps) {
+  const Icon = ROLE_ICON_BY_MODULE[module] ?? UserCheck;
+  return <Icon aria-hidden="true" className={className} strokeWidth={2.3} />;
+}
+
 function getInitials(username: string) {
   return username.trim().slice(0, 2).toUpperCase() || "PV";
 }
@@ -553,24 +744,32 @@ function getActiveModule(user: CurrentUser): AuthenticatedModule {
   const profileNames = user.profiles.map((profile) =>
     normalizeModuleName(profile.name),
   );
-  if (profileNames.some((name) => name.includes("bracvam"))) return "bracvam";
-  if (profileNames.some((name) => name.includes("proponente") || name.includes("proponent"))) return "proponent";
-  if (profileNames.some((name) => name.includes("administr"))) return "administration";
-
-  const profileRole = PROCESS_PARTICIPANT_ROLES.find((role) =>
-    profileNames.some((name) => matchesParticipantRole(name, role)),
-  );
-  if (profileRole) return profileRole;
-
   const sessionRoles = [
     ...user.roles,
     ...(user.scopes?.flatMap((scope) => scope.roles) ?? []),
   ];
-  const participantRole = sessionRoles.find((role) =>
-    PROCESS_PARTICIPANT_ROLES.includes(role as ProcessParticipantRole),
-  ) as ProcessParticipantRole | undefined;
-  if (participantRole) return participantRole;
-  if (user.isAdministrator) return "administration";
+  const associationRole = PROCESS_PARTICIPANT_ROLES.find(
+    (role) => role !== "proponent" && role !== "sponsor" && sessionRoles.includes(role),
+  );
+  if (associationRole) return associationRole;
+
+  if (profileNames.some((name) => name.includes("administr"))) {
+    return "administration";
+  }
+  if (profileNames.some((name) => name.includes("bracvam"))) {
+    return "bracvam";
+  }
+  if (
+    profileNames.some(
+      (name) => name.includes("proponente") || name.includes("proponent"),
+    )
+  ) {
+    return "proponent";
+  }
+
+  if (sessionRoles.includes("sponsor")) return "sponsor";
+  if (sessionRoles.includes("proponent")) return "proponent";
+
   return "platform";
 }
 
@@ -580,24 +779,6 @@ function normalizeModuleName(value: string) {
     .replaceAll(/[\u0300-\u036f]/g, "")
     .toLocaleLowerCase("pt-BR")
     .replaceAll(/[-_]/g, " ");
-}
-
-function matchesParticipantRole(name: string, role: ProcessParticipantRole) {
-  const aliases: Record<ProcessParticipantRole, string[]> = {
-    proponent: ["proponente", "proponent"],
-    sponsor: ["patrocinador", "sponsor"],
-    group_manager: ["grupo gestor", "group manager", "management group"],
-    study_manager: ["gestor do estudo", "gerente do estudo", "study manager"],
-    statistician: ["estatistico", "statistician"],
-    adhoc_evaluator: ["avaliador ad hoc", "ad hoc evaluator"],
-    peer_reviewer: ["revisor por pares", "peer reviewer"],
-    lead_laboratory: ["laboratorio lider", "laboratorio responsavel", "lead laboratory"],
-    participating_laboratory: ["laboratorio participante", "participating laboratory"],
-    sample_selection_group: ["grupo de selecao de amostras", "sample selection group"],
-    regulatory_observer: ["observador regulatorio", "regulatory observer"],
-    collaborator: ["colaborador", "collaborator"],
-  };
-  return aliases[role].some((alias) => name.includes(alias));
 }
 
 function formatRoles(roles: string[], locale: string, emptyLabel: string) {

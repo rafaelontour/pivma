@@ -37,12 +37,14 @@ export type LoginFormState = { kind: "idle" } | { kind: "loading" };
 
 export type LoginFormProps = {
   onRegister: () => void;
+  returnTo?: string;
 };
 
 export type RegistrationFormState = { kind: "idle" } | { kind: "loading" };
 
 export type RegistrationFormProps = {
   onLogin: () => void;
+  returnTo?: string;
 };
 
 export type PasswordCriterion = {

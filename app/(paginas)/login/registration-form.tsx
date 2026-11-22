@@ -19,7 +19,7 @@ import type { ApiMessage } from "@/types/Servico";
 const USERNAME_PATTERN = /^[A-Za-z0-9._-]{3,64}$/;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export function RegistrationForm({ onLogin }: RegistrationFormProps) {
+export function RegistrationForm({ onLogin, returnTo }: RegistrationFormProps) {
   const { t } = useTranslation();
   const [fullName, setFullName] = useState("");
   const [username, setUsername] = useState("");
@@ -93,6 +93,9 @@ export function RegistrationForm({ onLogin }: RegistrationFormProps) {
       toast.success(t("auth.register.success"), {
         description: t("auth.register.successDescription"),
       });
+      if (returnTo) {
+        window.sessionStorage.setItem("pivma:invite:return-to", returnTo);
+      }
       onLogin();
     } catch {
       setPassword("");

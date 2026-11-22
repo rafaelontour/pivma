@@ -9,6 +9,9 @@ import {
   Pencil,
   Plus,
   RefreshCw,
+  Search,
+  UserPlus,
+  Check,
   TriangleAlert,
   X,
 } from "lucide-react";
@@ -27,12 +30,15 @@ import type {
   InstitutionalDialogProps,
   InstitutionalDialogShellProps,
   InstitutionalDialogState,
+  LaboratoryMemberDialogProps,
+  LaboratoryMemberDialogState,
   InstitutionalCatalogMessageProps,
   InstitutionalStatusBadgeProps,
   InstitutionalTarget,
   Laboratory,
 } from "@/types/Institucional";
 import type { ApiRecord } from "@/types/Servico";
+import type { UserList } from "@/types/Usuario";
 
 export function InstitutionalCatalog({ initialSnapshot }: InstitutionalCatalogProps) {
   const { i18n, t } = useTranslation();
@@ -43,7 +49,27 @@ export function InstitutionalCatalog({ initialSnapshot }: InstitutionalCatalogPr
       : { kind: "loading" },
   );
   const [dialog, setDialog] = useState<InstitutionalDialogState>({ kind: "closed" });
+  const [memberDialog, setMemberDialog] = useState<LaboratoryMemberDialogState>({ kind: "closed" });
+  const [canManageAffiliations, setCanManageAffiliations] = useState(false);
+  const [canManageCatalog, setCanManageCatalog] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetch("/api/auth/me", { cache: "no-store", signal: controller.signal })
+      .then(async (response) => response.ok ? response.json().catch(() => null) : null)
+      .then((payload) => {
+        const permissions = getPermissionList(payload);
+        setCanManageCatalog(permissions.includes("institutional.catalogs.manage"));
+        setCanManageAffiliations([
+          "institutional.affiliations.manage",
+          "users.read",
+          "institutional.read",
+        ].every((permission) => permissions.includes(permission)));
+      })
+      .catch(() => setCanManageAffiliations(false));
+    return () => controller.abort();
+  }, []);
 
   async function loadCatalog(preserveCurrent = false) {
     if (!preserveCurrent) setCatalog({ kind: "loading" });
@@ -114,6 +140,78 @@ export function InstitutionalCatalog({ initialSnapshot }: InstitutionalCatalogPr
 
   function openDeactivate(target: InstitutionalTarget) {
     setDialog({ kind: "deactivate", target, error: null, isSubmitting: false });
+  }
+
+  function openAddPerson(laboratory: Laboratory) {
+    setMemberDialog({
+      kind: "open",
+      laboratory,
+      search: "",
+      users: [],
+      selectedUserId: "",
+      error: null,
+      hasSearched: false,
+      isSearching: false,
+      isSubmitting: false,
+    });
+  }
+
+  async function searchPeople() {
+    if (memberDialog.kind !== "open" || memberDialog.isSearching || memberDialog.isSubmitting) return;
+    const current = memberDialog;
+    if (current.search.trim().length < 2) {
+      setMemberDialog({ ...current, users: [], selectedUserId: "", error: t("institutionalCatalog.members.searchRequired"), hasSearched: false });
+      return;
+    }
+    setMemberDialog({ ...current, error: null, hasSearched: false, isSearching: true, users: [], selectedUserId: "" });
+    try {
+      const params = new URLSearchParams({ name: current.search.trim() });
+      const response = await fetch(`/api/institucional/laboratorios/${current.laboratory.id}/membros?${params}`, { cache: "no-store" });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !isUserList(payload)) {
+        setMemberDialog({ ...current, error: getLocalizedApiError(payload, t("institutionalCatalog.members.searchFailed"), t), hasSearched: false, isSearching: false });
+        return;
+      }
+      setMemberDialog({
+        ...current,
+        users: payload.items.filter((user) => user.active),
+        error: null,
+        hasSearched: true,
+        isSearching: false,
+      });
+    } catch {
+      setMemberDialog({ ...current, error: t("institutionalCatalog.members.connectionFailed"), hasSearched: false, isSearching: false });
+    }
+  }
+
+  async function addPersonToLaboratory() {
+    if (memberDialog.kind !== "open" || memberDialog.isSubmitting) return;
+    const current = memberDialog;
+    if (!current.users.some((user) => user.id === current.selectedUserId)) {
+      setMemberDialog({ ...current, error: t("institutionalCatalog.members.selectPerson") });
+      return;
+    }
+    setMemberDialog({ ...current, error: null, isSubmitting: true });
+    try {
+      const response = await fetch(`/api/institucional/laboratorios/${current.laboratory.id}/membros`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: current.selectedUserId }),
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        const fallback = response.status === 409
+          ? t("institutionalCatalog.members.duplicate")
+          : t("institutionalCatalog.members.addFailed");
+        setMemberDialog({ ...current, error: getLocalizedApiError(payload, fallback, t), isSubmitting: false });
+        return;
+      }
+      const selectedPerson = current.users.find((user) => user.id === current.selectedUserId);
+      setMemberDialog({ kind: "closed" });
+      toast.success(t("institutionalCatalog.members.added", { person: selectedPerson?.full_name || selectedPerson?.username }));
+    } catch {
+      setMemberDialog({ ...current, error: t("institutionalCatalog.members.connectionFailed"), isSubmitting: false });
+    }
   }
 
   function closeDialog() {
@@ -216,20 +314,24 @@ export function InstitutionalCatalog({ initialSnapshot }: InstitutionalCatalogPr
             <RefreshCw aria-hidden="true" className={`size-4 ${isRefreshing ? "animate-spin" : ""}`} />
             {t("institutionalCatalog.actions.refresh")}
           </button>
-          <button className={secondaryButtonClass} onClick={() => openCreate("institution")} type="button">
-            <Plus aria-hidden="true" className="size-4" />
-            {t("institutionalCatalog.actions.newInstitution")}
-          </button>
-          <button
-            className={primaryButtonClass}
-            disabled={activeInstitutions.length === 0}
-            onClick={() => openCreate("laboratory")}
-            title={activeInstitutions.length === 0 ? t("institutionalCatalog.noActiveInstitution") : undefined}
-            type="button"
-          >
-            <Plus aria-hidden="true" className="size-4" />
-            {t("institutionalCatalog.actions.newLaboratory")}
-          </button>
+          {canManageCatalog && (
+            <>
+              <button className={secondaryButtonClass} onClick={() => openCreate("institution")} type="button">
+                <Plus aria-hidden="true" className="size-4" />
+                {t("institutionalCatalog.actions.newInstitution")}
+              </button>
+              <button
+                className={primaryButtonClass}
+                disabled={activeInstitutions.length === 0}
+                onClick={() => openCreate("laboratory")}
+                title={activeInstitutions.length === 0 ? t("institutionalCatalog.noActiveInstitution") : undefined}
+                type="button"
+              >
+                <Plus aria-hidden="true" className="size-4" />
+                {t("institutionalCatalog.actions.newLaboratory")}
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -249,6 +351,9 @@ export function InstitutionalCatalog({ initialSnapshot }: InstitutionalCatalogPr
                 .filter((laboratory) => laboratory.institution.id === institution.id)
                 .sort((left, right) => compareLocalized(left.name, right.name, locale))}
               locale={locale}
+              canManageCatalog={canManageCatalog}
+              canManageAffiliations={canManageAffiliations}
+              onAddPerson={openAddPerson}
               onDeactivate={openDeactivate}
               onRename={openRename}
             />
@@ -268,11 +373,21 @@ export function InstitutionalCatalog({ initialSnapshot }: InstitutionalCatalogPr
           state={dialog}
         />
       )}
+      {memberDialog.kind === "open" && (
+        <LaboratoryMemberDialog
+          onClose={() => setMemberDialog((current) => current.kind === "open" && (current.isSearching || current.isSubmitting) ? current : { kind: "closed" })}
+          onSearch={() => void searchPeople()}
+          onSearchChange={(search) => setMemberDialog((current) => current.kind === "open" ? { ...current, search, users: [], selectedUserId: "", error: null, hasSearched: false } : current)}
+          onSelectUser={(selectedUserId) => setMemberDialog((current) => current.kind === "open" ? { ...current, selectedUserId, error: null } : current)}
+          onSubmit={() => void addPersonToLaboratory()}
+          state={memberDialog}
+        />
+      )}
     </section>
   );
 }
 
-function InstitutionCard({ institution, laboratories, locale, onDeactivate, onRename }: InstitutionCardProps) {
+function InstitutionCard({ institution, laboratories, locale, canManageCatalog, canManageAffiliations, onAddPerson, onDeactivate, onRename }: InstitutionCardProps) {
   const { t } = useTranslation();
   const target: InstitutionalTarget = { id: institution.id, kind: "institution", name: institution.name };
 
@@ -295,12 +410,14 @@ function InstitutionCard({ institution, laboratories, locale, onDeactivate, onRe
             </p>
           </div>
         </div>
-        <div className="flex gap-2">
-          <ActionButton label={t("institutionalCatalog.actions.renameInstitution", { name: institution.name })} onClick={() => onRename(target)} />
-          {institution.active && (
-            <ActionButton danger label={t("institutionalCatalog.actions.deactivateInstitution", { name: institution.name })} onClick={() => onDeactivate(target)} />
-          )}
-        </div>
+        {canManageCatalog && (
+          <div className="flex gap-2">
+            <ActionButton label={t("institutionalCatalog.actions.renameInstitution", { name: institution.name })} onClick={() => onRename(target)} />
+            {institution.active && (
+              <ActionButton danger label={t("institutionalCatalog.actions.deactivateInstitution", { name: institution.name })} onClick={() => onDeactivate(target)} />
+            )}
+          </div>
+        )}
       </div>
       <div className="p-5">
         <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">
@@ -327,9 +444,23 @@ function InstitutionCard({ institution, laboratories, locale, onDeactivate, onRe
                     <StatusBadge active={laboratory.active} />
                   </div>
                   <div className="flex gap-2">
-                    <ActionButton label={t("institutionalCatalog.actions.renameLaboratory", { name: laboratory.name })} onClick={() => onRename(laboratoryTarget)} />
-                    {laboratory.active && (
-                      <ActionButton danger label={t("institutionalCatalog.actions.deactivateLaboratory", { name: laboratory.name })} onClick={() => onDeactivate(laboratoryTarget)} />
+                    {canManageAffiliations && laboratory.active && institution.active && (
+                      <button
+                        className={secondaryButtonClass}
+                        onClick={() => onAddPerson(laboratory)}
+                        type="button"
+                      >
+                        <Plus aria-hidden="true" className="size-4" />
+                        {t("institutionalCatalog.members.addAction")}
+                      </button>
+                    )}
+                    {canManageCatalog && (
+                      <>
+                        <ActionButton label={t("institutionalCatalog.actions.renameLaboratory", { name: laboratory.name })} onClick={() => onRename(laboratoryTarget)} />
+                        {laboratory.active && (
+                          <ActionButton danger label={t("institutionalCatalog.actions.deactivateLaboratory", { name: laboratory.name })} onClick={() => onDeactivate(laboratoryTarget)} />
+                        )}
+                      </>
                     )}
                   </div>
                 </li>
@@ -426,7 +557,116 @@ function InstitutionalDialog({ state, institutions, onClose, onInstitutionChange
   );
 }
 
-function DialogShell({ label, titleId, busy, onClose, children }: InstitutionalDialogShellProps) {
+function LaboratoryMemberDialog({ state, onClose, onSearchChange, onSelectUser, onSearch, onSubmit }: LaboratoryMemberDialogProps) {
+  const { t } = useTranslation();
+  const title = t("institutionalCatalog.members.dialogTitle", { laboratory: state.laboratory.name });
+
+  function handleSearch(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    onSearch();
+  }
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    onSubmit();
+  }
+
+  return (
+    <DialogShell busy={state.isSearching || state.isSubmitting} label={title} onClose={onClose} titleId="laboratory-member-dialog-title" wide>
+      <div className="flex items-start justify-between gap-5 rounded-t-2xl border-b border-teal-100 bg-gradient-to-br from-teal-50 via-white to-cyan-50 px-6 py-5">
+        <div className="flex min-w-0 items-start gap-4">
+          <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-teal-700 text-white shadow-sm">
+            <UserPlus aria-hidden="true" className="size-6" />
+          </span>
+          <div className="min-w-0">
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">{t("institutionalCatalog.members.eyebrow")}</p>
+            <h2 className="mt-1 break-words text-xl font-bold text-slate-950" id="laboratory-member-dialog-title">{title}</h2>
+            <p className="mt-2 max-w-xl text-sm leading-6 text-slate-600">{t("institutionalCatalog.members.description")}</p>
+          </div>
+        </div>
+        <button aria-label={t("institutionalCatalog.actions.close")} className="shrink-0 rounded-xl border border-slate-200 bg-white p-2 text-slate-500 shadow-sm transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500" disabled={state.isSearching || state.isSubmitting} onClick={onClose} type="button">
+          <X aria-hidden="true" className="size-5" />
+        </button>
+      </div>
+      <form onSubmit={handleSearch}>
+        <div className="px-6 pt-6">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <label className="block text-sm font-bold text-slate-800" htmlFor="laboratory-member-search">{t("institutionalCatalog.members.searchLabel")}</label>
+            <p className="mt-1 text-xs leading-5 text-slate-500">{t("institutionalCatalog.members.searchHint")}</p>
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+              <div className="relative flex-1">
+                <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 size-5 -translate-y-1/2 text-slate-400" />
+                <input autoFocus className="block min-h-12 w-full rounded-xl border border-slate-300 bg-white py-2.5 pl-10 pr-3 text-sm text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-teal-600 focus:ring-4 focus:ring-teal-500/15 disabled:bg-slate-100" disabled={state.isSearching || state.isSubmitting} id="laboratory-member-search" maxLength={255} minLength={2} onChange={(event) => onSearchChange(event.target.value)} placeholder={t("institutionalCatalog.members.searchPlaceholder")} required value={state.search} />
+              </div>
+              <button aria-label={t("institutionalCatalog.members.searchAction")} className={`${primaryButtonClass} min-h-12 rounded-xl px-5`} disabled={state.isSearching || state.isSubmitting || state.search.trim().length < 2} type="submit">
+                {state.isSearching ? <LoaderCircle aria-hidden="true" className="size-4 animate-spin" /> : <Search aria-hidden="true" className="size-4" />}
+                {t(state.isSearching ? "institutionalCatalog.members.searching" : "institutionalCatalog.members.searchAction")}
+              </button>
+            </div>
+          </div>
+        </div>
+      </form>
+      <form onSubmit={handleSubmit}>
+        <div className="min-h-52 space-y-3 px-6 py-5">
+          {state.isSearching ? (
+            <div aria-live="polite" className="grid min-h-40 place-items-center rounded-2xl border border-dashed border-slate-300 bg-white text-center">
+              <div>
+                <LoaderCircle aria-hidden="true" className="mx-auto size-7 animate-spin text-teal-700" />
+                <p className="mt-3 text-sm font-semibold text-slate-700">{t("institutionalCatalog.members.searching")}</p>
+              </div>
+            </div>
+          ) : state.users.length > 0 ? (
+            <fieldset>
+              <legend className="mb-3 flex w-full items-center justify-between gap-3 text-sm font-bold text-slate-800">
+                <span>{t("institutionalCatalog.members.results")}</span>
+                <span className="rounded-full bg-teal-50 px-2.5 py-1 text-xs font-bold text-teal-800">{t("institutionalCatalog.members.resultCount", { count: state.users.length })}</span>
+              </legend>
+              <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
+              {state.users.map((user) => (
+                <label className={`group flex cursor-pointer items-center gap-3 rounded-xl border p-3.5 transition ${state.selectedUserId === user.id ? "border-teal-600 bg-teal-50 shadow-sm ring-1 ring-teal-600" : "border-slate-200 bg-white hover:border-teal-300 hover:bg-slate-50"}`} key={user.id}>
+                  <input checked={state.selectedUserId === user.id} className="sr-only" disabled={state.isSubmitting} name="laboratory-member" onChange={() => onSelectUser(user.id)} type="radio" value={user.id} />
+                  <span className={`grid size-10 shrink-0 place-items-center rounded-full text-sm font-bold ${state.selectedUserId === user.id ? "bg-teal-700 text-white" : "bg-slate-100 text-slate-600 group-hover:bg-teal-100 group-hover:text-teal-800"}`}>{(user.full_name || "?").trim().charAt(0).toLocaleUpperCase()}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block break-words text-sm font-bold text-slate-950">{user.full_name}</span>
+                    <span className="mt-0.5 block break-all text-xs text-slate-500">{user.email}</span>
+                  </span>
+                  <span className={`grid size-6 shrink-0 place-items-center rounded-full border ${state.selectedUserId === user.id ? "border-teal-700 bg-teal-700 text-white" : "border-slate-300 bg-white text-transparent"}`}><Check aria-hidden="true" className="size-4" /></span>
+                </label>
+              ))}
+              </div>
+            </fieldset>
+          ) : state.hasSearched && !state.error ? (
+            <div className="grid min-h-40 place-items-center rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-6 text-center">
+              <div>
+                <Search aria-hidden="true" className="mx-auto size-7 text-slate-400" />
+                <p className="mt-3 text-sm font-bold text-slate-800">{t("institutionalCatalog.members.noResultsTitle")}</p>
+                <p className="mt-1 text-sm text-slate-500">{t("institutionalCatalog.members.noResults", { name: state.search.trim() })}</p>
+              </div>
+            </div>
+          ) : !state.error ? (
+            <div className="grid min-h-40 place-items-center rounded-2xl border border-dashed border-slate-300 bg-slate-50/70 px-6 text-center">
+              <div>
+                <UserPlus aria-hidden="true" className="mx-auto size-7 text-teal-700" />
+                <p className="mt-3 text-sm font-bold text-slate-800">{t("institutionalCatalog.members.initialTitle")}</p>
+                <p className="mt-1 text-sm text-slate-500">{t("institutionalCatalog.members.initialDescription")}</p>
+              </div>
+            </div>
+          ) : null}
+          {state.error && <p aria-live="assertive" className="rounded-xl border border-red-200 bg-red-50 p-3.5 text-sm text-red-700">{state.error}</p>}
+        </div>
+        <div className="flex flex-col-reverse gap-2 border-t border-slate-200 bg-slate-50 px-6 py-4 sm:flex-row sm:justify-end">
+          <button className={secondaryButtonClass} disabled={state.isSearching || state.isSubmitting} onClick={onClose} type="button">{t("institutionalCatalog.actions.cancel")}</button>
+          <button className={primaryButtonClass} disabled={state.isSubmitting || state.isSearching || !state.selectedUserId} type="submit">
+            {state.isSubmitting && <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />}
+            {t(state.isSubmitting ? "institutionalCatalog.members.adding" : "institutionalCatalog.members.addAction")}
+          </button>
+        </div>
+      </form>
+    </DialogShell>
+  );
+}
+
+function DialogShell({ label, titleId, busy, wide = false, onClose, children }: InstitutionalDialogShellProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const previousFocus = useRef<HTMLElement | null>(null);
 
@@ -460,7 +700,7 @@ function DialogShell({ label, titleId, busy, onClose, children }: InstitutionalD
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-slate-950/55 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
-      <div aria-busy={busy} aria-label={label} aria-labelledby={titleId} aria-modal="true" className="w-full max-w-lg rounded-2xl bg-white shadow-2xl" onKeyDown={handleKeyDown} ref={dialogRef} role="dialog">
+      <div aria-busy={busy} aria-label={label} aria-labelledby={titleId} aria-modal="true" className={`w-full ${wide ? "max-w-2xl" : "max-w-lg"} overflow-hidden rounded-2xl bg-white shadow-2xl`} onKeyDown={handleKeyDown} ref={dialogRef} role="dialog">
         {children}
       </div>
     </div>
@@ -503,6 +743,26 @@ function isInstitutionalCatalogSnapshot(value: unknown): value is InstitutionalC
   const record = value as ApiRecord;
   return Array.isArray(record.institutions) && record.institutions.every(isInstitution) &&
     Array.isArray(record.laboratories) && record.laboratories.every(isLaboratory);
+}
+
+function getPermissionList(value: unknown): string[] {
+  if (!value || typeof value !== "object") return [];
+  const record = value as ApiRecord;
+  return Array.isArray(record.permissions) && record.permissions.every((permission) => typeof permission === "string")
+    ? record.permissions
+    : [];
+}
+
+function isUserList(value: unknown): value is UserList {
+  if (!value || typeof value !== "object") return false;
+  const record = value as ApiRecord;
+  return typeof record.offset === "number" && typeof record.limit === "number" && Array.isArray(record.items) &&
+    record.items.every((item) => {
+      if (!item || typeof item !== "object") return false;
+      const user = item as ApiRecord;
+      return typeof user.id === "string" && typeof user.username === "string" && typeof user.email === "string" &&
+        (user.full_name === null || typeof user.full_name === "string") && typeof user.active === "boolean" && Array.isArray(user.profiles);
+    });
 }
 
 function isInstitution(value: unknown): value is Institution {

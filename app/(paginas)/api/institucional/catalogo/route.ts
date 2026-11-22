@@ -6,7 +6,10 @@ import { listInstitutionalCatalog } from "@/services/Institucional";
 export const runtime = "nodejs";
 
 export async function GET() {
-  const authorization = await authorizeInternalApi(["institutional.catalogs.manage"]);
+  const authorization = await authorizeInternalApi([
+    "institutional.catalogs.manage",
+    "institutional.read",
+  ]);
   if (!authorization.ok) return authorization.response;
 
   const result = await listInstitutionalCatalog(authorization.accessToken);

@@ -29,6 +29,9 @@
 - [x] 4.2 Ampliar o Kanban e os detalhes para leitura da composição completa pela BraCVAM.
 - [x] 4.3 Criar controles administrativos da BraCVAM para ajustes autorizados durante o processo.
 - [ ] 4.4 Sinalizar afiliação removida com designação ainda ativa e oferecer tratamento explícito quando autorizado.
+- [x] 4.5 Implementar perfil visual próprio e determinístico para BraCVAM, Proponente, Administração e os doze cargos locais no shell autenticado.
+- [x] 4.6 Adicionar ao grupo gestor as opções Grupo e Processos, listando integrantes por processo e a etapa atual dos processos associados.
+- [x] 4.7 Substituir o Kanban do módulo efetivo Patrocinador por Acompanhamento, listar somente vínculos ativos `sponsor` com processo, proponente e data localizada da atribuição e criar o detalhe por estado/fase/atividade, bloqueando páginas operacionais sem inferir resultados ausentes.
 
 ## 5. Internacionalização e verificação
 
@@ -37,3 +40,20 @@
 - [ ] 5.3 Exercitar atribuição, convite, aceite, reenvio, revogação, conflito, substituição, conclusão e histórico com sessões reais.
 - [ ] 5.4 Confirmar por rede que o navegador usa somente rotas internas e recebe os códigos externos sem credenciais.
 - [x] 5.5 Executar `pnpm i18n:check`, `pnpm lint`, `pnpm exec tsc --noEmit`, `pnpm build`, `git diff --check` e validação OpenSpec estrita.
+- [x] 5.6 Validar paridade pt-BR/en, identificação sem depender somente de cor, lint, TypeScript, diff e OpenSpec para os perfis visuais.
+- [x] 5.7 Corrigir a precedência visual para que grupo gestor e demais cargos locais não herdem o tema BraCVAM da conta.
+- [x] 5.8 Validar navegação, autorização, traduções, tipos e apresentação de grupo e processos sem expor ações administrativas.
+- [x] 5.9 Reservar o tema verde ao BraCVAM e manter o grupo gestor em laranja, validando contraste e consistência.
+- [x] 5.10 Persistir o shell autenticado em layout compartilhado para que a navegação pelo menu substitua apenas o conteúdo e não consulte novamente a sessão.
+- [x] 5.11 Padronizar BraCVAM em verde, Proponente em azul e Administração em roxo, distribuindo temas próprios para os demais cargos.
+- [x] 5.12 Priorizar a identidade visual Administração sobre o papel auxiliar `proponent`, sem alterar associações técnicas ou permissões.
+- [x] 5.13 Exibir Submissões para o módulo geral e Proponente, ocultando o item de Administração, BraCVAM e cargos associativos.
+- [x] 5.14 Manter a identidade BraCVAM verde quando houver apenas capacidade administrativa técnica, exibindo um único tema efetivo por sessão.
+- [x] 5.15 Priorizar perfis institucionais explícitos sobre o papel local `proponent`, sem esconder associações técnicas efetivas.
+- [x] 5.16 Remover inferência de cargo por conta demo e resolver módulos somente por perfis e associações publicadas pela API.
+- [x] 5.17 Aplicar uma cor por cargo associativo e exibir badges localizados, incluindo Módulo do lab. líder em ciano.
+- [x] 5.18 Manter contas sem cargo no módulo geral cinza e reconciliar para o módulo Proponente azul após a primeira submissão.
+- [x] 5.19 Renomear o perfil neutro de Acesso geral para Acesso padrão em português e inglês.
+- [x] 5.20 Restringir o módulo efetivo Proponente a Início e Submissões, ocultar Designações, Processos e os demais itens e redirecionar acessos diretos a outras páginas autenticadas para `/inicio`, validando precedência de perfis, i18n, lint, tipos e OpenSpec.
+- [x] 5.21 Restringir o módulo efetivo Grupo gestor a Início e Acompanhamento, renomear o item existente Grupo e bloquear acesso direto ao Kanban e às demais páginas autenticadas.
+- [x] 5.22 Substituir o destino Abrir composição por Ver processo no acompanhamento do grupo gestor e apresentar uma página de consulta somente leitura.

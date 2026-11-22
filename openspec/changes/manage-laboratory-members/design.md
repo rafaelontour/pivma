@@ -1,78 +1,52 @@
 ## Context
 
-A change `add-institutional-catalog-settings` introduz a página hierárquica de instituições e laboratórios. O frontend também possui um diretório administrativo paginado de usuários. Administrador e BraCVAM recebem atualmente `institutional.affiliations.manage`, `institutional.read` e `users.read`; Proponente não recebe essas permissões.
+O catálogo institucional é a tela que organiza instituições e laboratórios. A API permite criar afiliações em `/institutional/users/{user_id}/affiliations`, mas não expõe uma listagem por laboratório. BraCVAM e Administrador de demonstração possuem `institutional.affiliations.manage`, `users.read` e `institutional.read`; Proponente não possui essas permissões.
 
-O OpenAPI atual publica `GET` e `POST /institutional/users/{user_id}/affiliations`, `DELETE /institutional/users/{user_id}/affiliations/{affiliation_id}` e a consulta das afiliações da própria sessão. `AffiliationCreate` exige `institution_id` e aceita `laboratory_id`; a resposta relaciona referências de usuário, instituição e laboratório. Não existe, porém, endpoint ou filtro para listar afiliações por laboratório, o que impede uma lista laboratorial completa sem consultar cada usuário.
+O corpo de criação exige `institution_id` e `laboratory_id`. A tela buscará contas ativas pelo diretório existente, que já suporta busca, e enviará a conta escolhida ao servidor. O servidor consultará o catálogo, derivará a instituição e validará o estado ativo antes de criar o vínculo.
 
 ## Goals / Non-Goals
 
 **Goals:**
 
-- Integrar a gestão de membros ao laboratório selecionado sem confundir catálogo, afiliação e participação em processo.
-- Reusar usuários persistidos e validar todos os identificadores e estados antes das mutações.
-- Carregar membros com uma consulta paginada por laboratório e reconciliar o estado após cada operação.
-- Preservar autorização, privacidade, internacionalização e acessibilidade já adotadas no projeto.
+- Adicionar uma conta existente a um laboratório pela ação mostrada junto ao laboratório na página do catálogo.
+- Permitir escolher somente contas ativas e laboratórios cuja instituição também esteja ativa.
+- Repetir autorização e validação no servidor e manter a operação separada de perfis e designações de processo.
 
 **Non-Goals:**
 
-- Criar contas, perfis de permissão ou convites.
-- Designar patrocinador, grupo gestor ou laboratório participante em um processo.
-- Permitir autoafiliação ou gestão por Proponente ou por um papel local de processo.
-- Implementar varredura N+1 do diretório para descobrir membros.
-- Reativar afiliações ou apresentar histórico completo de vínculos inativos.
+- Consultar ou exibir a lista de membros de cada laboratório, pois a API não oferece consulta inversa.
+- Desativar vínculos, criar contas, perfis, convites ou participantes de processos.
+- Percorrer todas as contas ou fazer chamadas N+1.
 
 ## Decisions
 
-### 1. Gestão contextual dentro do laboratório
+### 1. Ação junto a cada laboratório ativo
 
-Cada laboratório ativo receberá a ação **Gerenciar membros**, abrindo um painel ou diálogo contextual com título, instituição, laboratório, membros atuais e busca de usuários. Isso reduz o risco de associar a pessoa ao laboratório errado e mantém a hierarquia institucional visível.
+A linha do laboratório exibe “Adicionar pessoa” somente para sessões autorizadas e quando o laboratório e sua instituição estão ativos. Como o filtro `search` publicado pela API consulta somente nome de usuário e e-mail, a rota interna pagina as contas ativas e filtra exclusivamente `full_name`, ignorando caixa e acentuação. O diálogo permite selecionar um resultado e confirma a inclusão.
 
-A alternativa de criar imediatamente outro cartão em Configurações foi descartada porque o operador já chegou ao recurso-alvo pelo catálogo. Se o volume futuro exigir operações em massa, um módulo específico poderá ser proposto separadamente.
+O diálogo usa uma largura maior e organiza cabeçalho contextual, busca nominal, estados da consulta, cartões de resultado e ações em regiões visualmente distintas. A seleção é indicada por cor, borda e ícone, sem depender apenas do controle de rádio.
 
-### 2. A listagem depende de consulta reversa no backend
+### 2. API externa acessada somente pelo servidor
 
-Antes da implementação, o backend deverá publicar uma listagem paginada de afiliações filtrada por `laboratory_id`, ou um recurso equivalente protegido por `institutional.affiliations.manage`. O frontend não percorrerá todas as contas chamando o endpoint de afiliações por usuário, pois esse desenho cresce como N+1, aumenta exposição de dados e não produz um snapshot transacionalmente consistente.
+O navegador usa as rotas internas existentes para consultar o catálogo e buscar contas, e envia a mutação para `/api/institucional/laboratorios/{laboratoryId}/membros`. O Route Handler exige `institutional.affiliations.manage`, `users.read` e `institutional.read`, valida UUIDs, conta ativa, laboratório e instituição. O serviço server-only cria a afiliação na API externa.
 
-Os contratos existentes continuam adequados para criar e desativar vínculos. A nova consulta reversa é uma dependência externa explícita desta change; enquanto ela não existir, a ação não deverá ser publicada como funcional.
+### 3. O laboratório selecionado determina a instituição
 
-### 3. Usuários são pesquisados e selecionados por identificador
+O navegador envia o `user_id`; o `laboratory_id` vem da rota. O servidor deriva `institution_id` do laboratório encontrado no catálogo para impedir combinações inconsistentes. A API externa responde conflitos para vínculos duplicados, que serão apresentados como mensagem localizada.
 
-A inclusão reutilizará a busca paginada do diretório com `active=true`. O valor confirmado será o UUID de uma opção retornada, nunca um e-mail ou nome digitado sem resolução. Isso evita criar identidade implicitamente e permite que a API faça a validação final de concorrência e situação da conta.
+### 4. Não mostrar membros sem endpoint reverso
 
-Administrador e BraCVAM possuem hoje `users.read`, mas as rotas internas repetirão `institutional.affiliations.manage` e as permissões necessárias. A interface não inferirá autorização pelo nome do perfil.
-
-### 4. A instituição vem do laboratório, não de um segundo seletor
-
-Ao adicionar um membro, o corpo será derivado do alvo contextual: `institution_id` virá de `laboratory.institution.id` e `laboratory_id` do laboratório selecionado. Não haverá um seletor independente de instituição, eliminando combinações divergentes na interface. O Route Handler validará ambos os UUIDs e o serviço externo continuará como autoridade sobre existência, atividade e correspondência.
-
-### 5. Criação e desativação usam rotas internas específicas
-
-Tipos de afiliação, paginação, entradas e estados de interface ficarão em `types/Institucional.ts` ou em um arquivo institucional dedicado, conforme o tamanho final. Serviços server-only normalizarão estritamente as respostas e encaminharão `Origin` e sessão apenas à API externa.
-
-Route Handlers internos serão organizados pelo laboratório para a consulta e pelo usuário/afiliação para as mutações. Eles mapearão ausência de sessão, proibição, recurso inexistente, conflito, validação e indisponibilidade para códigos seguros, sem expor URL ou credencial externa.
-
-### 6. Validação em camadas e reconciliação autoritativa
-
-Conforme a regra geral do README, a confirmação ficará desabilitada até que exista usuário ativo selecionado e contexto válido de instituição e laboratório. A mesma validação será repetida no envio e no servidor. Enquanto houver requisição, novas ações conflitantes permanecerão bloqueadas.
-
-Depois de uma mutação aceita, o cliente recarregará a página de membros. Se essa reconciliação falhar, comunicará estado possivelmente desatualizado e oferecerá atualização manual sem repetir automaticamente o `POST` ou `DELETE`. Em `409`, fará reconsulta antes de permitir nova tentativa.
-
-### 7. Afiliação e participação em processo permanecem separadas
-
-Afiliação responde “de qual laboratório esta conta faz parte”. A designação `participating_laboratory` responde “qual responsabilidade esta pessoa possui neste processo”. Nenhuma operação desta change chamará endpoints de participantes ou convites, e a interface explicará que o vínculo institucional não concede participação automática.
+A tela oferece a operação de inclusão por laboratório, mas não inventa uma lista de membros consultando afiliações de todas as contas. O feedback de sucesso confirma a pessoa e o laboratório vinculados.
 
 ## Risks / Trade-offs
 
-- **[Backend ainda não lista afiliações por laboratório]** → manter a change aberta e condicionar a implementação ao contrato paginado reverso; não introduzir N+1 temporário.
-- **[Conta ou laboratório desativado entre seleção e envio]** → repetir validações no servidor, tratar `404`, `409` ou `422` com mensagem segura e reconciliar.
-- **[Duplicidade concorrente]** → bloquear envio local, confiar na unicidade do backend e recarregar a lista após conflito.
-- **[Diretório de usuários pode crescer]** → pesquisar e paginar no servidor, sem carregar todas as contas no navegador.
-- **[Confusão entre membro e participante]** → manter textos e integrações distintos e não executar efeitos colaterais em processos.
+- **Conta ou laboratório muda de estado após a busca** → validar novamente conta, laboratório e instituição no servidor imediatamente antes da criação.
+- **Vínculo já existe** → preservar o conflito `409` da API e apresentar mensagem localizada.
+- **Permissões mudam entre abertura e envio** → verificar todas as permissões no Route Handler da mutação.
 
 ## Migration Plan
 
-1. Confirmar a publicação e a autorização da consulta paginada por laboratório no OpenAPI.
-2. Implementar tipos, serviço e Route Handlers internos sem expor a origem externa.
-3. Disponibilizar a gestão no laboratório somente para sessões autorizadas.
-4. Validar inclusão e desativação com contas de teste explicitamente indicadas e remover ou desativar os vínculos temporários ao final.
-5. Em rollback, remover a ação e as rotas internas; afiliações persistidas continuam auditáveis no backend e não exigem migração de dados.
+1. Adicionar a rota interna por laboratório e reutilizar o serviço de criação existente.
+2. Incluir a busca de contas ativas e o diálogo na linha de cada laboratório.
+3. Verificar as traduções, permissões e compilação da aplicação.
+4. Em rollback, remover a ação, o diálogo e a rota; afiliações já persistidas permanecem auditáveis no backend.

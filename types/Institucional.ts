@@ -1,4 +1,5 @@
 import type { ReactNode, RefObject } from "react";
+import type { UserListItem } from "./Usuario";
 
 export type InstitutionRef = {
   id: string;
@@ -41,6 +42,25 @@ export type InstitutionalListResponse<T> = {
   items: T[];
   pagination: InstitutionalPagination;
 };
+
+export type InstitutionalAffiliationCreateInput = {
+  institution_id: string;
+  laboratory_id: string;
+};
+
+export type LaboratoryMemberDialogState =
+  | { kind: "closed" }
+  | {
+      kind: "open";
+      laboratory: Laboratory;
+      search: string;
+      users: UserListItem[];
+      selectedUserId: string;
+      error: string | null;
+      hasSearched: boolean;
+      isSearching: boolean;
+      isSubmitting: boolean;
+    };
 
 export type InstitutionalCatalogSnapshot = {
   institutions: Institution[];
@@ -91,6 +111,15 @@ export type InstitutionalCatalogProps = {
   initialSnapshot?: InstitutionalCatalogSnapshot;
 };
 
+export type LaboratoryMemberDialogProps = {
+  state: Extract<LaboratoryMemberDialogState, { kind: "open" }>;
+  onClose: () => void;
+  onSearchChange: (search: string) => void;
+  onSelectUser: (userId: string) => void;
+  onSearch: () => void;
+  onSubmit: () => void;
+};
+
 export type InstitutionalDialogProps = {
   state: Exclude<InstitutionalDialogState, { kind: "closed" }>;
   institutions: Institution[];
@@ -104,6 +133,7 @@ export type InstitutionalDialogShellProps = {
   label: string;
   titleId: string;
   busy: boolean;
+  wide?: boolean;
   onClose: () => void;
   children: ReactNode;
 };
@@ -120,6 +150,9 @@ export type InstitutionCardProps = {
   institution: Institution;
   laboratories: Laboratory[];
   locale: "pt-BR" | "en";
+  canManageCatalog: boolean;
+  canManageAffiliations: boolean;
+  onAddPerson: (laboratory: Laboratory) => void;
   onDeactivate: (target: InstitutionalTarget) => void;
   onRename: (target: InstitutionalTarget) => void;
 };

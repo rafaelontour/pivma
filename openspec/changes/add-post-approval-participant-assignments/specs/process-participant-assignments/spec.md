@@ -1,6 +1,6 @@
 ## Purpose
 
-Permitir que a BraCVAM componha, após a aprovação, o grupo gestor e o patrocinador de um processo em uma jornada rastreável, usando contas existentes ou convites por e-mail.
+Permitir que a BraCVAM componha, após a aprovação, o grupo gestor e o patrocinador de um processo em uma jornada rastreável, usando contas existentes ou convites por e-mail, e registrar a continuidade operacional planejada para as etapas seguintes.
 
 ## ADDED Requirements
 
@@ -34,6 +34,12 @@ A interface MUST apresentar cada etapa em uma aba numerada, com **Grupo gestor**
 
 O sistema SHALL representar o grupo gestor como uma coleção de uma ou mais contas individuais vinculadas ao processo com o papel local `group_manager`. O sistema MUST NOT criar conta coletiva, entidade paralela ou plataforma separada para o grupo e MUST NOT substituir integrantes ativos ao adicionar outra pessoa.
 
+Depois da conclusão da etapa inicial, a BraCVAM com `process.participants.manage` SHALL poder adicionar outros integrantes ao grupo gestor e revogar designações existentes, sujeito às regras autoritativas da API. Essas operações de manutenção MUST NOT reabrir ou alterar manualmente a tarefa concluída.
+
+Enquanto `assign_group_manager` estiver acionável, a interface SHALL permitir adicionar vários integrantes sem concluir a tarefa automaticamente. A ação **Concluir definição do grupo gestor** SHALL permanecer explícita, ser apresentada após haver pessoa ativa e só concluir quando a BraCVAM confirmar essa ação e a API aceitar a operação.
+
+Depois que o grupo gestor estiver concluído, a tela de composição SHALL manter disponível o formulário para adicionar novos integrantes à sessão autorizada. Adicionar ou revogar pessoas, inclusive quando o último integrante ativo for removido, MUST NOT esconder o formulário nem exigir reabertura da tarefa; cada nova designação SHALL ser reconciliada com a API e outras inclusões continuarão disponíveis.
+
 #### Scenario: Primeiro integrante adicionado
 
 - **WHEN** a BraCVAM designa uma conta válida como `group_manager`
@@ -44,10 +50,58 @@ O sistema SHALL representar o grupo gestor como uma coleção de uma ou mais con
 - **WHEN** já existe um integrante ativo e a BraCVAM adiciona outra conta válida
 - **THEN** o sistema mantém os integrantes anteriores e acrescenta uma nova designação `group_manager`
 
+#### Scenario: Adicionar pessoas antes de concluir o grupo
+
+- **WHEN** a tarefa `assign_group_manager` permanece acionável após uma ou mais designações
+- **THEN** a interface mantém a opção de adicionar outras pessoas e só conclui a etapa quando a BraCVAM aciona **Concluir definição do grupo gestor**
+
+#### Scenario: Manutenção depois da conclusão da etapa
+
+- **WHEN** a etapa `assign_group_manager` está concluída e uma pessoa BraCVAM com `process.participants.manage` adiciona outra conta ativa
+- **THEN** o sistema cria a designação por meio da API, mantém os integrantes existentes e não exige que a tarefa inicial volte a `READY`
+
+#### Scenario: Grupo concluído permanece editável
+
+- **WHEN** a tarefa inicial está concluída e a BraCVAM possui `process.participants.manage`
+- **THEN** a interface mantém o formulário de inclusão disponível após adicionar integrantes e após revogar designações, inclusive quando não resta integrante ativo
+
+#### Scenario: Remoção de integrante existente
+
+- **WHEN** uma pessoa BraCVAM com `process.participants.manage` revoga a designação de um integrante
+- **THEN** o servidor encaminha à API o cookie autenticado e a origem HTTP(S) da interface, e a lista é reconciliada com o resultado autoritativo
+
 #### Scenario: Conclusão do grupo gestor
 
 - **WHEN** existe ao menos um integrante ativo e a BraCVAM solicita a conclusão da etapa
 - **THEN** o sistema usa a operação autoritativa da API e atualiza a linha do tempo conforme o resultado retornado
+
+### Requirement: Continuidade operacional após a composição inicial
+
+O plano do processo SHALL contemplar, após a definição inicial de patrocinador e grupo gestor, designações BraCVAM para grupo de seleção de amostras, laboratório líder, laboratórios participantes, estatístico, colaboradores/observadores e especialistas temáticos ad hoc. A ordem relativa entre patrocinador e grupo gestor não define dependência para as atividades posteriores.
+
+O plano SHALL contemplar tarefas locais para o grupo de seleção definir e preparar amostras, para o estatístico preparar o plano estatístico e para cada laboratório participante confirmar seu recebimento. A homologação da estrutura do estudo SHALL ser uma tarefa BraCVAM liberada apenas após a conclusão das demais atividades requeridas da fase 2. O registro de problema no recebimento SHALL originar uma tarefa para o grupo de seleção resolver a não conformidade.
+
+As chaves técnicas das atividades, cardinalidade de cargos, permissões, critérios de conclusão e dependências SHALL ser confirmados contra a API antes de implementar ou alterar transições no frontend. A interface MUST NOT simular estados, tarefas ou permissões localmente.
+
+#### Scenario: Designações operacionais pela BraCVAM
+
+- **WHEN** o processo avança para a composição técnica posterior à definição inicial
+- **THEN** a BraCVAM pode designar os cargos listados por operações autorizadas pela API e as dependências do grupo gestor são respeitadas conforme o estado autoritativo
+
+#### Scenario: Tarefas locais dos cargos designados
+
+- **WHEN** a API publica tarefas para o grupo de seleção, estatístico ou laboratórios participantes
+- **THEN** cada pessoa vê somente as tarefas correspondentes aos seus cargos e executa a atividade pelo fluxo próprio do cargo
+
+#### Scenario: Homologação aguarda atividades da fase 2
+
+- **WHEN** ainda existem atividades requeridas da fase 2 não concluídas
+- **THEN** a tarefa de homologação da estrutura não é apresentada como disponível
+
+#### Scenario: Problema identificado no recebimento
+
+- **WHEN** um laboratório participante registra uma não conformidade no recebimento de amostras
+- **THEN** o sistema acompanha a tarefa de resolução atribuída ao grupo de seleção conforme publicada pela API
 
 ### Requirement: Visibilidade da composição para o proponente
 
@@ -140,6 +194,53 @@ O sistema SHALL permitir convidar para `group_manager` ou `sponsor` uma pessoa n
 - **WHEN** a API registra o aceite e publica a designação correspondente
 - **THEN** o sistema remove a pendência da apresentação corrente e passa a mostrar a pessoa como participante ativo
 
+### Requirement: Convite compartilhável por link
+
+O sistema SHALL permitir que a BraCVAM crie um convite com `channel: link` e copie uma URL interna contendo o token retornado somente na resposta de criação. O token MUST NOT aparecer na listagem posterior de convites, no histórico, em logs da aplicação ou em dados de observabilidade. A abertura do link MUST apresentar somente a prévia publicada pela API e MUST NOT aceitar o convite automaticamente.
+
+O aceite SHALL exigir uma sessão autenticada. O sistema MUST preservar o destino do convite durante login ou cadastro e MUST retornar à mesma página depois da autenticação. Cadastro e aceite MUST permanecer operações distintas: criar a conta não confirma a designação sem ação explícita da pessoa convidada.
+
+As etapas de patrocinador e grupo gestor MUST permanecer pendentes enquanto houver convite não expirado com estado `pending` para o cargo correspondente. A conclusão manual de uma etapa MUST ser recusada nesse estado. Depois do aceite, a interface SHALL marcar a etapa como concluída somente quando a API publicar a tarefa concluída e existir participante ativo para o cargo; a situação **Concluída** SHALL receber destaque visual distinto da pendência.
+
+Na definição do patrocinador, a interface SHALL identificar em destaque a pessoa convidada e o estado do convite até o aceite. Para o patrocinador ativo, a efetividade, os conflitos e as ações para declarar conflito ou revogar a designação SHALL ser apresentados com hierarquia visual clara e controles acessíveis.
+
+Um convite MUST NOT ser apresentado como participante ativo apenas porque seu registro informa `accepted`. A interface SHALL manter a pessoa como convite pendente/aguardando vínculo até reconciliar `accepted_by` com uma designação ativa do mesmo cargo na lista de participantes. Só então a pessoa SHALL aparecer como integrante ou patrocinador ativo e deixar de aparecer como convite pendente.
+
+#### Scenario: Pessoa já autenticada abre o link
+
+- **WHEN** uma pessoa com sessão válida abre um convite por link ainda vigente
+- **THEN** o sistema apresenta a prévia e permite confirmar o aceite sem exigir novo login
+
+#### Scenario: Pessoa com conta está desconectada
+
+- **WHEN** uma pessoa sem sessão abre o convite e escolhe entrar
+- **THEN** o sistema preserva o destino durante o login e retorna à prévia após autenticar
+
+#### Scenario: Pessoa ainda não possui conta
+
+- **WHEN** uma pessoa sem sessão abre o convite e escolhe criar conta
+- **THEN** o sistema preserva o destino durante o cadastro e o login subsequente e retorna à prévia para aceite explícito
+
+#### Scenario: BraCVAM gera o link
+
+- **WHEN** a BraCVAM cria um convite pelo canal `link`
+- **THEN** a interface apresenta uma única URL interna copiável construída com o token da resposta e reconcilia a listagem sem persistir o token nela
+
+#### Scenario: Link inválido, expirado ou já utilizado
+
+- **WHEN** a API recusa a prévia ou o aceite por token inválido, expirado, revogado ou já aceito
+- **THEN** o sistema apresenta o estado seguro correspondente e não cria designação local
+
+#### Scenario: Etapa aguarda aceite dos convites
+
+- **WHEN** existe convite `pending` e não expirado para patrocinador ou integrante do grupo gestor
+- **THEN** a etapa exibe **Pendente de aceite**, a conclusão permanece bloqueada e o convite continua listado como pendente
+
+#### Scenario: Etapa concluída após aceite
+
+- **WHEN** todos os convites vigentes do cargo foram aceitos, há participante ativo e a API publica a tarefa como concluída
+- **THEN** a interface destaca **Concluída** na etapa correspondente
+
 ### Requirement: Definição do patrocinador
 
 O sistema SHALL permitir definir uma pessoa com o papel local `sponsor` depois da etapa do grupo gestor, por seleção de conta existente ou convite por e-mail. O sistema MUST apresentar a designação ativa, o convite pendente ou a ausência de patrocinador conforme a API.
@@ -204,4 +305,4 @@ Após cada designação, convite ou conclusão de etapa, o sistema MUST reconcil
 #### Scenario: Operação protegida e localizada
 
 - **WHEN** a interface consulta ou altera a composição
-- **THEN** usa uma rota interna, não expõe URL externa, cookie ou token de convite e localiza rótulos e datas sem traduzir nomes próprios
+- **THEN** usa uma rota interna, não expõe URL externa ou cookie e limita o token de convite à URL compartilhável e à resposta imediata que a originou, localizando rótulos e datas sem traduzir nomes próprios

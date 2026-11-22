@@ -34,6 +34,11 @@ export function getSettingsCapabilities(
   const canManageInstitutionalCatalog = user.permissions.includes(
     "institutional.catalogs.manage",
   );
+  const canManageLaboratoryAffiliations = [
+    "institutional.affiliations.manage",
+    "users.read",
+    "institutional.read",
+  ].every((permission) => user.permissions.includes(permission));
   const canManageCollectionTemplates = user.isAdministrator || canManageInstitutionalCatalog;
 
   return {
@@ -41,6 +46,7 @@ export function getSettingsCapabilities(
     canViewAiEvaluations,
     canManageUsers,
     canManageInstitutionalCatalog,
+    canManageLaboratoryAffiliations,
     canManageCollectionTemplates,
     user,
   };
@@ -65,6 +71,7 @@ export function hasAnySettingsAccess(
     capabilities.canViewAiEvaluations ||
     capabilities.canManageUsers ||
     capabilities.canManageInstitutionalCatalog ||
+    capabilities.canManageLaboratoryAffiliations ||
     capabilities.canManageCollectionTemplates === true
   );
 }
@@ -111,7 +118,7 @@ export function getSettingsModules(
       href: "/instituicoes-laboratorios",
       badge: t("settings.modules.institutionalCatalog.badge"),
       iconName: "Building2",
-      isAllowed: capabilities.canManageInstitutionalCatalog,
+      isAllowed: capabilities.canManageInstitutionalCatalog || capabilities.canManageLaboratoryAffiliations,
       deniedReason: t("settings.modules.institutionalCatalog.denied"),
     },
     {
