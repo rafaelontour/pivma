@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import Link from "next/link";
@@ -53,6 +54,8 @@ const STAGE_PRESENTATIONS: readonly ProcessStagePresentation[] = [
 const TERMINAL_PROCESS_STATUSES = new Set(["CLOSED", "CANCELLED", "ARCHIVED"]);
 
 export function ProcessKanban() {
+  const searchParams = useSearchParams();
+  const targetProcessId = searchParams.get("processId");
   const { i18n, t } = useTranslation();
   const [state, setState] = useState<ProcessKanbanState>({ kind: "loading" });
   const [details, setDetails] = useState<ProcessDetailsState>({ kind: "closed" });
@@ -65,6 +68,19 @@ export function ProcessKanban() {
   const boardControllerRef = useRef<AbortController | null>(null);
   const detailsControllerRef = useRef<AbortController | null>(null);
   const isDeletingRef = useRef(false);
+  const openedAlertProcessRef = useRef<string | null>(null);
+  const alertItems = state.kind === "ready" ? buildKanbanItems(state.processes, state.tasks) : [];
+  const alertColumns = buildColumns(alertItems, phaseFilter, t, i18n.resolvedLanguage);
+
+  useEffect(() => {
+    if (!targetProcessId || state.kind !== "ready" || openedAlertProcessRef.current === targetProcessId) return;
+    const item = alertColumns.flatMap((column) => column.items).find((candidate) => candidate.process.id === targetProcessId);
+    if (!item) return;
+    openedAlertProcessRef.current = targetProcessId;
+    void openDetails(item.process, item.stage);
+  // This effect runs only when the authorized board contains the target process.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [alertColumns, state.kind, targetProcessId]);
 
   useEffect(() => {
     setHeaderActionsTarget(

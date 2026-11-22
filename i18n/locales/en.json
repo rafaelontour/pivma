@@ -406,7 +406,7 @@
     "loading": "Loading process composition…",
     "readOnly": "Your session can view this process, but it does not have an actionable composition task right now.",
     "fields": { "email": "Invitee email", "emailPlaceholder": "name@institution.org", "laboratory": "Participating laboratory", "selectLaboratory": "Select an active laboratory", "conflictJustification": "Describe the reason for declaring a conflict", "assignmentMode": "How do you want to add this person?", "userId": "Existing account ID", "searchUser": "Search existing account", "selectUser": "Select a person", "chooseUser": "Select a matching account", "searchingUsers": "Searching accounts…", "noUsersFound": "No active accounts found.", "userSearchFailed": "Could not search accounts right now. Try again." },
-    "actions": { "refresh": "Refresh composition", "sending": "Working…", "invite": "Send invite", "inviteByEmail": "Invite by email", "inviteByLink": "Create invite link", "copyLink": "Copy the invite link", "assignExisting": "Assign existing account", "assign": "Assign person", "open": "Open composition", "viewProcess": "View process", "backToList": "Back to process list", "completeRole": "Complete role assignment", "completeGroupDefinition": "Complete management group setup", "declareConflict": "Declare conflict", "revoke": "Revoke", "resend": "Resend invite" },
+    "actions": { "refresh": "Refresh composition", "sending": "Working…", "invite": "Send invite", "inviteByEmail": "Invite by email", "inviteByLink": "Create invite link", "copyLink": "Copy the invite link", "assignExisting": "Assign existing account", "assign": "Assign person", "open": "Open composition", "viewProcess": "View process", "backToList": "Back to process list", "completeRole": "Complete role assignment", "completeGroupDefinition": "Complete assignment", "declareConflict": "Declare conflict", "revoke": "Revoke", "resend": "Resend invite" },
     "status": { "active": "Active assignment", "pending": "Invite pending", "acceptedInvite": "Invite accepted", "acceptedAwaitingAssignment": "Accepted; awaiting active assignment", "expiredInvite": "Invite expired", "revokedInvite": "Invite revoked", "effective": "Effective", "notEffective": "Not effective", "conflict": "Conflict declared" },
     "roleLabels": { "sponsor": "Sponsor", "group_manager": "Management group", "participating_laboratory": "Participating laboratory", "study_manager": "Study manager", "statistician": "Statistician", "adhoc_evaluator": "Ad hoc evaluator", "peer_reviewer": "Peer reviewer", "lead_laboratory": "Lead laboratory", "proponent": "Proponent", "sample_selection_group": "Sample selection group", "regulatory_observer": "Regulatory observer", "collaborator": "Collaborator" },
     "details": { "title": "Team and assignments", "empty": "No person has been assigned and there are no pending invites.", "pendingTasks": "{{count}} composition task(s) are still open." },
@@ -416,8 +416,8 @@
     "groupMembers": "Management group members",
     "laterAssignments": { "title": "Additional assignments", "description": "Steps appear according to tasks and permissions published by the API." },
     "submission": { "nextStep": "Screening has unlocked tasks to compose the process team.", "teamProgress": "You can view this process team composition.", "beingDefined": "The BraCVAM team is defining this process's groups. The composition will appear here when it is ready." },
-    "timeline": { "title": "Process composition steps", "step": "Step {{number}}", "done": "Completed", "pendingInvites": "Awaiting acceptance", "current": "Available to this session", "waiting": "Waiting for a step or permission", "cancelled": "Cancelled" },
-    "operationalTasks": { "title": "Operational activities", "description": "Follow current phase tasks here; task controls remain in their corresponding workspace.", "sampleDefinition": "Sample definition and preparation", "statisticalPlan": "Statistical plan", "openSamples": "Open sample workspace" },
+    "timeline": { "title": "Process composition steps", "openStage": "Open {{stage}}. Status: {{status}}", "done": "Completed", "toDefine": "To be defined", "pendingInvites": "Awaiting acceptance", "current": "Pending", "waiting": "Pending", "cancelled": "Cancelled" },
+    "operationalTasks": { "title": "Operational activities", "description": "Follow current phase tasks here; task controls remain in their corresponding workspace.", "sampleDefinition": "Sample definition and preparation", "sampleDefinitionDescription": "Define the study samples and organize their preparation.", "statisticalPlan": "Statistical plan", "statisticalPlanDescription": "Assign the person responsible for preparing the statistical plan.", "openSamples": "Open sample workspace" },
     "profile": { "role": "Role in process", "assignedAt": "Joined process" },
     "delivery": { "pending": "Delivery pending", "sent": "Email sent", "failed": "Delivery failed", "cancelled": "Delivery cancelled" },
     "roles": {
@@ -435,6 +435,7 @@
       "participating_laboratory": { "title": "Participating laboratories", "description": "Select a registered laboratory and invite the person responsible for it in this process." },
       "noAction": "There is no actionable task for this assignment in your session.",
       "waitingAcceptance": "Wait for the invite to be accepted before sending another assignment for this role.",
+      "singleSponsor": "A sponsor is already assigned. To replace them, revoke the current assignment before adding another.",
       "addMembersBeforeComplete": "Add everyone to the management group. Complete this step when the group is ready and all invites have been accepted.",
       "completeWhenReady": "You can add more members before completing this step.",
       "acceptedRefresh": "The invite was accepted. Refresh the composition to view the active assignment.",
@@ -1245,6 +1246,55 @@
       "userCount": { "title": "Search results", "description": "See how many accounts match the current filters here." },
       "userList": { "title": "User list", "description": "Review account names, usernames, emails, profiles, and status in this table." },
       "userActions": { "title": "Actions for each user", "description": "Use the last column to open a profile, edit a name, or manage profiles according to your access." }
+    }
+  },
+  "alerts": {
+    "trigger": "Alerts, {{count}} unread",
+    "title": "Alerts",
+    "readAll": "Mark all as read",
+    "readAllSuccess": "{{count}} alerts marked as read.",
+    "readAllEmpty": "There were no unread alerts.",
+    "readFailed": "We could not update the alert's read status.",
+    "unread": "Unread",
+    "all": "All",
+    "loadError": "We could not load alerts.",
+    "empty": "There are no alerts in this list.",
+    "previous": "Previous",
+    "next": "Next",
+    "previousPage": "Previous page",
+    "nextPage": "Next page",
+    "page": "Page {{page}} of {{total}}",
+    "generic": "New alert for {{code}}",
+    "destinationUnavailable": "This item is no longer available to your session. The alert remains in your history.",
+    "taskOpened": {
+      "triage": "New submission to review: {{code}}",
+      "returnReview": "Your submission {{code}} was returned for changes. Due: {{dueDate}}",
+      "returnReviewNoDueDate": "Your submission {{code}} was returned for changes.",
+      "assignment": "Assign {{activity}} for {{code}}",
+      "structure": "Study structure for {{code}} is ready for approval",
+      "receiptResolution": "Sample receipt issue for {{code}}",
+      "reopened": "{{activity}} was reopened for {{code}}",
+      "genericTask": "New task: {{activity}} for {{code}}"
+    },
+    "submissionStatus": {
+      "in_triage": "Your submission {{code}} moved to triage",
+      "approved": "Your submission {{code}} was approved in triage",
+      "rejected": "Your submission {{code}} was rejected in triage"
+    },
+    "assignmentEffective": "Your assignment as {{role}} for {{code}} is effective again",
+    "assignmentIneffective": "Your assignment for {{code}} is no longer effective: your affiliation with {{laboratory}} ended",
+    "vialStatuses": { "replaced": "replaced" },
+    "kinds": {
+      "task_opened": "New task: {{activity}} for {{code}}",
+      "submission_status_changed": "Your submission {{code}} changed status",
+      "structure_approved": "The study structure for {{code}} was approved",
+      "process_withdrawn": "The applicant withdrew process {{code}}",
+      "assignment_created": "You were assigned as {{role}} for {{code}}",
+      "assignment_revoked": "Your assignment as {{role}} for {{code}} was revoked",
+      "assignment_effectiveness_changed": "Your assignment for {{code}} changed effectiveness",
+      "laboratory_run_completed": "{{laboratory}} completed {{activity}} for {{code}}",
+      "laboratory_run_waived": "{{laboratory}} was waived from phase {{phase}} for {{code}}",
+      "sample_nonconformity_decided": "The Sample Selection Group decided on vial {{code}}: {{status}}"
     }
   },
   "shell": {

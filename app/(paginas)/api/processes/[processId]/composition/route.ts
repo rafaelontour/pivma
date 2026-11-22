@@ -32,10 +32,12 @@ export async function POST(request: Request, context: ProcessCompositionRouteCon
   const tasks = await listProcessTasks(authorization.accessToken, processId);
   if (!tasks.ok) return compositionError(tasks.status, authorization.cookieStore, tasks.code, tasks.message);
   const taskKey = `assign_${input.input.role_key}`;
+  const reviewRoleMaintenance = authorization.session.access.global_permissions.includes("triage.review") &&
+    tasks.data.some((task) => task.activity_key === taskKey && task.status !== "COMPLETED" && task.status !== "CANCELLED");
   const completedGroupManagerMaintenance = input.input.role_key === "group_manager" &&
     authorization.session.access.global_permissions.includes("process.participants.manage") &&
     tasks.data.some((task) => task.activity_key === taskKey && task.status === "COMPLETED");
-  if (!completedGroupManagerMaintenance && !canActOnAssignment(tasks.data, taskKey, authorization.roles, authorization.session.access.global_permissions.includes("triage.review"))) {
+  if (!reviewRoleMaintenance && !completedGroupManagerMaintenance && !canActOnAssignment(tasks.data, taskKey, authorization.roles, authorization.session.access.global_permissions.includes("triage.review"))) {
     return NextResponse.json({ code: "CONFLICT", message: "Esta definição não está disponível para este processo no momento." }, { status: 409 });
   }
   if (input.input.role_key === "participating_laboratory" || input.input.role_key === "lead_laboratory") {

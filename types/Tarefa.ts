@@ -31,3 +31,19 @@ export type ProcessTaskListOptions = {
   page: number;
   size: number;
 };
+
+export type ProcessTaskDetail = {
+  id: string;
+  process_id: string;
+  activity_key: string;
+  activity_run_number: number;
+  title: string;
+  status: string;
+  is_blocked: boolean;
+  blocked_reason?: string | null;
+  due_date?: string | null;
+  laboratory?: { id: string; name: string } | null;
+  activity_run_status: string;
+};
+
+export type TaskDetailRouteContext = { params: Promise<{ taskId: string }> };

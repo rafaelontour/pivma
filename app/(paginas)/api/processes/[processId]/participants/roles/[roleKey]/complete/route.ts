@@ -27,9 +27,17 @@ export async function POST(_request: Request, context: ProcessParticipantRoleAct
     fallbackMessage: "Não foi possível validar a atribuição do cargo.",
   });
   const taskKey = `assign_${roleKey}`;
-  const hasActionableTask = tasks.ok && canActOnAssignment(tasks.data, taskKey, authorization.roles, authorization.session.access.global_permissions.includes("triage.review"));
+  const canReview = authorization.session.access.global_permissions.includes("triage.review");
+  const hasActionableTask = tasks.ok && (
+    canActOnAssignment(tasks.data, taskKey, authorization.roles, canReview) ||
+    (roleKey === "group_manager" && canReview && tasks.data.some((task) => task.activity_key === taskKey && task.status !== "COMPLETED" && task.status !== "CANCELLED"))
+  );
   const hasActiveParticipant = composition.ok && composition.data.participants.some((participant) => participant.role_key === roleKey && participant.active);
   const hasPendingInvite = composition.ok && composition.data.invites.some((invite) => invite.role_key === roleKey && invite.status === "pending" && !invite.expired);
+  const alreadyCompleted = tasks.ok && tasks.data.some((task) => task.activity_key === taskKey && task.status === "COMPLETED");
+  if (roleKey === "group_manager" && alreadyCompleted && canReview && hasActiveParticipant && !hasPendingInvite) {
+    return NextResponse.json({ completed: true });
+  }
   if (!hasActionableTask || !hasActiveParticipant || hasPendingInvite) {
     return NextResponse.json({ code: "CONFLICT", message: "Esta etapa não pode ser concluída no momento." }, { status: 409 });
   }

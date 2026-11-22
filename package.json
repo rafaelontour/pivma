@@ -8,7 +8,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "i18n:check": "node scripts/check-i18n.mjs"
+    "i18n:check": "node scripts/check-i18n.mjs",
+    "test:alerts": "node --test scripts/alerts.test.cjs"
   },
   "dependencies": {
     "axios": "^1.20.0",

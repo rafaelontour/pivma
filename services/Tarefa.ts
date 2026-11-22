@@ -5,6 +5,7 @@ import { tryit } from "radash";
 import { http } from "./Http";
 import type {
   ProcessTask,
+  ProcessTaskDetail,
   ProcessTaskList,
   ProcessTaskListOptions,
   ProcessTaskStatus,
@@ -36,6 +37,21 @@ export async function listCurrentTasks(
 
   const data = normalizeTaskList(response.data);
   return data ? { ok: true, data } : { ok: false };
+}
+
+export async function getTaskDetail(accessToken: string, taskId: string): Promise<ServiceResult<ProcessTaskDetail>> {
+  const [error, response] = await tryit(() => http.get<unknown>(`/tasks/${encodeURIComponent(taskId)}`, {
+    headers: { Cookie: `access_token=${accessToken}` },
+  }))();
+  if (error) return { ok: false, status: getStatus(error) };
+  const value = response.data;
+  if (!isRecord(value) || typeof value.id !== "string" || typeof value.process_id !== "string" ||
+      typeof value.activity_key !== "string" || typeof value.activity_run_number !== "number" ||
+      typeof value.title !== "string" || typeof value.status !== "string" ||
+      typeof value.is_blocked !== "boolean" || typeof value.activity_run_status !== "string") return { ok: false };
+  const laboratory = value.laboratory;
+  if (laboratory !== undefined && laboratory !== null && (!isRecord(laboratory) || typeof laboratory.id !== "string" || typeof laboratory.name !== "string")) return { ok: false };
+  return { ok: true, data: value as ProcessTaskDetail };
 }
 
 export function normalizeTaskList(value: unknown): ProcessTaskList | null {

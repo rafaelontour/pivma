@@ -60,8 +60,10 @@ export async function getProcessComposition(
       tasks: taskItems,
       laboratories: laboratories.ok ? laboratories.data.filter((laboratory) => laboratory.active) : [],
       capabilities: {
-        canAssignSponsor: canActOnAssignment(taskItems, "assign_sponsor", roles, canReview),
+        canAssignSponsor: canActOnAssignment(taskItems, "assign_sponsor", roles, canReview) ||
+          (canReview && taskItems.some((task) => task.activity_key === "assign_sponsor" && task.status === "COMPLETED")),
         canAssignGroupManager: canActOnAssignment(taskItems, "assign_group_manager", roles, canReview) ||
+          (canReview && taskItems.some((task) => task.activity_key === "assign_group_manager" && task.status !== "COMPLETED" && task.status !== "CANCELLED")) ||
           (canManageParticipants && taskItems.some((task) => task.activity_key === "assign_group_manager" && task.status === "COMPLETED")),
         canAssignLaboratories: isGroupManager,
         canManageParticipants: isGroupManager || roles.includes("proponent") || canReview,

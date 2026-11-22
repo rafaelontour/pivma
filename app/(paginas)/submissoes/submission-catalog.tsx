@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
@@ -66,6 +67,8 @@ import {
 } from "./submission-pre-evaluation";
 
 export function SubmissionCatalog() {
+  const searchParams = useSearchParams();
+  const targetProcessId = searchParams.get("processId");
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<SubmissionTab>("templates");
   const [submittedFilter, setSubmittedFilter] = useState<"sent" | "returned">("sent");
@@ -87,6 +90,7 @@ export function SubmissionCatalog() {
   const isCreatingRef = useRef(false);
   const isOpeningRef = useRef(false);
   const isDeletingRef = useRef(false);
+  const focusedProcessRef = useRef<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -113,6 +117,18 @@ export function SubmissionCatalog() {
       active = false;
     };
   }, [t]);
+
+  useEffect(() => {
+    if (!targetProcessId || submittedState.kind !== "ready" || focusedProcessRef.current === targetProcessId) return;
+    const submission = submittedState.submissions.find((item) => item.id === targetProcessId);
+    if (!submission) return;
+    focusedProcessRef.current = targetProcessId;
+    // The query parameter selects the destination tab after the authorized submission list loads.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setActiveTab("submitted");
+    setSubmittedFilter(isReturnedSubmission(submission) ? "returned" : "sent");
+    window.requestAnimationFrame(() => document.getElementById(`submission-alert-${targetProcessId}`)?.scrollIntoView({ behavior: "smooth", block: "center" }));
+  }, [submittedState, targetProcessId]);
 
   useEffect(() => {
     if (dialog.kind === "closed") {
@@ -603,6 +619,7 @@ export function SubmissionCatalog() {
                   : undefined;
 
               return (
+                <div id={`submission-alert-${submission.id}`} key={submission.id}>
                 <SubmissionTrackingCard
                   key={submission.id}
                   onOpenReturnReview={(selected) => void openReturnReview(selected)}
@@ -613,6 +630,7 @@ export function SubmissionCatalog() {
                   submission={submission}
                   templateName={templateName ?? submission.template_key}
                 />
+                </div>
               );
             })}
           </div>

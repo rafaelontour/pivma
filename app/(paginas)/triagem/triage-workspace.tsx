@@ -1,7 +1,7 @@
 "use client";
 
 import type { FormEvent } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertCircle, ArrowLeft, Bot, CalendarDays, CheckCircle2, ClipboardCheck, History, Info, LoaderCircle, RefreshCw, Save } from "lucide-react";
 import { toast } from "sonner";
@@ -38,6 +38,8 @@ export function TriageWorkspace({
   onCompleted,
 }: TriageWorkspaceProps = {}) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const targetProcessId = searchParams.get("processId");
   const { i18n, t } = useTranslation();
   const [queue, setQueue] = useState<TriageQueueState>(
     initialProcess
@@ -129,6 +131,16 @@ export function TriageWorkspace({
       if (detailControllerRef.current === controller) detailControllerRef.current = null;
     }
   }, [t]);
+
+  useEffect(() => {
+    if (!targetProcessId || queue.kind !== "ready" || initializedProcessRef.current === targetProcessId) return;
+    const target = queue.processes.find((process) => process.id === targetProcessId);
+    if (!target) return;
+    initializedProcessRef.current = targetProcessId;
+    // Resolve the query target only after the authorized triage queue has loaded.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void selectProcess(target);
+  }, [queue, selectProcess, targetProcessId]);
 
   useEffect(() => {
     if (

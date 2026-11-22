@@ -57,6 +57,7 @@ import {
 import { hasProcessKanbanAccess } from "@/types/Processo";
 import { hasFormManagementAccess } from "@/components/configuracoes";
 import { GuidedOnboarding } from "./guided-onboarding";
+import { AlertCenter } from "./alert-center";
 
 const ROLE_ICON_BY_MODULE: Record<AuthenticatedModule, LucideIcon> = {
   proponent: FilePenLine,
@@ -336,6 +337,7 @@ export function AuthenticatedShell({
           <span className="hidden rounded-full border border-teal-700/20 bg-teal-600/10 px-3 py-1 text-xs font-semibold text-teal-800 sm:block">
             {t("common.secureEnvironment")}
           </span>
+          <AlertCenter module={activeModule} />
           <LanguageToggle />
           <button
             aria-label={t("shell.logout")}
@@ -385,17 +387,17 @@ export function AuthenticatedShell({
         <div
           data-tour-scroll-container
           className={`min-h-0 flex-1 ${
-            activePage === "processes" ? "overflow-hidden" : "overflow-y-auto"
+            activePage === "processes" || activePage === "process-composition" ? "overflow-hidden" : "overflow-y-auto"
           }`}
         >
           <div
             className={`mx-auto flex w-full max-w-none flex-col px-5 py-6 sm:px-8 sm:py-9 lg:px-12 ${
-              activePage === "processes"
+              activePage === "processes" || activePage === "process-composition"
                 ? "h-full min-h-0"
                 : "min-h-full"
             }`}
           >
-            <div className="authenticated-role-heading flex shrink-0 items-start justify-between gap-5 rounded-2xl border px-5 py-5 shadow-sm sm:px-6">
+            <div className={`authenticated-role-heading flex shrink-0 items-start justify-between gap-5 rounded-2xl border px-6 py-6 shadow-sm sm:px-6 sm:py-6 ${activePage === "process-composition" ? "sticky top-0 z-20 bg-white/95 backdrop-blur" : ""}`}>
               <div className="min-w-0">
                 <p className="text-xs font-bold uppercase tracking-[0.18em] text-teal-700">
                   {heading.eyebrow}
@@ -417,9 +419,6 @@ export function AuthenticatedShell({
 
             {children}
 
-            <footer className="shrink-0 border-t border-slate-300 pt-5 text-xs text-slate-500">
-              {t("shell.footer")}
-            </footer>
           </div>
         </div>
       </section>

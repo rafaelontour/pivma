@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { LoaderCircle, RefreshCw, Save, Trash2, Upload, Check } from "lucide-react";
 import { toast } from "sonner";
@@ -13,6 +13,8 @@ import type { ProcessOperationsFieldProps, ProcessSamplesWorkspaceProps, SampleR
 export function ProcessSamplesWorkspace({ processId }: ProcessSamplesWorkspaceProps) {
   const { t, i18n } = useTranslation();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const targetVialId = searchParams.get("vialId");
   const [samples, setSamples] = useState<ApiRecord[]>([]);
   const [permissions, setPermissions] = useState<ApiRecord>({});
   const [structure, setStructure] = useState<ApiRecord | null>(null);
@@ -70,6 +72,18 @@ export function ProcessSamplesWorkspace({ processId }: ProcessSamplesWorkspacePr
   }, [processId, labelPage, loadInternal]);
 
   useEffect(() => { const timer = window.setTimeout(() => void refresh(), 0); return () => window.clearTimeout(timer); }, [refresh]);
+
+  useEffect(() => {
+    if (!targetVialId || loading) return;
+    const targetIndex = vials.findIndex((vial) => [vial.id, vial.code, vial.vial_id].some((value) => typeof value === "string" && value === targetVialId));
+    if (targetIndex < 0) return;
+    const list = document.querySelector<HTMLElement>("[aria-labelledby='receipt-title'] ul");
+    const item = list?.children.item(targetIndex) as HTMLElement | null;
+    if (!item) return;
+    item.classList.add("border-amber-500", "bg-amber-50", "ring-2", "ring-amber-300");
+    item.setAttribute("aria-current", "location");
+    item.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "center" });
+  }, [loading, targetVialId, vials]);
 
   async function createSample(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -225,7 +239,7 @@ export function ProcessSamplesWorkspace({ processId }: ProcessSamplesWorkspacePr
   }
 
   if (loading && samples.length === 0 && !structure) return <div className="flex min-h-44 items-center justify-center gap-3 text-sm text-slate-600" aria-live="polite"><LoaderCircle className="size-5 animate-spin text-teal-700" aria-hidden="true" />{t("processOperations.loading")}</div>;
-  return <div className="grid gap-6 py-6">
+  return <div className="grid gap-6 py-6" data-target-vial={targetVialId ?? undefined}>
     <div className="flex flex-wrap items-center justify-between gap-3"><p className="max-w-3xl text-sm leading-6 text-slate-600">{t("processOperations.description")}</p><button type="button" onClick={() => void refresh()} disabled={loading} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold"><RefreshCw className="size-4" aria-hidden="true" />{t("processOperations.actions.refresh")}</button></div>
     {errors.length > 0 && <ul className="grid gap-2" aria-live="polite">{errors.map((error, index) => <li key={`${index}-${error}`} role="alert" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{error}</li>)}</ul>}
     <section className="grid gap-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" aria-labelledby="samples-title"><div className="flex flex-wrap items-center justify-between gap-3"><h2 id="samples-title" className="text-lg font-bold">{t("processOperations.sections.samples")}</h2></div>
